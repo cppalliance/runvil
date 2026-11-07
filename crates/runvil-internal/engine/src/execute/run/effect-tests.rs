@@ -15,10 +15,10 @@
 use std::fmt;
 
 use runvil_model_client::client::{CompletionResult, RawExchange, ToolCall};
-use runvil_model_client::model::completion_error;
+use runvil_model_client::model::make_completion_error;
 use runvil_types::error::ErrorCode;
 use runvil_types::packs::PackId;
-use runvil_types::tools::{OutputTrust, tool_error};
+use runvil_types::tools::{OutputTrust, make_tool_error};
 use serde::de::DeserializeOwned;
 use serde_json::json;
 
@@ -275,7 +275,7 @@ fn a_canned_chat_answer_records_no_finish_reason() {
 
 #[test]
 fn a_failed_chat_answer_records_the_codes_tag_and_the_errors_prose() {
-    let mut error = completion_error(
+    let mut error = make_completion_error(
         ErrorCode::MalformedResponse,
         "the model backend sent a reply that could not be understood: \
          completion stream ended without the [DONE] sentinel",
@@ -322,7 +322,7 @@ fn a_tool_call_answer_records_the_outputs_text_and_trust() {
 
 #[test]
 fn a_failed_tool_call_answer_records_the_errors_prose_and_hides_its_cause() {
-    let error = tool_error(ErrorCode::ToolBackend, "backend failed")
+    let error = make_tool_error(ErrorCode::ToolBackend, "backend failed")
         .with_cause(&std::io::Error::other("boom"));
     assert!(
         error.message.contains("boom"),
@@ -346,7 +346,7 @@ fn a_failed_tool_call_answer_records_its_codes_tag() {
         ErrorCode::ToolOther,
         ErrorCode::Internal,
     ] {
-        let record = EffectAnswer::ToolCall(Err(tool_error(code, "failed"))).to_record();
+        let record = EffectAnswer::ToolCall(Err(make_tool_error(code, "failed"))).to_record();
         assert_eq!(
             record,
             AnswerRecord::ToolCall(Err(FailureRecord::new(code.tag(), "failed"))),
@@ -359,14 +359,14 @@ fn a_failed_tool_call_answer_records_its_codes_tag() {
 fn a_failure_record_of_each_kind_round_trips_through_json() {
     let cases = [
         (
-            EffectAnswer::Chat(Err(completion_error(
+            EffectAnswer::Chat(Err(make_completion_error(
                 ErrorCode::RateLimited,
                 "the model backend is limiting the request rate",
             ))),
             r#"{"Chat":{"Err":{"kind":"rate_limited","message":"the model backend is limiting the request rate"}}}"#,
         ),
         (
-            EffectAnswer::ToolCall(Err(tool_error(
+            EffectAnswer::ToolCall(Err(make_tool_error(
                 ErrorCode::ToolInvalidArguments,
                 "path is required",
             ))),
@@ -456,7 +456,7 @@ fn every_kinds_public_record_is_json_that_round_trips_exactly() {
             CompletionResult::Text("the reply".to_owned()),
             "stop",
         )))),
-        EffectAnswer::Chat(Err(completion_error(
+        EffectAnswer::Chat(Err(make_completion_error(
             ErrorCode::RateLimited,
             "the model backend is limiting the request rate",
         ))),

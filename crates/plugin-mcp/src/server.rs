@@ -8,7 +8,7 @@ use rmcp::model::{
     RequestId, Tool,
 };
 use rmcp::service::{Peer, PeerRequestOptions, RoleClient};
-use runvil_plugin::{Error, ErrorCode, tool_error};
+use runvil_plugin::{Error, ErrorCode, make_tool_error};
 use serde_json::Value;
 use tokio::runtime::Handle;
 use tokio::sync::watch;
@@ -139,7 +139,7 @@ async fn send(
     let handle = peer
         .send_cancellable_request(request, PeerRequestOptions::with_timeout(CALL_DEADLINE))
         .await
-        .map_err(|e| result::service_error(&e))?;
+        .map_err(|e| result::make_service_error(&e))?;
     let mut guard = CancelOnDrop {
         armed: Some((handle.peer.clone(), handle.id.clone())),
         runtime,
@@ -161,10 +161,11 @@ pub(crate) async fn call(
     let mut task = AbortOnDrop(runtime.spawn(send(peer, name, arguments, runtime.clone())));
     match (&mut task.0).await {
         Ok(outcome) => outcome,
-        Err(join) => Err(
-            tool_error(ErrorCode::ToolTransport, "the MCP call task did not finish")
-                .with_cause(&join),
-        ),
+        Err(join) => Err(make_tool_error(
+            ErrorCode::ToolTransport,
+            "the MCP call task did not finish",
+        )
+        .with_cause(&join)),
     }
 }
 

@@ -180,7 +180,7 @@ impl CallDepth {
     pub(super) fn deeper(self) -> Result<CallDepth> {
         let depth = self.0 + 1;
         if depth > MAX_CALL_DEPTH {
-            return Err(error::call_depth_exceeded(MAX_CALL_DEPTH));
+            return Err(error::make_call_depth_exceeded_error(MAX_CALL_DEPTH));
         }
         Ok(CallDepth(depth))
     }
@@ -460,9 +460,9 @@ impl Chain {
     /// `join_task` returns without a join, and `end_tool_call` ends the
     /// call's identity with no owner to merge it into.
     pub(super) fn access(&self) -> Result<&Arc<Access>> {
-        self.access
-            .as_ref()
-            .ok_or(error::internal("a live chain holds its access capability"))
+        self.access.as_ref().ok_or(error::make_internal_error(
+            "a live chain holds its access capability",
+        ))
     }
 
     /// Hands out the chain's next child id, under [`Counters::next_child`].
@@ -472,9 +472,9 @@ impl Chain {
     /// children, which no reachable run does.
     pub(super) fn next_child_id(&mut self) -> Result<ChainId> {
         let index = self.counters.next_child;
-        self.counters.next_child = index
-            .checked_add(1)
-            .ok_or(error::internal("a chain's child count cannot exceed u32"))?;
+        self.counters.next_child = index.checked_add(1).ok_or(error::make_internal_error(
+            "a chain's child count cannot exceed u32",
+        ))?;
         Ok(self.lineage.child(index))
     }
 
@@ -486,9 +486,9 @@ impl Chain {
     /// sections, which no reachable run does.
     pub(super) fn next_entry_id(&mut self) -> Result<String> {
         let index = self.counters.next_entry;
-        self.counters.next_entry = index
-            .checked_add(1)
-            .ok_or(error::internal("a chain's entry count cannot exceed u32"))?;
+        self.counters.next_entry = index.checked_add(1).ok_or(error::make_internal_error(
+            "a chain's entry count cannot exceed u32",
+        ))?;
         Ok(self.lineage.entry(index))
     }
 
@@ -525,12 +525,12 @@ impl Chain {
             .as_mut()
             .and_then(|entered| entered.running.as_mut())
         else {
-            return Err(error::internal(
+            return Err(error::make_internal_error(
                 "a delivered answer implies a suspended block",
             ));
         };
         if running.answer.is_some() {
-            return Err(error::internal(
+            return Err(error::make_internal_error(
                 "a suspended block holds at most one delivered answer",
             ));
         }
@@ -550,7 +550,7 @@ impl Chain {
         self.entered
             .as_ref()
             .map(|entered| &entered.frame)
-            .ok_or(error::internal("a live chain holds its frame"))
+            .ok_or(error::make_internal_error("a live chain holds its frame"))
     }
 
     /// The frame of the section the chain is running, mutably.
@@ -562,7 +562,7 @@ impl Chain {
         self.entered
             .as_mut()
             .map(|entered| &mut entered.frame)
-            .ok_or(error::internal("a live chain holds its frame"))
+            .ok_or(error::make_internal_error("a live chain holds its frame"))
     }
 
     /// The chain's current block sequence: the H1 pass's blocks, or the
@@ -703,10 +703,12 @@ impl ChainArena {
         #[cfg(not(test))]
         let max_chains = MAX_CHAINS;
         if self.chains.len() >= max_chains {
-            return Err(error::internal("a run's chain count cannot exceed u32"));
+            return Err(error::make_internal_error(
+                "a run's chain count cannot exceed u32",
+            ));
         }
         let id = ChainIndex(u32::try_from(self.chains.len()).map_err(|cause| {
-            error::internal_with_cause("a run's chain count cannot exceed u32", &cause)
+            error::make_internal_with_cause_error("a run's chain count cannot exceed u32", &cause)
         })?);
         self.chains.push(chain);
         Ok(id)

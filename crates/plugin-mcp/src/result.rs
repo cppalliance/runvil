@@ -2,7 +2,7 @@
 
 use rmcp::ServiceError;
 use rmcp::model::{CallToolResult, ContentBlock, ResourceContents, ServerResult};
-use runvil_plugin::{Error, ErrorCode, tool_error};
+use runvil_plugin::{Error, ErrorCode, make_tool_error};
 
 /// What a content block this change does not know becomes. rmcp's content
 /// types are `#[non_exhaustive]`, so a new kind reaches this text.
@@ -25,7 +25,7 @@ pub(crate) fn service_cause(error: &ServiceError) -> &'static str {
 
 /// Maps a transport-level failure to a tool error, with the code that says
 /// whether retrying could help.
-pub(crate) fn service_error(error: &ServiceError) -> Error {
+pub(crate) fn make_service_error(error: &ServiceError) -> Error {
     let code = match error {
         ServiceError::McpError(_) | ServiceError::UnexpectedResponse => ErrorCode::ToolBackend,
         _ => ErrorCode::ToolTransport,
@@ -38,14 +38,14 @@ pub(crate) fn service_error(error: &ServiceError) -> Error {
         ServiceError::McpError(e) => format!("the MCP server refused the call: {}", e.message),
         other => format!("the MCP call failed: {}", service_cause(other)),
     };
-    tool_error(code, text)
+    make_tool_error(code, text)
 }
 
 /// Maps the answer to a `tools/call` request to its text.
 pub(crate) fn output(response: Result<ServerResult, ServiceError>) -> Result<String, Error> {
-    match response.map_err(|e| service_error(&e))? {
+    match response.map_err(|e| make_service_error(&e))? {
         ServerResult::CallToolResult(result) => render(&result),
-        _ => Err(tool_error(
+        _ => Err(make_tool_error(
             ErrorCode::ToolBackend,
             "the MCP server answered a tool call with something other than a tool result",
         )),
@@ -62,7 +62,7 @@ pub(crate) fn render(result: &CallToolResult) -> Result<String, Error> {
         } else {
             text
         };
-        return Err(tool_error(ErrorCode::ToolBackend, message));
+        return Err(make_tool_error(ErrorCode::ToolBackend, message));
     }
     Ok(text)
 }

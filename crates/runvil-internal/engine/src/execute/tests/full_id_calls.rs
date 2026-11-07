@@ -217,7 +217,7 @@ fn a_name_that_is_no_catalog_id_is_unbound_and_lists_the_catalog_ids() {
     assert_eq!(
         error,
         &placed(
-            crate::error::unbound_tool(
+            crate::error::make_unbound_tool_error(
                 "tools/missing",
                 &["tools/concrete".to_owned(), ECHO_ID.to_owned()]
             ),

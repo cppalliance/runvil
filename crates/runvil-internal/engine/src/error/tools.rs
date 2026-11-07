@@ -7,11 +7,11 @@ use runvil_types::tools::ToolId;
 
 use crate::lua::{DiscoveryTool, OfferMode};
 
-use super::{Error, failure, with_fact};
+use super::{Error, make_failure_error, with_fact};
 
 /// A failure with `code` whose text, `text`, is written for the model, so
 /// it is both the message and the prose, about the tool name `name`.
-fn refusal(code: ErrorCode, text: String, name: &str) -> Error {
+fn make_refusal_error(code: ErrorCode, text: String, name: &str) -> Error {
     with_fact(Error::new(code, text.clone(), text), ErrorFact::Name, name)
 }
 
@@ -19,9 +19,9 @@ fn refusal(code: ErrorCode, text: String, name: &str) -> Error {
 /// the `Name` fact is the alias, the `Reason` fact is the schema refusal's
 /// own, and the message ends with the refusal's text. Constructed only by
 /// the tool-scope preparation.
-pub(crate) fn bind_schema(alias: &str, cause: &Error) -> Error {
+pub(crate) fn make_bind_schema_error(alias: &str, cause: &Error) -> Error {
     let mut error = with_fact(
-        failure(
+        make_failure_error(
             ErrorCode::ToolSchemaInvalid,
             format!("model-facing schema build failure for tool alias {alias:?}"),
         ),
@@ -38,8 +38,8 @@ pub(crate) fn bind_schema(alias: &str, cause: &Error) -> Error {
 /// from, that broke a rule of the merge that builds them, which fails the
 /// entry's first loop round. `message` names what broke the rule and what
 /// the rule requires.
-pub(crate) fn tool_sets(message: String) -> Error {
-    failure(ErrorCode::ToolSetsInvalid, message)
+pub(crate) fn make_tool_sets_error(message: String) -> Error {
+    make_failure_error(ErrorCode::ToolSetsInvalid, message)
 }
 
 /// The tool `id` in `set`, as a broken merge rule's message names it, such
@@ -59,8 +59,8 @@ pub(crate) fn tool_in_set(id: &ToolId, set: OfferMode) -> String {
 ///
 /// This is the model tool loop's refusal alone: a script `tools.call`
 /// resolves against the run's whole catalog and fails with
-/// [`unbound_tool`] instead.
-pub(crate) fn out_of_scope_tool(
+/// [`make_unbound_tool_error`] instead.
+pub(crate) fn make_out_of_scope_tool_error(
     name: &str,
     global_exists: bool,
     static_aliases: &[String],
@@ -82,7 +82,7 @@ pub(crate) fn out_of_scope_tool(
     } else {
         String::new()
     };
-    refusal(
+    make_refusal_error(
         ErrorCode::OutOfScopeTool,
         format!(
             "tool {name:?} is not in this section's scope; aliases this section offers: \
@@ -100,8 +100,8 @@ pub(crate) fn out_of_scope_tool(
 /// model is offered, and the author's own code is not the model - so this
 /// means the name is no catalog tool's id at all; a wire name is the
 /// model's, never a script's.
-pub(crate) fn unbound_tool(name: &str, ids: &[String]) -> Error {
-    refusal(
+pub(crate) fn make_unbound_tool_error(name: &str, ids: &[String]) -> Error {
+    make_refusal_error(
         ErrorCode::UnboundTool,
         format!("tool {name:?} is not a tool in this run; catalog tools: {ids:?}"),
         name,
@@ -111,8 +111,8 @@ pub(crate) fn unbound_tool(name: &str, ids: &[String]) -> Error {
 /// A `tools.call` that named `name`, the catalog tool `id`, which only a
 /// model may call: a Pack marks a tool model-only when a render gives its
 /// arguments a script cannot know.
-pub(crate) fn model_only_tool(name: &str, id: &str) -> Error {
-    refusal(
+pub(crate) fn make_model_only_tool_error(name: &str, id: &str) -> Error {
+    make_refusal_error(
         ErrorCode::ModelOnlyTool,
         format!(
             "tool {name:?} ({id}) is model-only: a render shapes its arguments for the model \

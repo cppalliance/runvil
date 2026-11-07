@@ -104,6 +104,6 @@ pub use runvil_types::error::{Error, ErrorCode, ErrorFact, SourceLoc};
 pub use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
 pub use runvil_types::packs::PackId;
 pub use runvil_types::tools::{
-    OutputTrust, ToolCallOrigin, ToolCaller, ToolId, ToolInfo, ToolOutput, tool_error,
+    OutputTrust, ToolCallOrigin, ToolCaller, ToolId, ToolInfo, ToolOutput, make_tool_error,
 };
 pub use runvil_vfs::{Access, Entry, FileType, PathReason, Stat, VfsError};

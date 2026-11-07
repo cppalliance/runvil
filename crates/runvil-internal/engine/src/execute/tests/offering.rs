@@ -5,7 +5,7 @@
 
 use runvil_prompt::test_support::{PromptSource, one_section, prompt};
 
-use super::fixtures::{echo_tool, model_only_tool};
+use super::fixtures::{echo_tool, make_model_only_tool_error};
 use super::models_loop::{loop_model_name, loop_scenario};
 use super::*;
 use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
@@ -19,9 +19,9 @@ use runvil_types::packs::PackId;
 fn tool_at(id: &str, schema: Value) -> FnTool {
     let label = id.to_owned();
     let tool = FnTool::new(id, schema, move |args| {
-        let value = args["value"]
-            .as_str()
-            .ok_or_else(|| tool_error(ErrorCode::ToolOther, "the value argument is required"))?;
+        let value = args["value"].as_str().ok_or_else(|| {
+            make_tool_error(ErrorCode::ToolOther, "the value argument is required")
+        })?;
         Ok(ToolOutput::trusted(format!("{label}: {value}")))
     });
     tool.description(id)
@@ -150,7 +150,11 @@ fn a_model_only_tool_is_advertised_and_called_by_the_model() {
          models.loop()\n\
          return 'ok'",
     );
-    let rig = Rig::run(loop_scenario(source).tool(model_only_tool()).chat(&gateway));
+    let rig = Rig::run(
+        loop_scenario(source)
+            .tool(make_model_only_tool_error())
+            .chat(&gateway),
+    );
     assert_eq!(rig.trace().text(), "ok");
     let records = rig.issued();
     let calls: Vec<&EffectRecord> = records

@@ -162,7 +162,7 @@ pub(crate) const SELECTION_POISONED: &str = "model selection lock was poisoned";
 /// its lock is poisoned.
 #[track_caller]
 pub(crate) fn selection_poisoned() -> mlua::Error {
-    mlua::Error::external(error::internal(SELECTION_POISONED))
+    mlua::Error::external(error::make_internal_error(SELECTION_POISONED))
 }
 
 /// The type name the `models.use` target and `set_selection` refusals give
@@ -357,7 +357,7 @@ pub(crate) fn install_models(
     selection: &Arc<Mutex<Option<ModelBinding>>>,
     raw_ids: RawModelIds,
 ) -> Result<()> {
-    let models = lua.create_table().map_err(error::lua)?;
+    let models = lua.create_table().map_err(error::make_lua_error)?;
 
     let frozen = Arc::clone(set);
     let current = Arc::clone(selection);
@@ -389,8 +389,8 @@ pub(crate) fn install_models(
                 Ok(LuaModelHandle::from_binding(binding))
             },
         )
-        .map_err(error::lua)?;
-    models.set("use", use_fn).map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
+    models.set("use", use_fn).map_err(error::make_lua_error)?;
 
     let frozen = Arc::clone(set);
     let get_fn = lua
@@ -404,8 +404,8 @@ pub(crate) fn install_models(
             };
             Ok(LuaModelHandle::from_binding(binding))
         })
-        .map_err(error::lua)?;
-    models.set("get", get_fn).map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
+    models.set("get", get_fn).map_err(error::make_lua_error)?;
 
     let current = Arc::clone(selection);
     let current_fn = lua
@@ -415,10 +415,14 @@ pub(crate) fn install_models(
                 .map(LuaModelHandle::from_binding)
                 .ok_or_else(|| mlua::Error::external("the caller supplied no model"))
         })
-        .map_err(error::lua)?;
-    models.set("current", current_fn).map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
+    models
+        .set("current", current_fn)
+        .map_err(error::make_lua_error)?;
 
-    globals.raw_set("models", models).map_err(error::lua)
+    globals
+        .raw_set("models", models)
+        .map_err(error::make_lua_error)
 }
 #[cfg(test)]
 #[path = "models-tests.rs"]

@@ -16,14 +16,14 @@
 //! list as compacting, and calls the compactor, which edits the list in
 //! place. A kept compaction retries the round without counting it, and a
 //! round compacts at most once, so a retry that overflows again puts the
-//! snapshot back and raises `context_exhausted`.
+//! snapshot back and raises `make_context_exhausted_error`.
 
-use runvil_model_client::model::completion_error;
+use runvil_model_client::model::make_completion_error;
 use runvil_types::error::{ErrorCode, ErrorFact};
 use runvil_types::metrics::ToolCallEvent;
 
 use crate::compactors::{OverflowReason, estimate_tokens};
-use crate::error::{self, Error, context_exhausted, tool_loop_exhausted};
+use crate::error::{self, Error, make_context_exhausted_error, make_tool_loop_exhausted_error};
 use crate::messages::{MessageList, Snapshot};
 use crate::projection::project_messages;
 use crate::protocol::{
@@ -155,7 +155,7 @@ pub(super) enum Then<V> {
 
 impl<V: Clone> Machine<V> {
     /// A loop over `list`, capped at `max_rounds` rounds, and its first
-    /// step: the first round's `chat`, or `tool_loop_exhausted` when the
+    /// step: the first round's `chat`, or `make_tool_loop_exhausted_error` when the
     /// cap is 0.
     pub(super) fn begin(
         max_rounds: usize,
@@ -228,15 +228,15 @@ impl<V: Clone> Machine<V> {
             | (Phase::Batching, Input::Batched(Err(failure)))
             | (Phase::Calling, Input::Dispatched(Err(failure)))
             | (Phase::Reporting(None), Input::Reported(Err(failure))) => Then::Raise(failure),
-            _ => Then::RaiseNew(error::internal(UNEXPECTED_INPUT)),
+            _ => Then::RaiseNew(error::make_internal_error(UNEXPECTED_INPUT)),
         }
     }
 
     /// Starts the next round with its `chat`, or raises
-    /// `tool_loop_exhausted` once the cap's rounds have all started.
+    /// `make_tool_loop_exhausted_error` once the cap's rounds have all started.
     fn next_round(&mut self) -> Then<V> {
         if self.rounds >= self.max_rounds {
-            return Then::RaiseNew(tool_loop_exhausted());
+            return Then::RaiseNew(make_tool_loop_exhausted_error());
         }
         self.rounds += 1;
         self.chat(None)
@@ -278,7 +278,7 @@ impl<V: Clone> Machine<V> {
             let record = text_record(RecordRole::Assistant, String::new());
             return self.push(vec![record], |_| Then::Return);
         }
-        let mut empty = completion_error(
+        let mut empty = make_completion_error(
             ErrorCode::EmptyReply,
             detail.unwrap_or_else(|| EMPTY_MODEL_REPLY.to_owned()),
         );
@@ -291,11 +291,11 @@ impl<V: Clone> Machine<V> {
     /// Starts the round's compaction: snapshots the records, flags the
     /// list as compacting, and calls the compactor with `reason`. A round
     /// that already compacted puts its snapshot back and raises
-    /// `context_exhausted` instead.
+    /// `make_context_exhausted_error` instead.
     fn overflow(&mut self, reason: OverflowReason, compacted: Option<Snapshot>) -> Then<V> {
         if let Some(snapshot) = compacted {
             self.list.restore(snapshot);
-            return Then::RaiseNew(exhausted(reason));
+            return Then::RaiseNew(make_exhausted_error(reason));
         }
         let snapshot = self.list.snapshot();
         self.list.set_compacting(true);
@@ -312,7 +312,7 @@ impl<V: Clone> Machine<V> {
     fn take_batch(&mut self, texts: Vec<String>) -> Then<V> {
         let unanswered = self.calls.len() - self.results.len();
         if texts.len() > unanswered {
-            return Then::RaiseNew(error::internal(UNEXPECTED_INPUT));
+            return Then::RaiseNew(error::make_internal_error(UNEXPECTED_INPUT));
         }
         let short = texts.len() < unanswered;
         self.results.extend(texts);
@@ -374,7 +374,7 @@ impl<V: Clone> Machine<V> {
         for record in records {
             if let Err(refused) = self.list.push(record) {
                 self.phase = Phase::Done;
-                return Then::RaiseNew(error::internal(refused.message));
+                return Then::RaiseNew(error::make_internal_error(refused.message));
             }
         }
         next(self)
@@ -410,7 +410,7 @@ pub(super) fn settle<V>(
 
 /// Checks a compacted `list` against the rules [`settle`] names: the
 /// projection's refusal for a broken structural rule, and
-/// `context_exhausted` for `overflow` when the list did not shrink.
+/// `make_context_exhausted_error` for `overflow` when the list did not shrink.
 fn check(
     list: &MessageList,
     snapshot: &Snapshot,
@@ -427,14 +427,14 @@ fn check(
     if estimate_tokens(&projected) < before {
         Ok(())
     } else {
-        Err(exhausted(reason))
+        Err(make_exhausted_error(reason))
     }
 }
 
-/// A new `context_exhausted` error for `reason`, as `compactors.fail`
+/// A new `make_context_exhausted_error` error for `reason`, as `compactors.fail`
 /// raises it.
-fn exhausted(reason: OverflowReason) -> Error {
-    context_exhausted(reason.tag())
+fn make_exhausted_error(reason: OverflowReason) -> Error {
+    make_context_exhausted_error(reason.tag())
 }
 
 /// A record of `role` holding the plain text `content` and no `meta`.

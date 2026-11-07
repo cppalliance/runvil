@@ -32,17 +32,17 @@ pub(crate) fn tool_object(lua: &Lua, id: &str) -> mlua::Result<Option<AnyUserDat
 /// Returns a `LuaRuntime` failure if an object or the table cannot be created or
 /// stored.
 pub(super) fn install_tool_objects(lua: &Lua, set: &ToolSet) -> Result<()> {
-    let objects = lua.create_table().map_err(error::lua)?;
+    let objects = lua.create_table().map_err(error::make_lua_error)?;
     for info in set.catalog().tools() {
         let object = lua
             .create_userdata(LuaToolHandle::from_info(info))
-            .map_err(error::lua)?;
+            .map_err(error::make_lua_error)?;
         objects
             .raw_set(info.id.to_string(), object)
-            .map_err(error::lua)?;
+            .map_err(error::make_lua_error)?;
     }
     lua.set_named_registry_value(TOOL_OBJECTS_REGISTRY, objects)
-        .map_err(error::lua)
+        .map_err(error::make_lua_error)
 }
 
 /// Adds the tool object of the adhoc tool `binding` binds and returns it.
@@ -79,6 +79,6 @@ pub(super) fn install_tool_get(lua: &Lua, tools: &Table) -> Result<()> {
                 other.type_name()
             ))),
         })
-        .map_err(error::lua)?;
-    tools.set("get", get).map_err(error::lua)
+        .map_err(error::make_lua_error)?;
+    tools.set("get", get).map_err(error::make_lua_error)
 }

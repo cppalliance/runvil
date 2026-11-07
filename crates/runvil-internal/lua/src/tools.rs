@@ -73,7 +73,7 @@ pub(crate) fn adhoc_handler(lua: &Lua, name: &str) -> mlua::Result<Function> {
     };
     match handler {
         Value::Function(handler) => Ok(handler),
-        _ => Err(mlua::Error::external(error::internal(
+        _ => Err(mlua::Error::external(error::make_internal_error(
             "an adhoc tool answer names a registered handler",
         ))),
     }
@@ -98,7 +98,7 @@ pub(crate) fn install_tools(
     adhoc_tools: &AdhocTools,
     list: &MessageList,
 ) -> Result<()> {
-    let tools = lua.create_table().map_err(error::lua)?;
+    let tools = lua.create_table().map_err(error::make_lua_error)?;
     install_tool_objects(lua, set)?;
     let names = install_pack_objects(lua, set, adhoc_tools)?;
     install_pack_list(lua, &tools, names)?;
@@ -113,7 +113,9 @@ pub(crate) fn install_tools(
     install_adhoc(lua, &tools, adhoc_tools)?;
     install_tool_get(lua, &tools)?;
 
-    globals.raw_set("tools", tools).map_err(error::lua)
+    globals
+        .raw_set("tools", tools)
+        .map_err(error::make_lua_error)
 }
 
 /// Installs `tools.adhoc(attrs, f)` over a fresh handler table: `f` is
@@ -128,9 +130,9 @@ pub(crate) fn install_tools(
 fn install_adhoc(lua: &Lua, tools: &Table, adhoc_tools: &AdhocTools) -> Result<()> {
     lua.set_named_registry_value(
         ADHOC_HANDLERS_REGISTRY,
-        lua.create_table().map_err(error::lua)?,
+        lua.create_table().map_err(error::make_lua_error)?,
     )
-    .map_err(error::lua)?;
+    .map_err(error::make_lua_error)?;
     let adhoc = adhoc_tools.clone();
     let define = lua
         .create_function(move |lua, args: MultiValue| {
@@ -172,8 +174,8 @@ fn install_adhoc(lua: &Lua, tools: &Table, adhoc_tools: &AdhocTools) -> Result<(
             }
             Ok(object)
         })
-        .map_err(error::lua)?;
-    tools.set("adhoc", define).map_err(error::lua)
+        .map_err(error::make_lua_error)?;
+    tools.set("adhoc", define).map_err(error::make_lua_error)
 }
 
 /// Reads `tools.adhoc`'s attrs as the tool's wire name and info, checking
@@ -213,7 +215,7 @@ fn adhoc_info(lua: &Lua, attrs: &Table, adhoc: &AdhocTools) -> mlua::Result<(Str
     let description = attr_text(attrs, "description")?;
     let id =
         ToolId::parse(&format!("{ADHOC_PACK}/{}", name.to_ascii_lowercase())).map_err(|error| {
-            mlua::Error::external(error::internal(format!(
+            mlua::Error::external(error::make_internal_error(format!(
                 "an adhoc tool's id is a tool id: {error}"
             )))
         })?;

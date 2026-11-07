@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use plugin_user_input::InputBroker;
-use runvil::tool_error;
+use runvil::make_tool_error;
 use runvil::{Error, ErrorCode};
 use tokio::sync::broadcast;
 
@@ -111,7 +111,7 @@ impl InputBroker for SessionInputBroker {
             // of the registry. The still-armed guard pushes the canceled
             // frame on scope exit, so this path clears the client's prompt
             // too.
-            Err(_) => Err(tool_error(
+            Err(_) => Err(make_tool_error(
                 ErrorCode::ToolBackend,
                 "the user-input wait was canceled",
             )),

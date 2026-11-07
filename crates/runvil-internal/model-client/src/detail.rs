@@ -69,14 +69,14 @@ pub fn tool_schema_new(
 ) -> Result<ToolSchema, Error> {
     let name = name.into();
     if !is_alias(&name) {
-        return Err(schema_error(
+        return Err(make_schema_error(
             "invalid_name",
             format!("invalid tool wire name {name:?}: expected [A-Za-z][A-Za-z0-9_-]{{0,63}}"),
             &name,
         ));
     }
     if !parameters.is_object() {
-        return Err(schema_error(
+        return Err(make_schema_error(
             "non_object_schema",
             format!("tool {name:?} parameters schema must be a JSON object"),
             &name,
@@ -91,7 +91,7 @@ pub fn tool_schema_new(
 
 /// The error for a refused tool schema: a `ToolSchemaInvalid` that names the
 /// tool, with the broken rule as its reason.
-fn schema_error(reason: &'static str, message: String, name: &str) -> Error {
+fn make_schema_error(reason: &'static str, message: String, name: &str) -> Error {
     let mut error = Error::new(
         ErrorCode::ToolSchemaInvalid,
         message,

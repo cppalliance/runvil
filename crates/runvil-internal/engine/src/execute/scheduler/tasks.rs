@@ -135,7 +135,7 @@ pub(super) struct TaskEntry {
     /// the task, reported by `tasks.status`.
     pub(super) note: Option<String>,
     /// The prompt line of the author's call that spawned the task, which a
-    /// `tasks_live` failure that names it first is placed on: `None` for
+    /// `make_tasks_live_error` failure that names it first is placed on: `None` for
     /// an internal timer, and for a spawn whose yield found no author
     /// frame.
     pub(super) spawn_line: Option<NonZeroU32>,
@@ -198,7 +198,7 @@ impl TaskArena {
     pub(super) fn owned(&self, caller: ChainIndex, task: &TaskId) -> Result<&TaskEntry> {
         match self.entries.get(task) {
             Some(entry) if entry.owner == caller => Ok(entry),
-            _ => Err(error::task_not_owned(task)),
+            _ => Err(error::make_task_not_owned_error(task)),
         }
     }
 
@@ -213,7 +213,7 @@ impl TaskArena {
     ) -> Result<&TaskEntry> {
         match self.entries.get(task) {
             Some(entry) if entry.owner == caller || caller_task == task => Ok(entry),
-            _ => Err(error::task_not_owned(task)),
+            _ => Err(error::make_task_not_owned_error(task)),
         }
     }
 
@@ -254,7 +254,7 @@ impl TaskArena {
         for task in tasks {
             match self.owned(caller, task)?.state {
                 EntryState::Delivered { .. } => {
-                    return Err(error::task_consumed(task));
+                    return Err(error::make_task_consumed_error(task));
                 }
                 EntryState::Running => {}
                 EntryState::Done(_) | EntryState::Canceled | EntryState::Abandoned => {
@@ -290,7 +290,7 @@ impl TaskArena {
     /// wait on it, so its delivery is a scheduler bug.
     pub(super) fn take_delivery(&mut self, task: &TaskId) -> Result<String> {
         let Some(entry) = self.entries.get_mut(task) else {
-            return Err(error::internal("a delivered task has an entry"));
+            return Err(error::make_internal_error("a delivered task has an entry"));
         };
         match &mut entry.state {
             EntryState::Done(outcome) => {
@@ -300,11 +300,11 @@ impl TaskArena {
                 };
                 outcome
             }
-            EntryState::Canceled => Err(error::task_canceled(task)),
-            EntryState::Abandoned => Err(error::internal(
+            EntryState::Canceled => Err(error::make_task_canceled_error(task)),
+            EntryState::Abandoned => Err(error::make_internal_error(
                 "an abandoned task's owner ended, so no wait can deliver it",
             )),
-            EntryState::Running | EntryState::Delivered { .. } => Err(error::internal(
+            EntryState::Running | EntryState::Delivered { .. } => Err(error::make_internal_error(
                 "only a terminal, undelivered entry is delivered",
             )),
         }
@@ -474,11 +474,14 @@ impl Scheduler {
         // target's slice by path, resolved against the shared tree.
         let prompt = self.prompt();
         let resolved = self.with_chain(id, |ops| ops.resolve_chain_target(target))?;
-        let worker = resolved.pos.section(&prompt).ok_or(error::internal(
-            "a resolved worker is absent from its slice",
-        ))?;
+        let worker = resolved
+            .pos
+            .section(&prompt)
+            .ok_or(error::make_internal_error(
+                "a resolved worker is absent from its slice",
+            ))?;
         if worker.is_list() {
-            return Err(error::lua_runtime(format!(
+            return Err(error::make_lua_runtime_error(format!(
                 "section `{}` is a list section, not a worker template",
                 worker.name()
             )));
@@ -494,7 +497,7 @@ impl Scheduler {
                 &spawner_access,
                 prompt_origin(&prompt, worker.name(), worker.blocks()),
             )
-            .map_err(|cause| error::store(&cause))?;
+            .map_err(|cause| error::make_store_error(&cause))?;
         // The task's happens-before identity, recorded before the access
         // moves into the chain: every delivery joins it, and the chain
         // end joins it last.
@@ -708,12 +711,12 @@ mod tests {
         assert_eq!(entry.target, "worker 0");
         assert!(matches!(
             arena.owned(chain(2), &task),
-            Err(refused) if refused == error::task_not_owned(&task)
+            Err(refused) if refused == error::make_task_not_owned_error(&task)
         ));
         let unknown = TaskId::from(ChainId::root().child(9));
         assert!(matches!(
             arena.owned(chain(1), &unknown),
-            Err(refused) if refused == error::task_not_owned(&unknown)
+            Err(refused) if refused == error::make_task_not_owned_error(&unknown)
         ));
     }
 
@@ -729,7 +732,7 @@ mod tests {
         );
         assert!(matches!(
             arena.visible(chain(7), &outside, &task),
-            Err(refused) if refused == error::task_not_owned(&task)
+            Err(refused) if refused == error::make_task_not_owned_error(&task)
         ));
         let unknown = TaskId::from(ChainId::root().child(9));
         assert!(matches!(

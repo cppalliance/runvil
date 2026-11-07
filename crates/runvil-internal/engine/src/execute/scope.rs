@@ -236,7 +236,7 @@ fn check_render(
         all.iter().map(|sets| sets.pack.to_string()).collect()
     };
     if names(asked) != names(&answered) {
-        return Err(error::tool_sets(format!(
+        return Err(error::make_tool_sets_error(format!(
             "the render answered the Packs [{}] where the section offered the Packs [{}]; a \
              render answers each offered Pack once, in offer order",
             names(&answered).join(", "),
@@ -275,7 +275,7 @@ fn check_set(
     let mut kept: Vec<ToolInfo> = Vec::with_capacity(tools.len());
     for tool in tools {
         if offered.is_empty() {
-            return Err(error::tool_sets(format!(
+            return Err(error::make_tool_sets_error(format!(
                 "the {pack} Pack's render returned {}, a set the section did not offer the \
                  {pack} Pack into; a render returns tools only for the sets the section offered \
                  its Pack into",
@@ -283,7 +283,7 @@ fn check_set(
             )));
         }
         if !pack.contains(&tool.id) {
-            return Err(error::tool_sets(format!(
+            return Err(error::make_tool_sets_error(format!(
                 "the {pack} Pack's render returned {}; a Pack renders only tools whose id \
                  starts with its own Pack id",
                 error::tool_in_set(&tool.id, set)
@@ -291,7 +291,7 @@ fn check_set(
         }
         let unoffered = !offered.iter().any(|held| held.id == tool.id);
         if unoffered && catalog.get(&tool.id).is_some() {
-            return Err(error::tool_sets(format!(
+            return Err(error::make_tool_sets_error(format!(
                 "the render returned {}, a run catalog tool the section did not offer in that \
                  set; a render returns a catalog tool only into a set the section offered it in",
                 error::tool_in_set(&tool.id, set)
@@ -389,7 +389,7 @@ fn discovery_tools(dynamic_set: &[Laid]) -> Result<Vec<Laid>> {
                 ),
             };
             let id = ToolId::parse(tool.id())
-                .map_err(|_| error::internal("a discovery tool's id is a tool id"))?;
+                .map_err(|_| error::make_internal_error("a discovery tool's id is a tool id"))?;
             let info = ToolInfo::new(id, description, parameters);
             Ok(Laid {
                 binding: ToolBinding::from_info(tool.wire_name(), &info),
@@ -461,7 +461,7 @@ fn refuse_clash(static_set: &[Laid], dynamic_set: &[Laid]) -> Result<()> {
         let wire_name = tool.binding.alias();
         let id = tool.binding.id();
         if let Some(&(first_id, first_set)) = taken.get(wire_name) {
-            return Err(error::tool_sets(format!(
+            return Err(error::make_tool_sets_error(format!(
                 "the tools {} and {} share the wire name {wire_name:?}, and a wire name names \
                  one tool across a section's Static Set and Dynamic Set; offer only one of them",
                 error::tool_in_set(first_id, first_set),
@@ -486,7 +486,7 @@ pub(super) fn tool_schema(binding: &ToolBinding) -> Result<ToolSchema> {
         binding.description().to_owned(),
         binding.schema().clone(),
     )
-    .map_err(|refusal| error::bind_schema(binding.alias(), &refusal))
+    .map_err(|refusal| error::make_bind_schema_error(binding.alias(), &refusal))
 }
 
 #[cfg(test)]

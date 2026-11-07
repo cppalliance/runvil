@@ -12,11 +12,11 @@ use std::time::Duration;
 use harness_runner::HostContext;
 use harness_runner::performers::{BoxFuture, InferenceBroker, Timer};
 use runvil::effect::Round;
+use runvil::make_tool_error;
 use runvil::model::{
     Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
-    ModelInfo, ThinkingMode, ToolSchema, completion_error, phrase,
+    ModelInfo, ThinkingMode, ToolSchema, make_completion_error, phrase,
 };
-use runvil::tool_error;
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceKey, ToolContext,
@@ -108,7 +108,7 @@ impl InferenceBroker for ScriptedBroker {
         match self.listing {
             Listing::Lists => Box::pin(async { Ok(catalog()) }),
             Listing::Fails(code) => {
-                Box::pin(async move { Err(completion_error(code, phrase(code))) })
+                Box::pin(async move { Err(make_completion_error(code, phrase(code))) })
             }
             Listing::Holds => Box::pin(std::future::pending()),
         }
@@ -225,7 +225,7 @@ fn construct_hold(
 ) -> Result<Arc<dyn Pack>, Error> {
     let held = services
         .get(&HELD)
-        .ok_or_else(|| tool_error(ErrorCode::ToolOther, "the hold Pack needs tests/held"))?;
+        .ok_or_else(|| make_tool_error(ErrorCode::ToolOther, "the hold Pack needs tests/held"))?;
     let info = ToolInfo::new(
         ToolId::parse(&format!("{name}/hold")).unwrap(),
         "Hold until the call is dropped.",
@@ -309,7 +309,7 @@ impl AskBroker for Operator {
         let mut unanswered = Unanswered(Some(Arc::clone(&self.abandoned)));
         let text = self.answers.lock().await.recv().await;
         unanswered.0 = None;
-        text.ok_or_else(|| tool_error(ErrorCode::ToolOther, "the operator left"))
+        text.ok_or_else(|| make_tool_error(ErrorCode::ToolOther, "the operator left"))
     }
 }
 

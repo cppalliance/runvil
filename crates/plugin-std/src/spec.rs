@@ -9,7 +9,7 @@
 
 use std::sync::LazyLock;
 
-use runvil_plugin::{Error, ErrorCode, tool_error};
+use runvil_plugin::{Error, ErrorCode, make_tool_error};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -55,7 +55,7 @@ static DEFINITIONS: LazyLock<Result<Vec<Definition>, Error>> = LazyLock::new(|| 
         .iter()
         .map(|(segment, source)| {
             let file: File = serde_json::from_str(source).map_err(|e| {
-                tool_error(
+                make_tool_error(
                     ErrorCode::ToolBackend,
                     format!("std could not read the definition of its {segment} tool"),
                 )

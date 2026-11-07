@@ -27,7 +27,7 @@ use mlua::{Function, Lua, StdLib, Table, Value};
 use runvil_model_client::model::ModelBinding;
 
 use crate::engine_globals_store::route_store_to_shims;
-use crate::error::{self, Error, Result, TRACEBACK_HEADING};
+use crate::error::{self, Error, Result, TRACEBACK_HEADING, make_lua_error as map_lua};
 use crate::error_value::{install_error_value, normalized, raised_from, retained_error};
 use crate::hardening::CancelHook;
 use crate::models::{LuaModelHandle, selection_poisoned};
@@ -228,28 +228,28 @@ pub(crate) fn install_shims(
     loop_running: &Arc<AtomicBool>,
     cancel_hook: &CancelHook,
 ) -> Result<()> {
-    lua.load_std_libs(StdLib::COROUTINE).map_err(error::lua)?;
+    lua.load_std_libs(StdLib::COROUTINE).map_err(map_lua)?;
     let globals = lua.globals();
-    let coroutine: Table = globals.raw_get("coroutine").map_err(error::lua)?;
-    let yield_fn = recording_yield(lua, coroutine.raw_get("yield").map_err(error::lua)?)?;
+    let coroutine: Table = globals.raw_get("coroutine").map_err(map_lua)?;
+    let yield_fn = recording_yield(lua, coroutine.raw_get("yield").map_err(map_lua)?)?;
     let var_snapshot = lua
         .create_function(|lua, ()| var_snapshot_table(lua).map_err(mlua::Error::external))
-        .map_err(error::lua)?;
-    let models: Table = globals.raw_get("models").map_err(error::lua)?;
-    let tools: Table = globals.raw_get("tools").map_err(error::lua)?;
-    let compactors: Table = globals.raw_get("compactors").map_err(error::lua)?;
-    let error_value = install_error_value(lua).map_err(error::lua)?;
+        .map_err(map_lua)?;
+    let models: Table = globals.raw_get("models").map_err(map_lua)?;
+    let tools: Table = globals.raw_get("tools").map_err(map_lua)?;
+    let compactors: Table = globals.raw_get("compactors").map_err(map_lua)?;
+    let error_value = install_error_value(lua).map_err(map_lua)?;
     let stash_failure = stash_failure_capture(lua)?;
-    let normalize_failure = lua.create_function(normalized).map_err(error::lua)?;
+    let normalize_failure = lua.create_function(normalized).map_err(map_lua)?;
     let (enter_adhoc_handler, leave_adhoc_handler) =
         adhoc_handler_captures(lua, adhoc_handler_depth)?;
     let hook = cancel_hook.clone();
     let cancel_requested = lua
         .create_function(move |_, ()| Ok(hook.is_canceled()))
-        .map_err(error::lua)?;
+        .map_err(map_lua)?;
     let is_model_handle = lua
         .create_function(|_, value: Value| Ok(crate::models::is_handle(&value)))
-        .map_err(error::lua)?;
+        .map_err(map_lua)?;
     let loop_begin = crate::models_loop::loop_begin(
         lua,
         max_tool_iterations,
@@ -276,24 +276,24 @@ pub(crate) fn install_shims(
             loop_begin,
             compact_begin,
         ))
-        .map_err(error::lua)?;
-    let guard: Function = shims.raw_get("guard").map_err(error::lua)?;
+        .map_err(map_lua)?;
+    let guard: Function = shims.raw_get("guard").map_err(map_lua)?;
     lua.set_named_registry_value(GUARD_REGISTRY, guard)
-        .map_err(error::lua)?;
+        .map_err(map_lua)?;
     for name in ["pcall", "xpcall"] {
-        let protected: Function = shims.raw_get(name).map_err(error::lua)?;
-        globals.raw_set(name, protected).map_err(error::lua)?;
+        let protected: Function = shims.raw_get(name).map_err(map_lua)?;
+        globals.raw_set(name, protected).map_err(map_lua)?;
     }
-    let call: Function = shims.raw_get("call").map_err(error::lua)?;
-    globals.raw_set("call", call).map_err(error::lua)?;
-    let helpers: Table = shims.raw_get("helpers").map_err(error::lua)?;
+    let call: Function = shims.raw_get("call").map_err(map_lua)?;
+    globals.raw_set("call", call).map_err(map_lua)?;
+    let helpers: Table = shims.raw_get("helpers").map_err(map_lua)?;
     let tasks: Table = TASKS_PROGRAM
         .as_ref()
         .map_err(Clone::clone)?
         .load(lua)?
         .call((yield_fn.clone(), var_snapshot.clone(), helpers.clone()))
-        .map_err(error::lua)?;
-    globals.raw_set("tasks", &tasks).map_err(error::lua)?;
+        .map_err(map_lua)?;
+    globals.raw_set("tasks", &tasks).map_err(map_lua)?;
     let fanout = fanout_shim(
         lua,
         yield_fn,
@@ -302,15 +302,13 @@ pub(crate) fn install_shims(
         selection,
         is_model_handle,
     )?;
-    tasks.raw_set("fanout", fanout).map_err(error::lua)?;
+    tasks.raw_set("fanout", fanout).map_err(map_lua)?;
     stash_shims(lua, &shims)?;
     for name in ["loop", "compact"] {
-        let entry: Function = shims.raw_get(name).map_err(error::lua)?;
-        models.raw_set(name, entry).map_err(error::lua)?;
+        let entry: Function = shims.raw_get(name).map_err(map_lua)?;
+        models.raw_set(name, entry).map_err(map_lua)?;
     }
-    globals
-        .raw_set("coroutine", Value::Nil)
-        .map_err(error::lua)?;
+    globals.raw_set("coroutine", Value::Nil).map_err(map_lua)?;
     Ok(())
 }
 
@@ -324,11 +322,11 @@ fn recording_yield(lua: &Lua, raw_yield: Function) -> Result<Function> {
             error::set_call_line(lua, error::author_line(lua));
             Ok(())
         })
-        .map_err(error::lua)?;
+        .map_err(map_lua)?;
     lua.load(YIELD_SOURCE)
         .set_name(YIELD_CHUNK_NAME)
         .call((record, raw_yield))
-        .map_err(error::lua)
+        .map_err(map_lua)
 }
 
 /// Runs the `fanout` chunk over the shim chunk's `yield` and `var_snapshot`
@@ -357,12 +355,12 @@ fn fanout_shim(
                 )),
             }
         })
-        .map_err(error::lua)?;
+        .map_err(map_lua)?;
     let render_item = lua
         .create_function(|lua, item: Value| {
             crate::collection::render_item_value(lua, item).map_err(mlua::Error::external)
         })
-        .map_err(error::lua)?;
+        .map_err(map_lua)?;
     let (get_selection, set_selection) = selection_captures(lua, selection)?;
     FANOUT_PROGRAM
         .as_ref()
@@ -378,7 +376,7 @@ fn fanout_shim(
             set_selection,
             is_model_handle,
         ))
-        .map_err(error::lua)
+        .map_err(map_lua)
 }
 
 /// Builds the `fanout` chunk's `get_selection()` and `set_selection(value)`
@@ -403,7 +401,7 @@ fn selection_captures(
                 None => Ok(Value::Nil),
             }
         })
-        .map_err(error::lua)?;
+        .map_err(map_lua)?;
     let write = Arc::clone(selection);
     let set = lua
         .create_function(move |_, value: Value| -> mlua::Result<()> {
@@ -422,7 +420,7 @@ fn selection_captures(
             *write.lock().map_err(|_| selection_poisoned())? = binding;
             Ok(())
         })
-        .map_err(error::lua)?;
+        .map_err(map_lua)?;
     Ok((get, set))
 }
 
@@ -433,13 +431,13 @@ fn selection_captures(
 fn stash_shims(lua: &Lua, shims: &Table) -> Result<()> {
     #[cfg(any(test, feature = "test-support"))]
     {
-        let model_tool_call: Function = shims.raw_get("model_tool_call").map_err(error::lua)?;
+        let model_tool_call: Function = shims.raw_get("model_tool_call").map_err(map_lua)?;
         lua.set_named_registry_value(MODEL_TOOL_CALL_REGISTRY, model_tool_call)
-            .map_err(error::lua)?;
+            .map_err(map_lua)?;
     }
-    let store: Table = shims.raw_get("store").map_err(error::lua)?;
+    let store: Table = shims.raw_get("store").map_err(map_lua)?;
     lua.set_named_registry_value(STORE_REGISTRY, store)
-        .map_err(error::lua)
+        .map_err(map_lua)
 }
 
 /// Builds the shim chunk's `enter_adhoc_handler()` and `leave_adhoc_handler()`
@@ -452,14 +450,14 @@ fn adhoc_handler_captures(lua: &Lua, depth: &Arc<AtomicU32>) -> Result<(Function
             entered.fetch_add(1, Ordering::Relaxed);
             Ok(())
         })
-        .map_err(error::lua)?;
+        .map_err(map_lua)?;
     let left = Arc::clone(depth);
     let leave = lua
         .create_function(move |_, ()| {
             left.fetch_sub(1, Ordering::Relaxed);
             Ok(())
         })
-        .map_err(error::lua)?;
+        .map_err(map_lua)?;
     Ok((enter, leave))
 }
 
@@ -474,7 +472,7 @@ fn stash_failure_capture(lua: &Lua) -> Result<Function> {
         lua.set_named_registry_value(FAILURE_TRACEBACK_REGISTRY, traceback)?;
         lua.set_named_registry_value(FAILURE_REGISTRY, failure)
     })
-    .map_err(error::lua)
+    .map_err(map_lua)
 }
 
 /// Returns the shim's block guard for a VM whose shim install already ran.
@@ -489,7 +487,7 @@ fn stash_failure_capture(lua: &Lua) -> Result<Function> {
 /// # Errors
 /// Returns a `LuaRuntime` failure if the shim install never ran on this VM.
 pub(crate) fn block_guard(lua: &Lua) -> Result<Function> {
-    lua.named_registry_value(GUARD_REGISTRY).map_err(error::lua)
+    lua.named_registry_value(GUARD_REGISTRY).map_err(map_lua)
 }
 
 /// Takes what the guard stashed for the last failure of a guarded block.
@@ -503,24 +501,24 @@ pub(crate) fn block_guard(lua: &Lua) -> Result<Function> {
 pub(crate) fn take_failure(lua: &Lua) -> Result<StashedFailure> {
     let failure: Value = lua
         .named_registry_value(FAILURE_REGISTRY)
-        .map_err(error::lua)?;
+        .map_err(map_lua)?;
     let traceback: Value = lua
         .named_registry_value(FAILURE_TRACEBACK_REGISTRY)
-        .map_err(error::lua)?;
+        .map_err(map_lua)?;
     if matches!(failure, Value::Nil) {
         return Ok(StashedFailure::default());
     }
     lua.set_named_registry_value(FAILURE_REGISTRY, Value::Nil)
-        .map_err(error::lua)?;
+        .map_err(map_lua)?;
     lua.set_named_registry_value(FAILURE_TRACEBACK_REGISTRY, Value::Nil)
-        .map_err(error::lua)?;
+        .map_err(map_lua)?;
     let traceback = match traceback {
-        Value::String(text) => Some(text.to_str().map_err(error::lua)?.to_owned()),
+        Value::String(text) => Some(text.to_str().map_err(map_lua)?.to_owned()),
         _ => None,
     };
-    let raised = match retained_error(lua, &failure).map_err(error::lua)? {
+    let raised = match retained_error(lua, &failure).map_err(map_lua)? {
         Some(retained) => Some(retained),
-        None => raised_from(lua, &failure).map_err(error::lua)?,
+        None => raised_from(lua, &failure).map_err(map_lua)?,
     };
     let table = match failure {
         Value::Table(table) => Some(table),
@@ -542,7 +540,7 @@ pub(crate) fn take_failure(lua: &Lua) -> Result<StashedFailure> {
 /// [`Request::Store`](crate::Request::Store) states why every backend takes
 /// this path. The Harness performs each one as an `Effect::Vfs`, and a
 /// claims-model conflict through any of them ends the run with a
-/// determinism violation that `pcall` cannot catch.
+/// make_determinism_error violation that `pcall` cannot catch.
 ///
 /// The executor's section setup and live H1 setup are the only callers.
 ///
@@ -550,15 +548,13 @@ pub(crate) fn take_failure(lua: &Lua) -> Result<StashedFailure> {
 /// Returns a `LuaRuntime` failure if the shim install never ran on this VM, the
 /// `store` table is absent, or the install fails.
 pub fn install_store_shims(lua: &Lua) -> Result<()> {
-    let shims: Table = lua
-        .named_registry_value(STORE_REGISTRY)
-        .map_err(error::lua)?;
-    let store: Table = lua.globals().raw_get("store").map_err(error::lua)?;
+    let shims: Table = lua.named_registry_value(STORE_REGISTRY).map_err(map_lua)?;
+    let store: Table = lua.globals().raw_get("store").map_err(map_lua)?;
     // `pairs` order is unspecified; every iteration only assigns one named
     // function into `store`, so the resulting table does not depend on it.
     for pair in shims.pairs::<String, Function>() {
-        let (name, function) = pair.map_err(error::lua)?;
-        store.raw_set(name, function).map_err(error::lua)?;
+        let (name, function) = pair.map_err(map_lua)?;
+        store.raw_set(name, function).map_err(map_lua)?;
     }
     route_store_to_shims(lua, &shims)
 }

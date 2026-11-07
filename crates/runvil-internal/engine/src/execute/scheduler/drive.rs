@@ -9,7 +9,7 @@
 //! every issued effect has its answer, so every effect the caller was
 //! handed has exactly one answer.
 
-use runvil_types::error::{ErrorCode, failure, place};
+use runvil_types::error::{ErrorCode, make_failure_error, place};
 use runvil_types::event_lifecycle;
 use runvil_types::ids::AbandonReason;
 use runvil_vfs::Origin;
@@ -71,7 +71,7 @@ impl Scheduler {
             && self.ready.is_empty()
             && !self.effects.has_awaited()
         {
-            self.end(Err(error::internal(
+            self.end(Err(error::make_internal_error(
                 "the scheduler stalled with no ready chain, no in-flight request, \
                  and no queued chain that can be admitted",
             )));
@@ -90,7 +90,9 @@ impl Scheduler {
                 }
             }
             Phase::Done => Step::Done {
-                result: Err(error::internal("a finished run cannot be stepped again")),
+                result: Err(error::make_internal_error(
+                    "a finished run cannot be stepped again",
+                )),
                 events,
             },
             phase @ (Phase::Fresh | Phase::Running | Phase::Ending(_)) => {
@@ -118,7 +120,7 @@ impl Scheduler {
             Arrival::Awaited(parked) => parked,
             Arrival::Orphaned => return,
             Arrival::Unknown => {
-                self.end(Err(error::internal(
+                self.end(Err(error::make_internal_error(
                     "an answer arrived for an effect the run did not issue or already answered",
                 )));
                 return;
@@ -169,11 +171,11 @@ impl Scheduler {
         let declined = match frontmatter.runvil() {
             Some(0) => None,
             Some(other) => Some(place(
-                error::unsupported_version(other),
+                error::make_unsupported_version_error(other),
                 prompt.file(),
                 crate::prompt::detail::key_line(prompt, "runvil"),
             )),
-            None => Some(failure(
+            None => Some(make_failure_error(
                 ErrorCode::StructureInvalid,
                 "not a runvil prompt: no runvil version",
             )),
@@ -193,10 +195,10 @@ impl Scheduler {
             .ctx
             .vfs()
             .acquire_scope(Origin::new("store mount probe"))
-            .map_err(|cause| error::store(&cause))?;
+            .map_err(|cause| error::make_store_error(&cause))?;
         scope
             .probe_store(&probe)
-            .map_err(|cause| error::store(&cause))?;
+            .map_err(|cause| error::make_store_error(&cause))?;
         if let Some(refusal) = self.ctx.refusal() {
             return Err(refusal.clone());
         }

@@ -1,14 +1,14 @@
 //! The failures this crate builds itself: each is an [`Error`] made from a
 //! model code and that code's fixed phrase.
 //!
-//! A non-success HTTP status is not built here; `classify_http_failure`
+//! A non-success HTTP status is not built here; `make_classify_http_failure_error`
 //! reads its status and bounded body. These helpers cover the rest: a
 //! send or read that went wrong, a disabled client, and a reply this
 //! crate cannot read.
 
 use std::fmt::Display;
 
-use runvil::model::{completion_error, phrase};
+use runvil::model::{make_completion_error, phrase};
 use runvil::{Error, ErrorCode};
 
 /// A send or read that failed: `Timeout` when `error` was a timeout and
@@ -18,12 +18,12 @@ use runvil::{Error, ErrorCode};
     clippy::needless_pass_by_value,
     reason = "a `map_err` adapter takes the error by value"
 )]
-pub(crate) fn transport_failure(error: reqwest::Error) -> Error {
+pub(crate) fn make_transport_failure_error(error: reqwest::Error) -> Error {
     if error.is_timeout() {
-        return timeout(&error);
+        return make_timeout_error(&error);
     }
     let code = ErrorCode::Transport;
-    completion_error(code, phrase(code)).with_cause(&error)
+    make_completion_error(code, phrase(code)).with_cause(&error)
 }
 
 /// A receive deadline that elapsed: a `Timeout` with the elapsed error
@@ -32,28 +32,28 @@ pub(crate) fn transport_failure(error: reqwest::Error) -> Error {
     clippy::needless_pass_by_value,
     reason = "a `map_err` adapter takes the error by value"
 )]
-pub(crate) fn elapsed(error: tokio::time::error::Elapsed) -> Error {
-    timeout(&error)
+pub(crate) fn make_elapsed_error(error: tokio::time::error::Elapsed) -> Error {
+    make_timeout_error(&error)
 }
 
-fn timeout(cause: &(dyn std::error::Error + 'static)) -> Error {
+fn make_timeout_error(cause: &(dyn std::error::Error + 'static)) -> Error {
     let code = ErrorCode::Timeout;
-    completion_error(code, phrase(code)).with_cause(cause)
+    make_completion_error(code, phrase(code)).with_cause(cause)
 }
 
 /// The failure of a client built with `GatewayChat::disabled`: model
 /// access is off, so no round is sent.
-pub(crate) fn unavailable() -> Error {
+pub(crate) fn make_unavailable_error() -> Error {
     let code = ErrorCode::Unavailable;
-    completion_error(code, phrase(code))
+    make_completion_error(code, phrase(code))
 }
 
 /// A `MalformedResponse` failure: the code's fixed phrase extended with
 /// `: ` and `specific`, which this crate's own code wrote. Provider text
 /// never goes in `specific`.
-pub(crate) fn malformed(specific: impl Display) -> Error {
+pub(crate) fn make_malformed_error(specific: impl Display) -> Error {
     let code = ErrorCode::MalformedResponse;
-    completion_error(code, format!("{}: {specific}", phrase(code)))
+    make_completion_error(code, format!("{}: {specific}", phrase(code)))
 }
 
 /// Appends provider `text`, already bounded and control-escaped, to
@@ -79,7 +79,7 @@ pub(crate) fn decoded(error: Error) -> Error {
         .strip_prefix(phrase(code))
         .and_then(|rest| rest.strip_prefix(": "))
         .unwrap_or(prose);
-    malformed(specific)
+    make_malformed_error(specific)
 }
 
 #[cfg(test)]
@@ -95,7 +95,7 @@ mod tests {
         .await
         .expect_err("a pending future elapses");
         let cause = elapsed_error.to_string();
-        let timed_out = elapsed(elapsed_error);
+        let timed_out = make_elapsed_error(elapsed_error);
         assert_eq!(timed_out.code, ErrorCode::Timeout);
         assert_eq!(timed_out.prose, "the model backend did not answer in time");
         assert!(
@@ -103,14 +103,14 @@ mod tests {
             "the elapsed error is in the message only: {timed_out:?}"
         );
 
-        let disabled = unavailable();
+        let disabled = make_unavailable_error();
         assert_eq!(disabled.code, ErrorCode::Unavailable);
         assert_eq!(
             disabled.to_string(),
             "model access is turned off or not configured"
         );
 
-        let unreadable = malformed("model list body exceeds the 8-byte limit");
+        let unreadable = make_malformed_error("model list body exceeds the 8-byte limit");
         assert_eq!(unreadable.code, ErrorCode::MalformedResponse);
         assert_eq!(
             unreadable.to_string(),
@@ -133,7 +133,7 @@ mod tests {
             "the model backend sent a reply that could not be understood: tool call id was blank"
         );
 
-        let passed = decoded(unavailable());
+        let passed = decoded(make_unavailable_error());
         assert_eq!(passed.code, ErrorCode::Unavailable);
     }
 }

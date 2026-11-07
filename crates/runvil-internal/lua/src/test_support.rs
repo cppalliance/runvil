@@ -94,11 +94,14 @@ pub fn section_vm_peak() -> usize {
 pub fn install_model_tool_call_shim(lua: &Lua) -> Result<()> {
     let model_tool_call: Function = lua
         .named_registry_value(MODEL_TOOL_CALL_REGISTRY)
-        .map_err(error::lua)?;
-    let tools: Table = lua.globals().raw_get("tools").map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
+    let tools: Table = lua
+        .globals()
+        .raw_get("tools")
+        .map_err(error::make_lua_error)?;
     tools
         .raw_set("call_as_model", model_tool_call)
-        .map_err(error::lua)
+        .map_err(error::make_lua_error)
 }
 
 impl ToolBinding {

@@ -10,8 +10,9 @@ use runvil_types::ids::TaskId;
 use super::super::{error_table, install_error_value, raised_from, retained_error};
 use super::every_store_failure;
 use crate::error::{
-    QuotaResource, context_exhausted, internal, lua_quota, lua_runtime, task_canceled,
-    task_consumed, task_not_owned, tool, tool_loop_exhausted,
+    QuotaResource, make_context_exhausted_error, make_internal_error, make_lua_quota_error,
+    make_lua_runtime_error, make_task_canceled_error, make_task_consumed_error,
+    make_task_not_owned_error, make_tool_loop_exhausted_error, tool,
 };
 
 /// The task id `path` names.
@@ -29,7 +30,7 @@ fn failure(code: ErrorCode, facts: &[(ErrorFact, serde_json::Value)]) -> Error {
 /// Errors across the families whose facts their tables' fields hold.
 fn located_by_their_fields() -> Vec<Error> {
     let mut errors = vec![
-        context_exhausted("manual"),
+        make_context_exhausted_error("manual"),
         failure(
             ErrorCode::EmptyReply,
             &[(ErrorFact::FinishReason, "length".into())],
@@ -47,16 +48,16 @@ fn located_by_their_fields() -> Vec<Error> {
             ErrorCode::TasksLive,
             &[(ErrorFact::Tasks, serde_json::Value::from(vec!["1", "1.2"]))],
         ),
-        task_not_owned(&task("0.4")),
-        task_consumed(&task("0.5")),
-        task_canceled(&task("0.6")),
-        lua_runtime("a refused edit"),
-        tool_loop_exhausted(),
+        make_task_not_owned_error(&task("0.4")),
+        make_task_consumed_error(&task("0.5")),
+        make_task_canceled_error(&task("0.6")),
+        make_lua_runtime_error("a refused edit"),
+        make_tool_loop_exhausted_error(),
     ];
     errors.extend(
         every_store_failure()
             .iter()
-            .map(|(failure, _)| crate::store_error(failure)),
+            .map(|(failure, _)| crate::make_store_error(failure)),
     );
     errors
 }
@@ -94,11 +95,11 @@ fn every_table_carries_its_errors_code_beside_its_kind() {
     let lua = Lua::new();
     let mut errors = located_by_their_fields();
     errors.extend([
-        lua_quota(QuotaResource::LogByte),
+        make_lua_quota_error(QuotaResource::LogByte),
         tool(failure(ErrorCode::ToolBackend, &[])),
         failure(ErrorCode::Transport, &[]),
         failure(ErrorCode::CallDepthExceeded, &[]),
-        internal("a test invariant broke"),
+        make_internal_error("a test invariant broke"),
     ]);
     for error in errors {
         let table = error_table(&lua, &error).expect("the table renders");
@@ -133,7 +134,7 @@ fn a_table_read_back_keeps_its_code_prose_and_facts() {
 #[test]
 fn a_rendered_table_keeps_its_error_whole_and_a_shim_table_none() {
     let lua = Lua::new();
-    let error = context_exhausted("precheck");
+    let error = make_context_exhausted_error("precheck");
     let table = Value::Table(error_table(&lua, &error).expect("the table renders"));
     assert_eq!(
         retained_error(&lua, &table).expect("the table reads"),

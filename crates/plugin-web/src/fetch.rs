@@ -16,7 +16,7 @@ use tokio::runtime::Handle;
 use tokio::task::JoinHandle;
 use url::Url;
 
-use runvil_plugin::{Error, ErrorCode, ToolOutput, tool_error};
+use runvil_plugin::{Error, ErrorCode, ToolOutput, make_tool_error};
 
 use crate::config::{ConfigError, FetchConfig};
 use crate::error::{Disposition, FetchError, SafeUrl};
@@ -259,7 +259,7 @@ impl Drop for AbortOnDrop {
 fn soft_or_hard(err: &FetchError) -> CallResult {
     match err.classify() {
         Disposition::SoftOutput => Ok(ToolOutput::untrusted(err.model_facing())),
-        Disposition::Hard(code) => Err(tool_error(code, err.model_facing())),
+        Disposition::Hard(code) => Err(make_tool_error(code, err.model_facing())),
     }
 }
 
@@ -283,7 +283,7 @@ fn map_send_error_to_outcome(err: &reqwest::Error, url: &str) -> CallResult {
         if let Some(fetch_err) = current.downcast_ref::<FetchError>() {
             return match fetch_err.classify() {
                 Disposition::SoftOutput => Ok(ToolOutput::untrusted(fetch_err.model_facing())),
-                Disposition::Hard(code) => Err(tool_error(code, fetch_err.model_facing())),
+                Disposition::Hard(code) => Err(make_tool_error(code, fetch_err.model_facing())),
             };
         }
         source = current.source();
@@ -350,7 +350,7 @@ impl WebFetch {
             .get("url")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| {
-                tool_error(
+                make_tool_error(
                     ErrorCode::ToolInvalidArguments,
                     "web_fetch: missing url argument",
                 )
@@ -373,7 +373,7 @@ impl WebFetch {
         );
         match (&mut task.0).await {
             Ok(result) => result,
-            Err(join) => Err(tool_error(
+            Err(join) => Err(make_tool_error(
                 ErrorCode::ToolOther,
                 "web_fetch: the fetch task did not finish",
             )
@@ -395,7 +395,7 @@ fn parse_max_chars(args: &serde_json::Value, ceiling: usize) -> Result<usize, Er
         return Ok(ceiling);
     }
     let n = value.as_u64().filter(|n| *n >= 1).ok_or_else(|| {
-        tool_error(
+        make_tool_error(
             ErrorCode::ToolInvalidArguments,
             "web_fetch: max_chars must be a positive integer",
         )
@@ -414,7 +414,7 @@ fn parse_raw(args: &serde_json::Value) -> Result<bool, Error> {
         None => Ok(false),
         Some(value) if value.is_null() => Ok(false),
         Some(value) => value.as_bool().ok_or_else(|| {
-            tool_error(
+            make_tool_error(
                 ErrorCode::ToolInvalidArguments,
                 "web_fetch: raw must be a boolean",
             )

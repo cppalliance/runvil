@@ -18,7 +18,7 @@ use runvil_types::event_lifecycle;
 use runvil_types::ids::RoundId;
 
 use crate::Error;
-use crate::model::{Completion, CompletionResult, completion_error, phrase};
+use crate::model::{Completion, CompletionResult, make_completion_error, phrase};
 
 use super::context::ReportingHandles;
 use super::turn;
@@ -48,10 +48,10 @@ fn accept_infer_completion(
         // protocol violation rather than something to dispatch.
         // `CompletionResult` is `#[non_exhaustive]` across the crate boundary:
         // an unrecognized future outcome is the same violation.
-        CompletionResult::ToolCalls(_) => Err(malformed_reply(
+        CompletionResult::ToolCalls(_) => Err(make_malformed_reply_error(
             "the round sent tool calls, but no tools were advertised",
         )),
-        _ => Err(malformed_reply(
+        _ => Err(make_malformed_reply_error(
             "the round sent an unrecognized outcome, and no tools were advertised",
         )),
     }
@@ -59,9 +59,9 @@ fn accept_infer_completion(
 
 /// The malformed-reply failure for an infer round whose outcome breaks the
 /// round's protocol, with `specific` naming how.
-fn malformed_reply(specific: &str) -> Error {
+fn make_malformed_reply_error(specific: &str) -> Error {
     let code = ErrorCode::MalformedResponse;
-    completion_error(code, format!("{}: {specific}", phrase(code)))
+    make_completion_error(code, format!("{}: {specific}", phrase(code)))
 }
 
 /// Applies one infer round's answer, the completion the caller obtained

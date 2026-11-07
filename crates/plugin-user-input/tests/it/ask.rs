@@ -12,7 +12,7 @@ use plugin_user_input::{ASK, INPUT_BROKER, InputBroker, install};
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
     Error, ErrorCode, HostServices, OutputTrust, Pack, PackId, PackInfo, PackRegistry, ToolId,
-    tool_error,
+    make_tool_error,
 };
 use serde_json::{Value, json};
 
@@ -34,7 +34,7 @@ struct Failing;
 impl InputBroker for Failing {
     async fn wait(&self) -> Result<String, Error> {
         Err(
-            tool_error(ErrorCode::ToolBackend, "the operator's window closed")
+            make_tool_error(ErrorCode::ToolBackend, "the operator's window closed")
                 .with_cause(&std::io::Error::other("socket reset")),
         )
     }

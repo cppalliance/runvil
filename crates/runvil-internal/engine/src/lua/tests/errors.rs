@@ -119,7 +119,7 @@ fn a_failure_envelope_raises_a_table_holding_the_kind_and_fields() {
         else {
             panic!("the shim yield must suspend the block");
         };
-        let error = crate::error::context_exhausted(reason);
+        let error = crate::error::make_context_exhausted_error(reason);
         let display = error.prose.clone();
         assert_eq!(display, ErrorCode::ContextExhausted.prose());
         match vm
@@ -317,7 +317,7 @@ fn a_typed_error_substituted_at_the_coroutine_boundary_keeps_its_kind() {
         else {
             panic!("the shim yield must suspend the block");
         };
-        let quota = crate::error::lua_quota(runvil_lua::QuotaResource::LogEvent);
+        let quota = crate::error::make_lua_quota_error(runvil_lua::QuotaResource::LogEvent);
         let mut answered = place(quota.clone(), TEST_FILE, NonZeroU32::new(1));
         answered.prose = format!(
             "lua log event quota exceeded. {}",
@@ -347,14 +347,16 @@ fn a_structured_raise_surfacing_as_the_coroutine_failure_keeps_its_table() {
     else {
         panic!("the shim yield must suspend the block");
     };
-    let (envelope, _retained) =
-        answer_envelope(vm.lua(), Err(crate::error::context_exhausted("precheck")))
-            .expect("the envelope renders");
+    let (envelope, _retained) = answer_envelope(
+        vm.lua(),
+        Err(crate::error::make_context_exhausted_error("precheck")),
+    )
+    .expect("the envelope renders");
     match vm.resume_block_coro(&program, &thread, envelope) {
         Err(error) => assert_eq!(
             error,
             place(
-                crate::error::context_exhausted("precheck"),
+                crate::error::make_context_exhausted_error("precheck"),
                 TEST_FILE,
                 NonZeroU32::new(1)
             ),

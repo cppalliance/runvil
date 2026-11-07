@@ -188,7 +188,7 @@ impl Scheduler {
             .ctx
             .vfs()
             .acquire(Origin::at("probe", self.ctx.prompt().title(), 1))
-            .map_err(|cause| crate::error::store(&cause))?;
+            .map_err(|cause| crate::error::make_store_error(&cause))?;
         self.start_chain(ChainStart {
             lineage: ChainId::root(),
             counters: Counters::default(),

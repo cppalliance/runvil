@@ -29,7 +29,7 @@ use runvil_model_client::detail::{message_content_value, message_raw_tool_calls}
 use runvil_types::metrics::Usage;
 use serde_json::Value;
 
-use crate::error::{self, Result, context_exhausted, lua_runtime};
+use crate::error::{self, Result, make_context_exhausted_error, make_lua_runtime_error};
 use crate::messages::MessageList;
 
 /// Why a request cannot fit the model's context window.
@@ -58,7 +58,7 @@ impl OverflowReason {
     }
 
     /// The invocation tag the compactor callback receives, also the
-    /// `reason` field of a `context_exhausted` error table.
+    /// `reason` field of a `make_context_exhausted_error` error table.
     #[must_use]
     pub(crate) fn tag(self) -> &'static str {
         match self {
@@ -116,8 +116,8 @@ impl Compactor {
     /// over `list`, and leaves it unchanged.
     pub(crate) fn invoke(self, list: &MessageList, reason: &str) -> Result<()> {
         match self {
-            Compactor::Fail => Err(context_exhausted(reason)),
-            Compactor::Clear if !list.compacting() => Err(lua_runtime(
+            Compactor::Fail => Err(make_context_exhausted_error(reason)),
+            Compactor::Clear if !list.compacting() => Err(make_lua_runtime_error(
                 "compactors.clear works only inside a compactor; empty messages with \
                  models.compact(compactors.clear, reason)"
                     .to_owned(),
@@ -294,19 +294,21 @@ fn message_chars(message: &Message) -> u64 {
 /// # Errors
 /// Returns a `LuaRuntime` failure if a function or the global install fails.
 pub(crate) fn install_compactors(lua: &Lua, globals: &Table, list: &MessageList) -> Result<()> {
-    let compactors = lua.create_table().map_err(error::lua)?;
+    let compactors = lua.create_table().map_err(error::make_lua_error)?;
     for (name, policy) in [("fail", Compactor::Fail), ("clear", Compactor::Clear)] {
         let list = list.clone();
         let function: Function = lua
             .create_function(move |_lua, reason: String| {
                 policy.invoke(&list, &reason).map_err(mlua::Error::external)
             })
-            .map_err(error::lua)?;
-        compactors.raw_set(name, function).map_err(error::lua)?;
+            .map_err(error::make_lua_error)?;
+        compactors
+            .raw_set(name, function)
+            .map_err(error::make_lua_error)?;
     }
     globals
         .raw_set("compactors", compactors)
-        .map_err(error::lua)
+        .map_err(error::make_lua_error)
 }
 
 #[cfg(test)]

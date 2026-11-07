@@ -309,7 +309,7 @@ async fn a_body_read_timeout_is_a_timeout_failure() {
     assert!(read.is_timeout(), "reqwest reports the read as a timeout");
 
     let read_text = read.to_string();
-    let err = transport_failure(read);
+    let err = make_transport_failure_error(read);
     assert_eq!(
         err.code,
         ErrorCode::Timeout,

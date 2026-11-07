@@ -1,7 +1,7 @@
 //! Argument checking against a tool's own JSON Schema, and the helpers
 //! the file tools share to refuse what the schema alone cannot.
 
-use runvil_plugin::{Error, ErrorCode, tool_error};
+use runvil_plugin::{Error, ErrorCode, make_tool_error};
 use serde_json::Value;
 
 use crate::matcher::PatternError;
@@ -25,7 +25,7 @@ pub(crate) fn check(tool: &str, schema: &Value, args: &Value) -> Result<(), Erro
         args
     };
     let Some(object) = args.as_object() else {
-        return Err(invalid_arguments(
+        return Err(make_invalid_arguments_error(
             tool,
             "the arguments must be a JSON object",
         ));
@@ -34,13 +34,13 @@ pub(crate) fn check(tool: &str, schema: &Value, args: &Value) -> Result<(), Erro
         for name in required.iter().filter_map(Value::as_str) {
             match object.get(name) {
                 None => {
-                    return Err(invalid_arguments(
+                    return Err(make_invalid_arguments_error(
                         tool,
                         format!("`{name}` is required, and the call left it out"),
                     ));
                 }
                 Some(Value::Null) => {
-                    return Err(invalid_arguments(
+                    return Err(make_invalid_arguments_error(
                         tool,
                         format!("`{name}` is required, and the call passed null"),
                     ));
@@ -67,7 +67,7 @@ fn check_value(tool: &str, name: &str, property: &Value, value: &Value) -> Resul
         && !allowed.contains(value)
     {
         let allowed: Vec<String> = allowed.iter().map(ToString::to_string).collect();
-        return Err(invalid_arguments(
+        return Err(make_invalid_arguments_error(
             tool,
             format!(
                 "`{name}` must be one of {}, and the call passed {value}",
@@ -87,7 +87,7 @@ fn check_value(tool: &str, name: &str, property: &Value, value: &Value) -> Resul
         "object" => value.is_object(),
         "null" => value.is_null(),
         other => {
-            return Err(invalid_arguments(
+            return Err(make_invalid_arguments_error(
                 tool,
                 format!("`{name}` has a schema type {other} this build does not know"),
             ));
@@ -96,7 +96,7 @@ fn check_value(tool: &str, name: &str, property: &Value, value: &Value) -> Resul
     if matches {
         return check_items(tool, name, property, value);
     }
-    Err(invalid_arguments(
+    Err(make_invalid_arguments_error(
         tool,
         format!("`{name}` must be a JSON {expected}, and the call passed {value}"),
     ))
@@ -151,7 +151,7 @@ pub(crate) fn refuse_unknown(tool: &str, schema: &Value, args: &Value) -> Result
         Some((last, [])) => format!("The parameters are {last}."),
         Some((last, first)) => format!("The parameters are {} and {last}.", first.join(", ")),
     };
-    Err(invalid_arguments(
+    Err(make_invalid_arguments_error(
         tool,
         format!("`{unknown}` is not a parameter of this tool. {tail}"),
     ))
@@ -167,7 +167,7 @@ pub(crate) fn refuse_unknown(tool: &str, schema: &Value, args: &Value) -> Result
 /// Returns an invalid-arguments [`Error`] naming the parameter.
 pub(crate) fn refuse_blank(tool: &str, name: &str, value: &str) -> Result<(), Error> {
     if value.trim().is_empty() {
-        return Err(invalid_arguments(
+        return Err(make_invalid_arguments_error(
             tool,
             format!("`{name}` is empty or only whitespace, and the call passed \"{value}\""),
         ));
@@ -184,14 +184,19 @@ const PATTERN_ECHO_BYTES: usize = 80;
 /// The error echoes the pattern, cut to 80 bytes on a character boundary
 /// with `...` added when it was cut, so a long pattern does not fill the
 /// message.
-pub(crate) fn invalid_pattern(tool: &str, name: &str, pattern: &str, error: PatternError) -> Error {
+pub(crate) fn make_invalid_pattern_error(
+    tool: &str,
+    name: &str,
+    pattern: &str,
+    error: PatternError,
+) -> Error {
     let shown = clip_to_boundary(pattern, 0, PATTERN_ECHO_BYTES);
     let dots = if shown.len() < pattern.len() {
         "..."
     } else {
         ""
     };
-    invalid_arguments(
+    make_invalid_arguments_error(
         tool,
         format!(
             "`{name}` is invalid: \"{shown}{dots}\" does not parse: {}.",
@@ -221,8 +226,8 @@ pub(crate) fn plural(n: usize, noun: &str) -> String {
 
 /// An invalid-arguments error whose message opens with the tool's id
 /// segment.
-pub(crate) fn invalid_arguments(tool: &str, reason: impl std::fmt::Display) -> Error {
-    tool_error(
+pub(crate) fn make_invalid_arguments_error(tool: &str, reason: impl std::fmt::Display) -> Error {
+    make_tool_error(
         ErrorCode::ToolInvalidArguments,
         format!("std_{tool}: {reason}"),
     )

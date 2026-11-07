@@ -84,7 +84,7 @@ impl<'a> ChainOps<'a> {
     /// which every chain's start rules out.
     pub(super) fn scope(&self) -> Result<&'a ScopeHandle> {
         self.scope
-            .ok_or(error::internal("the run holds no scope handle"))
+            .ok_or(error::make_internal_error("the run holds no scope handle"))
     }
 
     /// Delivers `answer` to the chain's suspended block: the inline-answer

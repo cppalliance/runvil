@@ -44,7 +44,7 @@ pub type RecorderFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> +
 /// recorder failed: ` followed by the cause chain, and its prose is the
 /// code's default.
 #[must_use]
-pub fn recorder_error(cause: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Error {
+pub fn make_recorder_error(cause: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Error {
     let cause = cause.into();
     let code = ErrorCode::RecorderFailed;
     Error::new(code, "the run recorder failed", code.prose()).with_cause(&*cause)
@@ -63,13 +63,13 @@ pub(crate) fn is_refusal(error: &Error) -> bool {
 }
 
 /// A recorder's refusal of a write for run `run`: `RecorderFailed` with
-/// the run's `Run` fact, the refusal built with [`recorder_error`] when
+/// the run's `Run` fact, the refusal built with [`make_recorder_error`] when
 /// the recorder returned another code.
 pub(crate) fn refused(run: RunId, error: Error) -> Error {
     let error = if is_refusal(&error) {
         error
     } else {
-        recorder_error(error)
+        make_recorder_error(error)
     };
     of_run(run, error)
 }
@@ -93,14 +93,14 @@ pub trait RunRecorder: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns the recorder's own failure, built with [`recorder_error`].
+    /// Returns the recorder's own failure, built with [`make_recorder_error`].
     fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId>;
 
     /// Adds one record to an open run.
     ///
     /// # Errors
     ///
-    /// Returns the recorder's own failure, built with [`recorder_error`].
+    /// Returns the recorder's own failure, built with [`make_recorder_error`].
     fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()>;
 
     /// Closes a run with its result: the run's final text, or the error
@@ -109,7 +109,7 @@ pub trait RunRecorder: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns the recorder's own failure, built with [`recorder_error`].
+    /// Returns the recorder's own failure, built with [`make_recorder_error`].
     fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()>;
 }
 

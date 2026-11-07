@@ -6,7 +6,7 @@ use serde_json::json;
 
 use runvil_types::error::{Error, ErrorCode};
 
-use crate::messages::{MessageList, late_system};
+use crate::messages::{MessageList, make_late_system_error};
 use crate::project_messages;
 use crate::protocol::{MessageContent, MessageRecord, ToolCallRecord};
 use crate::test_vm::{BuiltVm, TestVm};
@@ -91,7 +91,7 @@ fn push_refuses_a_late_system_record_as_a_typed_edit_error_naming_its_position()
     let refusal = list
         .push(system("late"))
         .expect_err("a system record behind a user record");
-    assert_eq!(refusal, late_system(3));
+    assert_eq!(refusal, make_late_system_error(3));
     assert!(
         refusal
             .to_string()

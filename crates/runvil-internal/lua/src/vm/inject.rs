@@ -108,15 +108,19 @@ impl SectionVm<Uninjected> {
         selection: &Arc<Mutex<Option<ModelBinding>>>,
     ) -> Result<()> {
         let globals = self.lua.globals();
-        globals.raw_set("args", args).map_err(error::lua)?;
+        globals
+            .raw_set("args", args)
+            .map_err(error::make_lua_error)?;
         match argv {
             Argv::Writable(value) => crate::argv::install_writable(&self.lua, value)?,
             Argv::Frozen(value) => crate::argv::install_frozen(&self.lua, value)?,
         }
         let sys_table = seal_sys(&self.lua, sys)?;
-        globals.raw_set("sys", sys_table).map_err(error::lua)?;
+        globals
+            .raw_set("sys", sys_table)
+            .map_err(error::make_lua_error)?;
         let var = guarded_var(&self.lua, initial_var)?;
-        globals.raw_set("var", var).map_err(error::lua)?;
+        globals.raw_set("var", var).map_err(error::make_lua_error)?;
         install_tools(
             &self.lua,
             &globals,

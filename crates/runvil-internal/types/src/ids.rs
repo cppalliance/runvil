@@ -30,7 +30,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::error::Error;
-use crate::names::invalid_id;
+use crate::names::make_invalid_id_error;
 
 /// The hierarchical id of one chain: a path of child indices from the root
 /// chain.
@@ -87,7 +87,7 @@ impl FromStr for ChainId {
     /// `0.2.0`, each plain decimal digits that fit in a `u32`.
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let reject = || {
-            invalid_id(
+            make_invalid_id_error(
                 format!(
                     "invalid chain id `{input}`: required a dot-separated path of decimal \
                      components"
@@ -243,7 +243,7 @@ impl RoundId {
 pub enum AbandonReason {
     /// The owner ended normally, by returning a scalar or finishing its
     /// walk, and left the task running. The owner's outcome becomes the
-    /// `tasks_live` error.
+    /// `make_tasks_live_error` error.
     OwnerReturned,
     /// The owner failed.
     OwnerFailed,

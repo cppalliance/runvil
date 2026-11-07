@@ -8,7 +8,7 @@
 //! each operation like any other. Both are synchronous, like the VFS, and
 //! the Harness runs them inline in the run's future.
 
-use runvil::vfs::{Origin, VfsError, VfsOp, VfsOutcome, VfsRef, perform_vfs_op, store_error};
+use runvil::vfs::{Origin, VfsError, VfsOp, VfsOutcome, VfsRef, make_store_error, perform_vfs_op};
 use runvil::{Error, ErrorCode, ErrorFact};
 
 /// Puts the prompt's declared input in place in `vfs`'s store: writes
@@ -30,7 +30,7 @@ pub fn stage_input(
     let path = match (declared, &text) {
         (None, None) => return Ok(()),
         (None, Some(_)) => {
-            return Err(reasoned(
+            return Err(make_reasoned_error(
                 ErrorCode::RequirementsUnmet,
                 "input_undeclared",
                 "the launch supplied input text, but the prompt declares no `input:` file",
@@ -39,7 +39,7 @@ pub fn stage_input(
         (Some(path), _) => path,
     };
     let store = |source: VfsError| {
-        let mut error = store_error(&source);
+        let mut error = make_store_error(&source);
         error.message = format!("the input file `{path}` could not be staged: {source}");
         error.facts.insert(ErrorFact::Path, path.into());
         error
@@ -55,7 +55,7 @@ pub fn stage_input(
         None => match perform_vfs_op(&view, VfsOp::Exists { path: path.clone() }) {
             Ok(VfsOutcome::Bool(true)) => Ok(()),
             Ok(_) => {
-                let mut error = reasoned(
+                let mut error = make_reasoned_error(
                     ErrorCode::RequirementsUnmet,
                     "input_missing",
                     format!(
@@ -95,7 +95,7 @@ pub fn read_output(vfs: &VfsRef, path: &str) -> Result<String, VfsError> {
 /// declared `output:` path in `vfs`'s store, or why the report omits it.
 ///
 /// A run whose `result` is an error did not complete and fails with
-/// [`not_completed`], and a prompt with no `output:` file with `NoOutput`
+/// [`make_not_completed_error`], and a prompt with no `output:` file with `NoOutput`
 /// and the `Reason` fact `undeclared`. A completed run that left no file
 /// fails with `NotFound`, and a refused read with the store failure's
 /// code. Both carry the declared path as the `Path` fact. The prose is the
@@ -106,17 +106,17 @@ pub(crate) fn report_output(
     result: &Result<String, Error>,
 ) -> Result<String, Error> {
     if result.is_err() {
-        return Err(not_completed());
+        return Err(make_not_completed_error());
     }
     let path = path.ok_or_else(|| {
-        reasoned(
+        make_reasoned_error(
             ErrorCode::NoOutput,
             "undeclared",
             "the prompt declares no `output:` file",
         )
     })?;
     read_output(vfs, path).map_err(|error| {
-        let mut converted = store_error(&error);
+        let mut converted = make_store_error(&error);
         converted.message = if matches!(error, VfsError::NotFound { .. }) {
             format!("the run completed without writing its declared output file `{path}`")
         } else {
@@ -128,9 +128,9 @@ pub(crate) fn report_output(
 }
 
 /// The output failure of a run that failed or was canceled, possibly
-/// before it began: `NoOutput` with the `Reason` fact `not_completed`.
-pub(crate) fn not_completed() -> Error {
-    reasoned(
+/// before it began: `NoOutput` with the `Reason` fact `make_not_completed_error`.
+pub(crate) fn make_not_completed_error() -> Error {
+    make_reasoned_error(
         ErrorCode::NoOutput,
         "not_completed",
         "the run did not complete",
@@ -139,7 +139,7 @@ pub(crate) fn not_completed() -> Error {
 
 /// A failure under `code` with `message`, the `Reason` fact `reason`, and
 /// the code's default prose.
-fn reasoned(code: ErrorCode, reason: &str, message: impl Into<String>) -> Error {
+fn make_reasoned_error(code: ErrorCode, reason: &str, message: impl Into<String>) -> Error {
     let mut error = Error::new(code, message, code.prose());
     error.facts.insert(ErrorFact::Reason, reason.into());
     error

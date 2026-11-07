@@ -108,7 +108,7 @@ use std::sync::Arc;
 
 use runvil_plugin::{
     Error, ErrorCode, HostServices, Pack, PackId, PackInfo, PackRegistry, ServiceKey,
-    TOKIO_RUNTIME, tool_error,
+    TOKIO_RUNTIME, make_tool_error,
 };
 use serde_json::{Map, Value};
 use tokio::runtime::Handle;
@@ -156,7 +156,7 @@ fn construct(
         Value::Null => Map::new(),
         Value::Object(entries) => entries,
         _ => {
-            return Err(tool_error(
+            return Err(make_tool_error(
                 ErrorCode::ToolOther,
                 "the MCP configuration must be a JSON object of servers by name, as the \
                  `mcpServers` object of an mcp.json file is",
@@ -164,7 +164,7 @@ fn construct(
         }
     };
     let runtime = services.get(&RUNTIME).ok_or_else(|| {
-        tool_error(
+        make_tool_error(
             ErrorCode::ToolOther,
             "MCP needs runvil/tokio-runtime, and this host provides none",
         )

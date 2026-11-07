@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use runvil::tool_error;
+use runvil::make_tool_error;
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, ServiceId, ServiceKey, ToolContext, ToolId,
@@ -81,7 +81,7 @@ impl Pack for Asker {
     ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             let broker = cx.service(&BROKER).ok_or_else(|| {
-                tool_error(ErrorCode::ToolOther, "no operator is connected to this run")
+                make_tool_error(ErrorCode::ToolOther, "no operator is connected to this run")
             })?;
             broker.wait().await.map(ToolOutput::trusted)
         })

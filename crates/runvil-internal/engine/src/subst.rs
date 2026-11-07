@@ -65,7 +65,7 @@ use crate::Result;
 ///   `argv` was nil.
 /// - `serialize`: the bare-global lookup failed: the global cannot become
 ///   JSON data, the name is `prose` itself, or the lookup raised.
-fn failure(reason: &str, offset: usize, detail: String) -> Error {
+fn make_failure_error(reason: &str, offset: usize, detail: String) -> Error {
     let code = ErrorCode::Substitution;
     let kind: String = reason
         .split('_')
@@ -153,7 +153,7 @@ pub(crate) fn substitute(prose: &str, sources: &Sources<'_>) -> Result<String> {
             };
             let after = &prose[i + 2..];
             let end = after.find("}}").ok_or_else(|| {
-                placed(failure(
+                placed(make_failure_error(
                     "unclosed",
                     start,
                     "unclosed '{{' in prose".to_string(),
@@ -184,7 +184,7 @@ fn placeholder_line(line: Option<NonZeroU32>, before: &str) -> Option<NonZeroU32
 /// The nil-`argv` failure shared by the bare and dotted `{{ argv }}` paths.
 fn nil_argv<'a>(argv: Option<&'a Value>, path: &str, offset: usize) -> SubstResult<&'a Value> {
     argv.ok_or_else(|| {
-        failure(
+        make_failure_error(
             "nil_argv",
             offset,
             format!(
@@ -205,7 +205,7 @@ fn bare_global_root(
 ) -> SubstResult<Value> {
     globals(name)
         .map_err(|error| {
-            failure(
+            make_failure_error(
                 "serialize",
                 offset,
                 format!(
@@ -217,7 +217,7 @@ fn bare_global_root(
             .with_cause(&error)
         })?
         .ok_or_else(|| {
-            failure(
+            make_failure_error(
                 "unknown_namespace",
                 offset,
                 format!(
@@ -236,7 +236,7 @@ fn resolve(path: &str, offset: usize, sources: &Sources<'_>) -> SubstResult<Stri
     }
     if path == "item" {
         return sources.item.map(crate::lua::render_item).ok_or_else(|| {
-            failure(
+            make_failure_error(
                 "nil_item",
                 offset,
                 "{{ item }} is nil (no item is seeded into this section)".to_string(),
@@ -253,7 +253,7 @@ fn resolve(path: &str, offset: usize, sources: &Sources<'_>) -> SubstResult<Stri
     // when a matching JSON key happens to exist.
     for segment in path.split('.') {
         if segment.is_empty() || segment.trim() != segment {
-            return Err(failure(
+            return Err(make_failure_error(
                 "empty_segment",
                 offset,
                 format!(
@@ -275,14 +275,14 @@ fn resolve(path: &str, offset: usize, sources: &Sources<'_>) -> SubstResult<Stri
         "sys" => sources.sys,
         "argv" => nil_argv(sources.argv, path, offset)?,
         "args" => {
-            return Err(failure(
+            return Err(make_failure_error(
                 "not_a_table",
                 offset,
                 "args is a string, not a table".to_string(),
             ));
         }
         "item" => {
-            return Err(failure(
+            return Err(make_failure_error(
                 "not_a_table",
                 offset,
                 "item takes no key path; {{ item }} renders the whole item".to_string(),
@@ -299,7 +299,7 @@ fn resolve(path: &str, offset: usize, sources: &Sources<'_>) -> SubstResult<Stri
         Some(keys) => {
             for key in keys.split('.') {
                 current = current.get(key).ok_or_else(|| {
-                    failure(
+                    make_failure_error(
                         "missing_key",
                         offset,
                         format!("missing {{{{ {} }}}}", path_preview(path)),
@@ -310,7 +310,7 @@ fn resolve(path: &str, offset: usize, sources: &Sources<'_>) -> SubstResult<Stri
         // A bare `var`/`sys` with no key stays an error; a bare global with
         // no keys renders its whole JSON value.
         None if matches!(namespace, "var" | "sys") => {
-            return Err(failure(
+            return Err(make_failure_error(
                 "bad_path",
                 offset,
                 format!("bad path: {{{{ {} }}}}", path_preview(path)),
@@ -351,7 +351,7 @@ fn path_preview(path: &str) -> String {
 /// [`render_item`](crate::lua::render_item); a null is an error.
 fn render(value: &Value, path: &str, offset: usize) -> SubstResult<String> {
     if value.is_null() {
-        return Err(failure(
+        return Err(make_failure_error(
             "null_value",
             offset,
             format!("missing {{{{ {} }}}}", path_preview(path)),

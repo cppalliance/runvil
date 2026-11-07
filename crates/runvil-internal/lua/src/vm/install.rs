@@ -73,7 +73,7 @@ impl SectionVm {
     /// Takes the claims-model conflict the direct store closures recorded
     /// while the Pack preludes installed, clearing the slot. The executor
     /// reads it once the preludes return, so a conflict a prelude caught
-    /// with `pcall` still ends the run with a determinism violation.
+    /// with `pcall` still ends the run with a make_determinism_error violation.
     #[must_use]
     pub fn take_store_conflict(&self) -> Option<String> {
         // A panic elsewhere cannot leave the slot half-written, so a
@@ -121,8 +121,10 @@ impl SectionVm {
                 let var = var_to_json(lua).map_err(mlua::Error::external)?;
                 call_callback(target, input, var).map_err(mlua::Error::external)
             })
-            .map_err(error::lua)?;
-        globals.raw_set("call", call_fn).map_err(error::lua)?;
+            .map_err(error::make_lua_error)?;
+        globals
+            .raw_set("call", call_fn)
+            .map_err(error::make_lua_error)?;
         self.install_jump_global(&globals)?;
         self.install_prompt_table(&globals, read)
     }
@@ -245,14 +247,16 @@ impl SectionVm {
                 }
                 let heading = resolve_section_target(target)?;
                 let line = error::author_line(lua);
-                let mut slot = jump_slot
-                    .lock()
-                    .map_err(|_| mlua::Error::external(error::internal(JUMP_SLOT_POISONED)))?;
+                let mut slot = jump_slot.lock().map_err(|_| {
+                    mlua::Error::external(error::make_internal_error(JUMP_SLOT_POISONED))
+                })?;
                 *slot = Some((heading, line));
                 Err(mlua::Error::external("jump transfer"))
             })
-            .map_err(error::lua)?;
-        globals.raw_set("jump", jump_fn).map_err(error::lua)
+            .map_err(error::make_lua_error)?;
+        globals
+            .raw_set("jump", jump_fn)
+            .map_err(error::make_lua_error)
     }
 
     fn install_prompt_table<R, E>(&self, globals: &mlua::Table, read: R) -> Result<()>
@@ -269,7 +273,7 @@ impl SectionVm {
                     .map_err(mlua::Error::external)?;
                 Ok(text.map(|text| text.markdown))
             })
-            .map_err(error::lua)?;
+            .map_err(error::make_lua_error)?;
         let list = self
             .lua
             .create_function(move |lua, target: Value| {
@@ -283,11 +287,17 @@ impl SectionVm {
                     Some(text) => pack_sequence(lua, text.items).map(Value::Table),
                 }
             })
-            .map_err(error::lua)?;
-        let prompt = self.lua.create_table().map_err(error::lua)?;
-        prompt.raw_set("section", section).map_err(error::lua)?;
-        prompt.raw_set("list", list).map_err(error::lua)?;
-        globals.raw_set("prompt", prompt).map_err(error::lua)
+            .map_err(error::make_lua_error)?;
+        let prompt = self.lua.create_table().map_err(error::make_lua_error)?;
+        prompt
+            .raw_set("section", section)
+            .map_err(error::make_lua_error)?;
+        prompt
+            .raw_set("list", list)
+            .map_err(error::make_lua_error)?;
+        globals
+            .raw_set("prompt", prompt)
+            .map_err(error::make_lua_error)
     }
 
     /// Replaces the sealed Lua `sys` global at the section entry's first
@@ -300,12 +310,14 @@ impl SectionVm {
     pub fn re_seal_sys(&self, sys: &Json) -> Result<()> {
         let globals = self.lua.globals();
         let sys_table = seal_sys(&self.lua, sys)?;
-        globals.raw_set("sys", sys_table).map_err(error::lua)?;
+        globals
+            .raw_set("sys", sys_table)
+            .map_err(error::make_lua_error)?;
         let mut live = self
             .state
             .sys_live
             .lock()
-            .map_err(|_| error::internal(SYS_LIVE_POISONED))?;
+            .map_err(|_| error::make_internal_error(SYS_LIVE_POISONED))?;
         *live = sys.clone();
         Ok(())
     }

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use super::ids::ToolId;
 use super::info::ToolInfo;
 use crate::error::Error;
-use crate::names::invalid_id;
+use crate::names::make_invalid_id_error;
 
 /// A catalog of the tools a run may offer, given as `ToolInfo` values.
 ///
@@ -53,7 +53,7 @@ impl ToolCatalog {
         let mut seen = std::collections::BTreeSet::new();
         for tool in &tools {
             if !seen.insert(&tool.id) {
-                return Err(invalid_id(
+                return Err(make_invalid_id_error(
                     format!("duplicate tool identity `{}` in the tool catalog", tool.id),
                     &tool.id.to_string(),
                 ));

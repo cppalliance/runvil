@@ -17,7 +17,7 @@
 use std::str::FromStr;
 
 use crate::error::Error;
-use crate::names::{GlobalName, invalid_id};
+use crate::names::{GlobalName, make_invalid_id_error};
 use crate::tools::ToolId;
 
 /// The Pack ids the Engine holds tools under itself, which no Pack of any
@@ -49,7 +49,7 @@ impl PackId {
     /// `.`.
     pub fn parse(name: &str) -> Result<PackId, Error> {
         PackId::validate(name)
-            .map_err(|reason| invalid_id(format!("invalid Pack id: {reason}"), name))
+            .map_err(|reason| make_invalid_id_error(format!("invalid Pack id: {reason}"), name))
     }
 
     /// Parses `name` as [`PackId::parse`] does, but returns only the reason

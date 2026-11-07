@@ -13,7 +13,7 @@
 //! [`model::ModelBinding`]/[`model::ModelSet`] types
 //! model selections resolve and freeze through, with the universal
 //! [`Error`](runvil_types::error::Error) under a model code, built through
-//! [`model::completion_error`], as the failure a round reports.
+//! [`model::make_completion_error`], as the failure a round reports.
 //!
 //! The metrics vocabulary in [`runvil_types::metrics`] (`Usage`,
 //! `LlamaTimings`, `VllmMetrics`, `ClientTiming`, `CallMetrics`) is

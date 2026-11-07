@@ -2,9 +2,9 @@
 //! scheduler wait primitive and `tasks.join` is Lua over it (reporting
 //! a failed member without raising); `tasks.status` reads a parked and a
 //! finished task; `tasks.ready`, `tasks.pending`, `tasks.note`, and
-//! `tasks.cancel` round-trip; ownership is enforced (`task_not_owned`,
+//! `tasks.cancel` round-trip; ownership is enforced (`make_task_not_owned_error`,
 //! with the self exception for `status` and `note`); a delivered task's
-//! second wait raises `task_consumed`; cancel is idempotent and reports
+//! second wait raises `make_task_consumed_error`; cancel is idempotent and reports
 //! `TaskCanceled` exactly once.
 
 use runvil_types::event::Event;
@@ -68,7 +68,7 @@ fn join_fills_every_position_of_a_member_named_twice() {
     // A set naming one task twice: the task is waited on once and its
     // outcome lands at both positions, so the result sequence has no hole
     // and `#results` is the input's length; the second wait would have
-    // raised `task_consumed` had the shim waited twice.
+    // raised `make_task_consumed_error` had the shim waited twice.
     let md = tasks_prompt(
         "local a = tasks.spawn('## Alpha')\n\
          local b = tasks.spawn('## Beta')\n\
@@ -249,7 +249,7 @@ fn waiting_on_a_delivered_task_raises_task_consumed() {
 fn cancel_ends_a_parked_task_idempotently_and_reports_task_canceled_once() {
     // The child parks on a store write; the owner cancels it twice (the
     // second is a no-op), reads the terminal state, and ends with no live
-    // task - so no `tasks_live`. A wait on the canceled entry delivers
+    // task - so no `make_tasks_live_error`. A wait on the canceled entry delivers
     // `ok = false` with a `canceled` error value.
     //
     // The rig holds the child's write until the child's `TaskCanceled` is

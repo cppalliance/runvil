@@ -1,6 +1,6 @@
 //! Timeouts on the wait shims: `opts.timeout` on `tasks.join_any` returns
 //! `nil` when the internal timer wins and the members keep running (no
-//! `tasks_live` at chain end); on `tasks.join` it returns `results,
+//! `make_tasks_live_error` at chain end); on `tasks.join` it returns `results,
 //! timed_out` with the unfinished members absent. When a member wins the
 //! shim cancels the timer and its leaf work is dropped. The timer is an
 //! effect-backed entry the author never sees: `tasks.pending` and a status

@@ -14,9 +14,11 @@ use std::time::{Duration, Instant};
 use runvil::Error;
 use runvil::model::{Completion, CompletionOptions, Message, ToolSchema};
 
-use crate::config::{GatewayEndpoint, SecretString, invalid_env, missing_env};
-use crate::failure::{elapsed, transport_failure, unavailable};
-use crate::wire::classify::classify_http_failure;
+use crate::config::{
+    GatewayEndpoint, SecretString, make_invalid_env_error, make_missing_env_error,
+};
+use crate::failure::{make_elapsed_error, make_transport_failure_error, make_unavailable_error};
+use crate::wire::classify::make_classify_http_failure_error;
 use crate::wire::delta::StreamDelta;
 use crate::wire::read::{ChunkSource, read_body_capped, read_completion_stream};
 use crate::wire::request::build_request_body;
@@ -66,8 +68,8 @@ impl ChunkSource for ResponseChunks {
     async fn next_chunk(&mut self) -> Result<Option<Self::Chunk>, Error> {
         tokio::time::timeout(self.timeout, self.response.chunk())
             .await
-            .map_err(elapsed)?
-            .map_err(transport_failure)
+            .map_err(make_elapsed_error)?
+            .map_err(make_transport_failure_error)
     }
 }
 
@@ -196,7 +198,7 @@ impl GatewayChat {
             Err(std::env::VarError::NotPresent) => Ok(None),
             // A set-but-non-Unicode value is a real misconfiguration, surfaced
             // explicitly instead of being silently treated as "not set".
-            Err(std::env::VarError::NotUnicode(_)) => Err(invalid_env(name)),
+            Err(std::env::VarError::NotUnicode(_)) => Err(make_invalid_env_error(name)),
         })
     }
 
@@ -240,7 +242,7 @@ impl GatewayChat {
     ///   that names no known cause.
     /// - `ContextOverflow`, `RateLimited`, `QuotaExhausted`, `Overloaded`,
     ///   `Refused`, `ServerError`, or `Rejected` when the gateway answers
-    ///   with a status outside the 2xx range, as [`classify_http_failure`]
+    ///   with a status outside the 2xx range, as [`make_classify_http_failure_error`]
     ///   reads it.
     /// - `MalformedResponse` when the stream exceeds the response size cap,
     ///   a chunk fails to parse as usable JSON (a JSON decode error is kept
@@ -257,7 +259,7 @@ impl GatewayChat {
         on_delta: impl Fn(StreamDelta),
     ) -> Result<Completion, Error> {
         let GatewayTransport::Http(http) = &self.transport else {
-            return Err(unavailable());
+            return Err(make_unavailable_error());
         };
         let request_body = build_request_body(messages, tools, options);
 
@@ -274,8 +276,8 @@ impl GatewayChat {
         }
         let response = tokio::time::timeout(self.receive_timeout, request.send())
             .await
-            .map_err(elapsed)?
-            .map_err(transport_failure)?;
+            .map_err(make_elapsed_error)?
+            .map_err(make_transport_failure_error)?;
 
         let status = response.status();
         let content_length = response.content_length();
@@ -291,7 +293,7 @@ impl GatewayChat {
             // escaped body to the error's message only, never to its prose.
             let body = String::from_utf8_lossy(&raw_body);
             let body = escape_controls(&body, 2000);
-            return Err(classify_http_failure(status.as_u16(), &body));
+            return Err(make_classify_http_failure_error(status.as_u16(), &body));
         }
 
         // The byte cap, the `[DONE]` rule, the truncation rule, the strict
@@ -320,8 +322,8 @@ impl GatewayChat {
 fn from_env_with(
     lookup: impl Fn(&str) -> Result<Option<String>, Error>,
 ) -> Result<GatewayChat, Error> {
-    let base_url =
-        lookup("RUNVIL_GATEWAY_URL")?.ok_or_else(|| missing_env("RUNVIL_GATEWAY_URL"))?;
+    let base_url = lookup("RUNVIL_GATEWAY_URL")?
+        .ok_or_else(|| make_missing_env_error("RUNVIL_GATEWAY_URL"))?;
     let endpoint = GatewayEndpoint::new(&base_url)?;
     let key = lookup("RUNVIL_GATEWAY_API_KEY")?
         .map(SecretString::new)
@@ -329,7 +331,7 @@ fn from_env_with(
     match key {
         Some(key) => Ok(GatewayChat::new(endpoint, key)),
         None if endpoint.is_loopback() => Ok(GatewayChat::keyless(endpoint)),
-        None => Err(missing_env("RUNVIL_GATEWAY_API_KEY")),
+        None => Err(make_missing_env_error("RUNVIL_GATEWAY_API_KEY")),
     }
 }
 

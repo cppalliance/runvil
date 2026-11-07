@@ -26,7 +26,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use mlua::{AnyUserData, Function, Lua, LuaSerdeExt, MultiValue, Table, Value};
 use runvil_types::metrics::ToolCallEvent;
 
-use crate::error::{self, Result, authored, lua_runtime};
+use crate::error::{self, Result, authored, make_lua_runtime_error};
 use crate::error_value::{ErrorKind, error_table, message_table, normalized};
 use crate::hardening::CancelHook;
 use crate::messages::MessageList;
@@ -89,7 +89,7 @@ pub(crate) fn loop_begin(
     lua.create_function(move |lua, args: MultiValue| {
         begin(lua, args, max_tool_iterations, &compactors, &running, &hook)
     })
-    .map_err(error::lua)
+    .map_err(error::make_lua_error)
 }
 
 /// `loop_begin`'s body: the leading handle, then the arity; the
@@ -189,7 +189,7 @@ pub(crate) fn compact_begin(
     let running = Arc::clone(loop_running);
     let hook = hook.clone();
     lua.create_function(move |lua, args: MultiValue| compact(lua, args, &running, &hook))
-        .map_err(error::lua)
+        .map_err(error::make_lua_error)
 }
 
 /// `compact_begin`'s body. The flag is set only once nothing here can
@@ -244,7 +244,7 @@ fn compact(
 /// The answer of `loop_begin` or `compact_begin` to a refused call: no step
 /// closure, then the `"raise"` action with a new `LuaRuntime` failure.
 fn refuse(lua: &Lua, message: &str) -> mlua::Result<MultiValue> {
-    let mut action = act(lua, Then::RaiseNew(lua_runtime(message)))?;
+    let mut action = act(lua, Then::RaiseNew(make_lua_runtime_error(message)))?;
     action.push_front(Value::Nil);
     Ok(action)
 }
@@ -429,7 +429,7 @@ fn truthy(value: &Value) -> bool {
 /// produces: a crate bug, raised as an mlua callback error.
 #[track_caller]
 fn malformed(what: &'static str) -> mlua::Error {
-    mlua::Error::external(error::internal(what))
+    mlua::Error::external(error::make_internal_error(what))
 }
 
 /// Lua's `type()` name for `value`, with an integer named `integer`, as

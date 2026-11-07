@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use runvil_plugin::{
     Error, ErrorCode, HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ToolContext,
-    ToolId, ToolInfo, ToolOutput, tool_error,
+    ToolId, ToolInfo, ToolOutput, make_tool_error,
 };
 use serde_json::{Value, json};
 
@@ -67,7 +67,7 @@ fn construct(
     _services: &HostServices,
 ) -> Result<Arc<dyn Pack>, Error> {
     if !(config.is_null() || config == json!({})) {
-        return Err(tool_error(
+        return Err(make_tool_error(
             ErrorCode::ToolOther,
             "std takes no configuration",
         ));
@@ -76,7 +76,7 @@ fn construct(
         .iter()
         .map(|definition| {
             let id = ToolId::parse(&format!("{name}/{}", definition.segment)).map_err(|e| {
-                tool_error(
+                make_tool_error(
                     ErrorCode::ToolOther,
                     format!("std could not name its {} tool", definition.segment),
                 )
@@ -120,7 +120,7 @@ impl Pack for Std {
         Box::pin(async move {
             let name = cx.tool().name();
             let Some(definition) = definition(name) else {
-                return Err(tool_error(
+                return Err(make_tool_error(
                     ErrorCode::ToolOther,
                     format!("std has no tool named {name}"),
                 ));

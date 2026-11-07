@@ -410,8 +410,8 @@ fn act_names_each_call_return_and_raise_with_its_values() {
     );
     let plain = Then::RaiseNormalized(value("plain"));
     assert_eq!(action(&lua, plain), tagged("raise", vec![value("plain")]));
-    let typed = mlua::Error::external(crate::context_exhausted("precheck"));
-    let mut new = runvil_model_client::model::completion_error(ErrorCode::EmptyReply, "empty");
+    let typed = mlua::Error::external(crate::make_context_exhausted_error("precheck"));
+    let mut new = runvil_model_client::model::make_completion_error(ErrorCode::EmptyReply, "empty");
     new.facts.insert(ErrorFact::FinishReason, "stop".into());
     let raised = [
         (

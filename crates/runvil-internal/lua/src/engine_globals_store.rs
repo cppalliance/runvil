@@ -11,7 +11,7 @@ use runvil_types::event_lifecycle::{self as lifecycle, Lifecycle};
 use runvil_vfs::{Access, ScopeHandle, VfsError};
 
 use crate::error::{self, Error, Result, author_prose};
-use crate::error_value::store_error;
+use crate::error_value::make_store_error;
 use crate::program::LuaProgram;
 use crate::protocol::{VfsOp, VfsOutcome};
 
@@ -32,8 +32,8 @@ static STORE_PROGRAM: LazyLock<Result<LuaProgram>> =
 
 /// The store failure `cause` with `message` in place of its own text.
 #[must_use]
-pub fn store_failure(cause: &VfsError, message: String) -> Error {
-    let mut error = store_error(cause);
+pub fn make_store_failure_error(cause: &VfsError, message: String) -> Error {
+    let mut error = make_store_error(cause);
     error.message = message;
     error
 }
@@ -98,12 +98,12 @@ impl StoreShared {
             reporter.report(&result, success, failure);
             result.map_err(|source| {
                 let message = store_error_message(&op(arguments), &source);
-                let mut failure = store_failure(&source, message);
+                let mut failure = make_store_failure_error(&source, message);
                 failure.prose = author_prose(&failure.message, failure.code);
                 mlua::Error::external(failure)
             })
         })
-        .map_err(error::lua)
+        .map_err(error::make_lua_error)
     }
 }
 
@@ -208,7 +208,7 @@ pub fn store_probe_message(error: &VfsError) -> String {
 
 /// Records a store conflict in the shared slot the Engine reads when the
 /// Pack preludes return: a conflict a prelude caught with `pcall` must
-/// still end the run with a determinism violation, so the direct closures
+/// still end the run with a make_determinism_error violation, so the direct closures
 /// write it here rather than only raising it.
 fn record_store_conflict<T>(
     conflict: &Mutex<Option<String>>,
@@ -250,7 +250,7 @@ fn record_store_conflict<T>(
 /// surface the conflict as [`VfsError::Conflict`]. A conflict these direct
 /// closures see - while the Pack preludes install, before the yield
 /// shims install - is recorded in `conflict`, the shared slot the Engine
-/// reads when the preludes return, so the run ends with a determinism
+/// reads when the preludes return, so the run ends with a make_determinism_error
 /// violation even if the prelude caught the error.
 ///
 /// The table's function values are Lua dispatchers over those closures,
@@ -273,7 +273,7 @@ pub(crate) fn install_store_table(
     section: &str,
     conflict: &Arc<Mutex<Option<String>>>,
 ) -> Result<()> {
-    let table = lua.create_table().map_err(error::lua)?;
+    let table = lua.create_table().map_err(error::make_lua_error)?;
     // One store view for the section's whole life: derived once from the
     // chain's access, so the closures share it and the strict path rules
     // run on every operation through it.
@@ -281,7 +281,7 @@ pub(crate) fn install_store_table(
         view: Arc::new(
             scope
                 .store_view(access)
-                .map_err(|cause| store_failure(&cause, store_probe_message(&cause)))?,
+                .map_err(|cause| make_store_failure_error(&cause, store_probe_message(&cause)))?,
         ),
         reporter: Arc::new(StoreReporter {
             emitter: emitter.clone(),
@@ -290,12 +290,15 @@ pub(crate) fn install_store_table(
         conflict: Arc::clone(conflict),
     };
     let program = STORE_PROGRAM.as_ref().map_err(Error::clone)?;
-    let (dispatcher, phase): (Function, Table) = program.load(lua)?.call(()).map_err(error::lua)?;
+    let (dispatcher, phase): (Function, Table) =
+        program.load(lua)?.call(()).map_err(error::make_lua_error)?;
     lua.set_named_registry_value(STORE_PHASE_REGISTRY, phase)
-        .map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
     let install = |name: &str, direct: Function| -> Result<()> {
-        let function: Function = dispatcher.call((name, direct)).map_err(error::lua)?;
-        table.raw_set(name, function).map_err(error::lua)
+        let function: Function = dispatcher
+            .call((name, direct))
+            .map_err(error::make_lua_error)?;
+        table.raw_set(name, function).map_err(error::make_lua_error)
     };
 
     let write = shared.closure(
@@ -370,7 +373,9 @@ pub(crate) fn install_store_table(
     )?;
     install("exists", exists)?;
 
-    globals.raw_set("store", table).map_err(error::lua)?;
+    globals
+        .raw_set("store", table)
+        .map_err(error::make_lua_error)?;
     Ok(())
 }
 
@@ -385,8 +390,10 @@ pub(crate) fn install_store_table(
 pub(crate) fn route_store_to_shims(lua: &Lua, shims: &Table) -> Result<()> {
     let phase: Table = lua
         .named_registry_value(STORE_PHASE_REGISTRY)
-        .map_err(error::lua)?;
-    phase.raw_set("shims", shims.clone()).map_err(error::lua)
+        .map_err(error::make_lua_error)?;
+    phase
+        .raw_set("shims", shims.clone())
+        .map_err(error::make_lua_error)
 }
 
 /// Executes one validated store operation against the store view: the

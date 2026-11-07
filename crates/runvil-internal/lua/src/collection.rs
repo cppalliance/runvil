@@ -11,7 +11,7 @@
 
 use mlua::{Lua, LuaSerdeExt, Table, Value};
 
-use crate::error::{self, Result, lua_runtime};
+use crate::error::{self, Result, make_lua_runtime_error};
 use crate::order::{KeyError, SortKey, sort_key};
 
 /// Enumerates fanout's collection argument as the sequence of members the
@@ -26,22 +26,26 @@ use crate::order::{KeyError, SortKey, sort_key};
 /// when a hash key is not a string, number, or boolean.
 pub(crate) fn collection_members(lua: &Lua, collection: &Value) -> Result<Table> {
     let Value::Table(table) = collection else {
-        return Err(lua_runtime(
+        return Err(make_lua_runtime_error(
             "tasks.fanout's second parameter is a collection; for a list section use prompt.list(heading), which returns nil when no visible section has that heading".to_owned(),
         ));
     };
     let border = table.raw_len();
     let members = lua
         .create_table_with_capacity(border, 0)
-        .map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
     for index in 1..=border {
-        let member = table.raw_get::<Value>(index).map_err(error::lua)?;
+        let member = table
+            .raw_get::<Value>(index)
+            .map_err(error::make_lua_error)?;
         check_member(&member, &index.to_string())?;
-        members.raw_set(index, member).map_err(error::lua)?;
+        members
+            .raw_set(index, member)
+            .map_err(error::make_lua_error)?;
     }
     let mut pairs: Vec<(SortKey, Value, Value)> = Vec::new();
     for pair in table.pairs::<Value, Value>() {
-        let (key, member) = pair.map_err(error::lua)?;
+        let (key, member) = pair.map_err(error::make_lua_error)?;
         // The array part was already emitted above, in order.
         if let Value::Integer(index) = &key
             && usize::try_from(*index).is_ok_and(|index| (1..=border).contains(&index))
@@ -53,10 +57,10 @@ pub(crate) fn collection_members(lua: &Lua, collection: &Value) -> Result<Table>
         // here, so a non-scalar key is rejected before any later code path.
         let (position, key_label) = sort_key(&key).map_err(|error| match error {
             KeyError::NotFinite => {
-                lua_runtime("fanout collection key is not a finite number".to_owned())
+                make_lua_runtime_error("fanout collection key is not a finite number".to_owned())
             }
-            KeyError::NotUtf8(source) => error::lua(source),
-            KeyError::Unsortable(type_name) => lua_runtime(format!(
+            KeyError::NotUtf8(source) => error::make_lua_error(source),
+            KeyError::Unsortable(type_name) => make_lua_runtime_error(format!(
                 "fanout collection key must be a string, number, or boolean, got {type_name}"
             )),
         })?;
@@ -65,12 +69,16 @@ pub(crate) fn collection_members(lua: &Lua, collection: &Value) -> Result<Table>
     }
     pairs.sort_by(|left, right| left.0.compare(&right.0));
     for (position, (_, key, member)) in pairs.into_iter().enumerate() {
-        let entry = lua.create_table_with_capacity(0, 2).map_err(error::lua)?;
-        entry.raw_set("key", key).map_err(error::lua)?;
-        entry.raw_set("value", member).map_err(error::lua)?;
+        let entry = lua
+            .create_table_with_capacity(0, 2)
+            .map_err(error::make_lua_error)?;
+        entry.raw_set("key", key).map_err(error::make_lua_error)?;
+        entry
+            .raw_set("value", member)
+            .map_err(error::make_lua_error)?;
         members
             .raw_set(border + position + 1, entry)
-            .map_err(error::lua)?;
+            .map_err(error::make_lua_error)?;
     }
     Ok(members)
 }
@@ -82,10 +90,12 @@ pub(crate) fn collection_members(lua: &Lua, collection: &Value) -> Result<Table>
 /// spawn's own type error.
 fn check_member(member: &Value, index: &str) -> Result<()> {
     match member {
-        Value::Function(_) | Value::UserData(_) | Value::Thread(_) => Err(lua_runtime(format!(
-            "fanout collection member at index {index} is a {}; members must be data",
-            member.type_name()
-        ))),
+        Value::Function(_) | Value::UserData(_) | Value::Thread(_) => {
+            Err(make_lua_runtime_error(format!(
+                "fanout collection member at index {index} is a {}; members must be data",
+                member.type_name()
+            )))
+        }
         _ => Ok(()),
     }
 }
@@ -113,7 +123,7 @@ pub fn render_item(item: &serde_json::Value) -> String {
 /// # Errors
 /// Returns a `LuaRuntime` failure when the value has no JSON form.
 pub(crate) fn render_item_value(lua: &Lua, item: Value) -> Result<String> {
-    let json: serde_json::Value = lua.from_value(item).map_err(error::lua)?;
+    let json: serde_json::Value = lua.from_value(item).map_err(error::make_lua_error)?;
     Ok(render_item(&json))
 }
 

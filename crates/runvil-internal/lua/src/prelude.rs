@@ -25,7 +25,7 @@ use mlua::chunk::ChunkMode;
 use mlua::{Lua, Table, Value};
 use runvil_types::packs::{PackId, Prelude};
 
-use crate::error::{self, Error, Result, TRACEBACK_HEADING, lua_runtime};
+use crate::error::{self, Error, Result, TRACEBACK_HEADING, make_lua_runtime_error};
 use crate::proxy::{key_path, key_text, read_only_proxy};
 
 /// The `_G` names a prelude's environment reads, as bound when it installs.
@@ -84,7 +84,7 @@ pub fn install_preludes(lua: &Lua, preludes: &[Prelude]) -> Result<()> {
             .set_mode(ChunkMode::Text)
             .set_environment(env.clone())
             .call::<()>(pack.to_string())
-            .map_err(|error| load_failure(pack, &error))?;
+            .map_err(|error| make_load_failure_error(pack, &error))?;
         let defined = defined_globals(pack, &env)?;
         for name in defined.keys() {
             check_collision(&globals, pack, name, &installed)?;
@@ -94,7 +94,9 @@ pub fn install_preludes(lua: &Lua, preludes: &[Prelude]) -> Result<()> {
                 Value::Table(table) => Value::Table(seal(lua, pack, &name, table)?),
                 other => other,
             };
-            globals.raw_set(name.as_str(), value).map_err(error::lua)?;
+            globals
+                .raw_set(name.as_str(), value)
+                .map_err(error::make_lua_error)?;
             installed.insert(name, pack);
         }
     }
@@ -106,19 +108,25 @@ pub fn install_preludes(lua: &Lua, preludes: &[Prelude]) -> Result<()> {
 /// globals, and the `string`, `table`, `math`, `utf8`, `tools`, `store`, and
 /// `json` tables it reads through that lookup are shared with the rest of the VM.
 fn environment(lua: &Lua, globals: &Table) -> Result<Table> {
-    let lookup = lua.create_table().map_err(error::lua)?;
+    let lookup = lua.create_table().map_err(error::make_lua_error)?;
     for name in VISIBLE_GLOBALS {
-        let value: Value = globals.raw_get(name).map_err(error::lua)?;
-        lookup.raw_set(name, value).map_err(error::lua)?;
+        let value: Value = globals.raw_get(name).map_err(error::make_lua_error)?;
+        lookup.raw_set(name, value).map_err(error::make_lua_error)?;
     }
-    if let Value::Table(var) = globals.raw_get::<Value>("var").map_err(error::lua)? {
-        let view = read_only_var(lua, var, "var".to_owned()).map_err(error::lua)?;
-        lookup.raw_set("var", view).map_err(error::lua)?;
+    if let Value::Table(var) = globals
+        .raw_get::<Value>("var")
+        .map_err(error::make_lua_error)?
+    {
+        let view = read_only_var(lua, var, "var".to_owned()).map_err(error::make_lua_error)?;
+        lookup.raw_set("var", view).map_err(error::make_lua_error)?;
     }
-    let metatable = lua.create_table().map_err(error::lua)?;
-    metatable.raw_set("__index", lookup).map_err(error::lua)?;
-    let env = lua.create_table().map_err(error::lua)?;
-    env.set_metatable(Some(metatable)).map_err(error::lua)?;
+    let metatable = lua.create_table().map_err(error::make_lua_error)?;
+    metatable
+        .raw_set("__index", lookup)
+        .map_err(error::make_lua_error)?;
+    let env = lua.create_table().map_err(error::make_lua_error)?;
+    env.set_metatable(Some(metatable))
+        .map_err(error::make_lua_error)?;
     Ok(env)
 }
 
@@ -148,7 +156,7 @@ fn read_only_var(lua: &Lua, target: Table, path: String) -> mlua::Result<Table> 
 fn defined_globals(pack: &PackId, env: &Table) -> Result<BTreeMap<String, Value>> {
     let mut defined = BTreeMap::new();
     for pair in env.pairs::<Value, Value>() {
-        let (key, value) = pair.map_err(error::lua)?;
+        let (key, value) = pair.map_err(error::make_lua_error)?;
         if let Value::String(name) = &key
             && let Ok(name) = name.to_str()
         {
@@ -159,7 +167,7 @@ fn defined_globals(pack: &PackId, env: &Table) -> Result<BTreeMap<String, Value>
             Value::String(_) => "a string key that is not valid UTF-8".to_owned(),
             other => format!("a key of type {}", other.type_name()),
         };
-        return Err(lua_runtime(format!(
+        return Err(make_lua_runtime_error(format!(
             "Pack `{pack}`: its prelude defines a global under {key}; a global's \
              name must be a UTF-8 string"
         )));
@@ -186,14 +194,16 @@ fn check_collision(
     } else if let Some(kind) = crate::reserved_name(name) {
         format!("which is reserved as {kind}")
     } else if !matches!(
-        globals.raw_get::<Value>(name).map_err(error::lua)?,
+        globals
+            .raw_get::<Value>(name)
+            .map_err(error::make_lua_error)?,
         Value::Nil
     ) {
         "which is already an Engine global".to_owned()
     } else {
         return Ok(());
     };
-    Err(lua_runtime(format!(
+    Err(make_lua_runtime_error(format!(
         "Pack `{pack}`: its prelude defines the global `{name}`, {collides_with}"
     )))
 }
@@ -208,12 +218,12 @@ fn seal(lua: &Lua, pack: &PackId, name: &str, hidden: Table) -> Result<Table> {
         move |key| format!("{refusal} '{}'", key_text(key)),
         &format!("{name} is sealed"),
     )
-    .map_err(error::lua)
+    .map_err(error::make_lua_error)
 }
 
 /// Maps a prelude's load or run failure to the model-facing message,
 /// keeping the Lua traceback after it.
-fn load_failure(pack: &PackId, error: &mlua::Error) -> Error {
+fn make_load_failure_error(pack: &PackId, error: &mlua::Error) -> Error {
     let rendered = match error {
         mlua::Error::RuntimeError(message) => message.clone(),
         other => other.to_string(),
@@ -230,7 +240,7 @@ fn load_failure(pack: &PackId, error: &mlua::Error) -> Error {
         message.push_str(TRACEBACK_HEADING);
         message.push_str(traceback);
     }
-    lua_runtime(message)
+    make_lua_runtime_error(message)
 }
 
 #[cfg(test)]

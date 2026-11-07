@@ -8,7 +8,7 @@ use rmcp::model::JsonObject;
 use rmcp::service::{Peer, RoleClient};
 use runvil_plugin::{
     Error, ErrorCode, Pack, PackFuture, PackId, ToolCaller, ToolContext, ToolId, ToolInfo,
-    ToolOutput, tool_error,
+    ToolOutput, make_tool_error,
 };
 use serde_json::{Map, Value, json};
 use tokio::runtime::Handle;
@@ -81,8 +81,8 @@ fn marked(caller: ToolCaller, text: String) -> ToolOutput {
     }
 }
 
-fn invalid(text: impl Into<String>) -> Error {
-    tool_error(ErrorCode::ToolInvalidArguments, text)
+fn make_invalid_error(text: impl Into<String>) -> Error {
+    make_tool_error(ErrorCode::ToolInvalidArguments, text)
 }
 
 /// The members of a tool's arguments, which must be a JSON object or
@@ -91,7 +91,7 @@ fn members(args: Value, refusal: &str) -> Result<Map<String, Value>, Error> {
     match args {
         Value::Null => Ok(Map::new()),
         Value::Object(members) => Ok(members),
-        _ => Err(invalid(refusal)),
+        _ => Err(make_invalid_error(refusal)),
     }
 }
 
@@ -100,7 +100,7 @@ fn string<'a>(members: &'a Map<String, Value>, key: &str) -> Result<Option<&'a s
     match members.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(text)) => Ok(Some(text)),
-        Some(_) => Err(invalid(format!("`{key}` must be a string"))),
+        Some(_) => Err(make_invalid_error(format!("`{key}` must be a string"))),
     }
 }
 
@@ -141,7 +141,8 @@ impl Mcp {
     ) -> Result<Mcp, Error> {
         let id = |tool: &str| {
             ToolId::parse(&format!("{name}/{tool}")).map_err(|e| {
-                tool_error(ErrorCode::ToolBackend, "MCP could not name its tools").with_cause(&e)
+                make_tool_error(ErrorCode::ToolBackend, "MCP could not name its tools")
+                    .with_cause(&e)
             })
         };
         let get = ToolInfo::new(
@@ -195,7 +196,7 @@ impl Mcp {
     /// The server under `name`, or an error that says how to list them.
     fn namespace(&self, name: &str) -> Result<&Namespace, Error> {
         self.namespaces.get(name).ok_or_else(|| {
-            invalid(format!(
+            make_invalid_error(format!(
                 "no configured MCP server has the namespace `{name}`; call {} with no arguments \
                  to list the namespaces",
                 self.get.id
@@ -203,8 +204,8 @@ impl Mcp {
         })
     }
 
-    fn unknown_tool(&self, namespace: &str, tool: &str) -> Error {
-        invalid(format!(
+    fn make_unknown_tool_error(&self, namespace: &str, tool: &str) -> Error {
+        make_invalid_error(format!(
             "the MCP server `{namespace}` has no tool `{tool}`; call {} with namespace \
              `{namespace}` to list its tools",
             self.get.id
@@ -232,7 +233,7 @@ impl Mcp {
                 json!({ "namespaces": namespaces })
             }
             (None, Some(_)) => {
-                return Err(invalid(
+                return Err(make_invalid_error(
                     "`toolName` names a tool of one server, so it needs `namespace` too",
                 ));
             }
@@ -247,7 +248,7 @@ impl Mcp {
                     .tools
                     .iter()
                     .find(|listed| listed.name == tool)
-                    .ok_or_else(|| self.unknown_tool(name, tool))?;
+                    .ok_or_else(|| self.make_unknown_tool_error(name, tool))?;
                 let mut entry = tool_entry(listed, true);
                 entry["namespace"] = name.into();
                 Ok(entry)
@@ -265,15 +266,15 @@ impl Mcp {
                 .iter()
                 .find(|listed| listed.name == tool)
                 .map(|listed| (ready.peer.clone(), listed.name.clone()))
-                .ok_or_else(|| self.unknown_tool(namespace, tool)),
-            Status::Loading => Err(tool_error(
+                .ok_or_else(|| self.make_unknown_tool_error(namespace, tool)),
+            Status::Loading => Err(make_tool_error(
                 ErrorCode::ToolOther,
                 format!(
                     "the MCP server `{namespace}` is still loading; call {} later to see when it is ready",
                     self.get.id
                 ),
             )),
-            Status::Error(reason) => Err(tool_error(
+            Status::Error(reason) => Err(make_tool_error(
                 ErrorCode::ToolOther,
                 format!("the MCP server `{namespace}` is unavailable: {reason}"),
             )),
@@ -291,13 +292,17 @@ impl Mcp {
         let arguments = match members.remove("arguments") {
             None | Some(Value::Null) => JsonObject::new(),
             Some(Value::Object(arguments)) => arguments,
-            Some(_) => return Err(invalid("MCP tool arguments must be a JSON object")),
+            Some(_) => {
+                return Err(make_invalid_error(
+                    "MCP tool arguments must be a JSON object",
+                ));
+            }
         };
         let (Some(namespace), Some(tool)) = (
             string(&members, "namespace")?,
             string(&members, "toolName")?,
         ) else {
-            return Err(invalid(
+            return Err(make_invalid_error(
                 "call_dynamic_tool needs the strings `namespace` and `toolName`",
             ));
         };
@@ -324,7 +329,7 @@ impl Pack for Mcp {
             } else if *tool == self.call.id {
                 self.call_tool(args).await.map(|text| marked(caller, text))
             } else {
-                Err(tool_error(
+                Err(make_tool_error(
                     ErrorCode::ToolOther,
                     format!("MCP has no tool {tool}"),
                 ))

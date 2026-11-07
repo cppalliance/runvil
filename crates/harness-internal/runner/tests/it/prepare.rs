@@ -24,7 +24,7 @@ use harness_runner::recorder::{
 };
 use runvil::cancel::CancelHandle;
 use runvil::event::Event;
-use runvil::tool_error;
+use runvil::make_tool_error;
 use runvil::{Error, ErrorCode, ErrorFact};
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
@@ -186,7 +186,7 @@ impl Pack for Echo {
             let value = args
                 .get("value")
                 .and_then(Value::as_str)
-                .ok_or_else(|| tool_error(ErrorCode::ToolOther, "echo: missing `value`"))?;
+                .ok_or_else(|| make_tool_error(ErrorCode::ToolOther, "echo: missing `value`"))?;
             Ok(ToolOutput::trusted(value.to_owned()))
         })
     }

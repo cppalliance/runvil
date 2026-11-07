@@ -10,11 +10,11 @@ use crate::Result;
 /// prose.
 ///
 /// # Errors
-/// Returns the failure `empty_item` builds from the first marker with no
+/// Returns the failure `make_empty_item_error` builds from the first marker with no
 /// content, trimmed and sliced from `prose`, when the prose is a list.
 pub(crate) fn bullet_items<'a>(
     prose: &'a str,
-    empty_item: impl FnOnce(&'a str) -> Error,
+    make_empty_item_error: impl FnOnce(&'a str) -> Error,
 ) -> Result<Option<Vec<&'a str>>> {
     let mut items = Vec::new();
     let mut empty_marker = None;
@@ -30,7 +30,7 @@ pub(crate) fn bullet_items<'a>(
         }
     }
     match empty_marker {
-        Some(marker) => Err(empty_item(marker)),
+        Some(marker) => Err(make_empty_item_error(marker)),
         None => Ok((!items.is_empty()).then_some(items)),
     }
 }

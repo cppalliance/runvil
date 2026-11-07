@@ -24,7 +24,7 @@ impl SectionVm {
         let mut slot = self
             .jump_slot
             .lock()
-            .map_err(|_| error::internal(JUMP_SLOT_POISONED))?;
+            .map_err(|_| error::make_internal_error(JUMP_SLOT_POISONED))?;
         Ok(slot.take())
     }
 
@@ -76,7 +76,10 @@ impl SectionVm {
         set_call_line(&self.lua, None);
         let function = program.load(&self.lua)?;
         let guard = block_guard(&self.lua)?;
-        let thread = self.lua.create_thread(guard).map_err(error::lua)?;
+        let thread = self
+            .lua
+            .create_thread(guard)
+            .map_err(error::make_lua_error)?;
         self.cancel_hook.install_on_thread(&thread)?;
         let result = thread.resume::<MultiValue>(function);
         match self.step_block_coro(thread, result)? {
@@ -140,7 +143,8 @@ impl SectionVm {
         thread: &Thread,
         answer: std::result::Result<Answer, Error>,
     ) -> Result<CoroStep> {
-        let (envelope, retained) = render_envelope(&self.lua, answer).map_err(error::lua)?;
+        let (envelope, retained) =
+            render_envelope(&self.lua, answer).map_err(error::make_lua_error)?;
         let result = thread.resume::<MultiValue>(envelope);
         match self.step_block_coro(thread.clone(), result)? {
             Ok(step) => Ok(step),
@@ -241,7 +245,7 @@ impl SectionVm {
             Ok(libraries) => {
                 program.map_runtime_error_among(error, &libraries, &prompt_file(&self.lua))
             }
-            Err(_) => error::internal("require's loaded library programs were poisoned"),
+            Err(_) => error::make_internal_error("require's loaded library programs were poisoned"),
         }
     }
 }

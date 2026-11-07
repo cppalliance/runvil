@@ -42,7 +42,7 @@ use runvil_types::ids::RoundId;
 use serde_json::{Map, Value as Json};
 
 use crate::bindings::ToolBinding;
-use crate::error::{self, Error, Result, author_refusal, lua_runtime};
+use crate::error::{self, Error, Result, author_refusal, make_lua_runtime_error};
 use crate::protocol::{MessageRecord, RecordRole, parse_record};
 use crate::scope::{OfferMode, RenderedTools};
 
@@ -58,7 +58,9 @@ pub(crate) const ASSIGNMENT_REFUSAL: &str = "messages is the section's conversat
 /// Returns a `LuaRuntime` failure if the userdata cannot be built or the
 /// guard's slot table cannot be written.
 pub(crate) fn install_messages(lua: &Lua, list: &MessageList) -> Result<()> {
-    let userdata = lua.create_userdata(list.clone()).map_err(error::lua)?;
+    let userdata = lua
+        .create_userdata(list.clone())
+        .map_err(error::make_lua_error)?;
     crate::globals::set_messages(lua, userdata)
 }
 
@@ -70,8 +72,8 @@ pub struct MessageList(Arc<Mutex<ListState>>);
 
 /// The refusal of an edit that would put the system record at the 1-based
 /// `index` behind a non-system record, which leaves the list unchanged.
-pub(crate) fn late_system(index: usize) -> Error {
-    lua_runtime(format!(
+pub(crate) fn make_late_system_error(index: usize) -> Error {
+    make_lua_runtime_error(format!(
         "messages[{index}] is a system message after a non-system message; system messages \
          lead the list, and only a compactor can change the leading block"
     ))
@@ -122,7 +124,7 @@ impl MessageList {
     /// refused.
     ///
     /// # Errors
-    /// Returns the [`late_system`] refusal naming a late system record's
+    /// Returns the [`make_late_system_error`] refusal naming a late system record's
     /// position.
     pub(crate) fn push(&self, record: MessageRecord) -> Result<()> {
         let mut state = self.state();
@@ -132,7 +134,7 @@ impl MessageList {
                 .iter()
                 .any(|held| held.role != RecordRole::System)
         {
-            return Err(late_system(state.records.len() + 1));
+            return Err(make_late_system_error(state.records.len() + 1));
         }
         state.records.push(Arc::new(record));
         Ok(())
@@ -145,7 +147,7 @@ impl MessageList {
         let mut state = self.state();
         let len = state.records.len();
         if !in_bounds(first, last, len) {
-            return Err(out_of_bounds(first, last, len));
+            return Err(make_out_of_bounds_error(first, last, len));
         }
         let edited: Vec<Arc<MessageRecord>> = state.records[..first - 1]
             .iter()
@@ -279,10 +281,14 @@ fn in_bounds(first: usize, last: usize, len: usize) -> bool {
 
 /// Returns the refusal for a `replace` range outside the list's bounds,
 /// from the range's positions as given, which leaves the list unchanged.
-fn out_of_bounds(first: impl TryInto<i64>, last: impl TryInto<i64>, len: usize) -> Error {
+fn make_out_of_bounds_error(
+    first: impl TryInto<i64>,
+    last: impl TryInto<i64>,
+    len: usize,
+) -> Error {
     let first = first.try_into().unwrap_or(i64::MAX);
     let last = last.try_into().unwrap_or(i64::MAX);
-    lua_runtime(format!(
+    make_lua_runtime_error(format!(
         "replace({first}, {last}) is out of bounds on a list of {len} records: it needs \
          1 <= first <= last + 1 <= {}",
         len.saturating_add(1)
@@ -300,7 +306,7 @@ fn check_leading_system(records: &[Arc<MessageRecord>]) -> Result<()> {
         .iter()
         .position(|record| record.role == RecordRole::System)
     {
-        Some(offset) => Err(late_system(lead + offset + 1)),
+        Some(offset) => Err(make_late_system_error(lead + offset + 1)),
         None => Ok(()),
     }
 }
@@ -525,7 +531,11 @@ impl UserData for MessageList {
                 let len = target.len();
                 let (first, last) = match (usize::try_from(first), usize::try_from(last)) {
                     (Ok(first), Ok(last)) if in_bounds(first, last, len) => (first, last),
-                    _ => return Err(mlua::Error::external(out_of_bounds(first, last, len))),
+                    _ => {
+                        return Err(mlua::Error::external(make_out_of_bounds_error(
+                            first, last, len,
+                        )));
+                    }
                 };
                 let records = records
                     .into_iter()

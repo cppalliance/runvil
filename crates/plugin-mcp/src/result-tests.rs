@@ -7,7 +7,7 @@ use rmcp::model::{CallToolResult, ServerResult};
 use runvil_plugin::ErrorCode;
 use serde_json::{Value, json};
 
-use super::{output, render, service_error};
+use super::{make_service_error, output, render};
 
 fn result(value: Value) -> CallToolResult {
     serde_json::from_value(value).expect("a tool result parses")
@@ -112,7 +112,7 @@ fn an_is_error_false_result_is_a_success() {
 
 #[test]
 fn a_timeout_is_a_transport_error_naming_the_deadline() {
-    let error = service_error(&ServiceError::Timeout {
+    let error = make_service_error(&ServiceError::Timeout {
         timeout: Duration::from_secs(300),
     });
     assert_eq!(error.code, ErrorCode::ToolTransport);
@@ -122,7 +122,7 @@ fn a_timeout_is_a_transport_error_naming_the_deadline() {
 #[test]
 fn a_lost_connection_is_a_transport_error() {
     assert_eq!(
-        service_error(&ServiceError::TransportClosed).code,
+        make_service_error(&ServiceError::TransportClosed).code,
         ErrorCode::ToolTransport
     );
 }
@@ -133,7 +133,7 @@ fn a_dropped_transport_error_does_not_repeat_the_url_in_its_text() {
 
     use rmcp::transport::DynamicTransportError;
 
-    let error = service_error(&ServiceError::TransportSend(
+    let error = make_service_error(&ServiceError::TransportSend(
         DynamicTransportError::from_parts(
             "streamable-http",
             TypeId::of::<()>(),
@@ -147,7 +147,7 @@ fn a_dropped_transport_error_does_not_repeat_the_url_in_its_text() {
 
 #[test]
 fn a_json_rpc_error_from_the_server_is_a_backend_error_with_its_message() {
-    let error = service_error(&ServiceError::McpError(rmcp::ErrorData::invalid_params(
+    let error = make_service_error(&ServiceError::McpError(rmcp::ErrorData::invalid_params(
         "bad id", None,
     )));
     assert_eq!(error.code, ErrorCode::ToolBackend);

@@ -8,7 +8,7 @@ use runvil_lua::LuaProgram;
 use runvil_types::emitter::{Emitter, EventSink};
 use runvil_types::error::{Error, ErrorCode, ErrorFact, SourceLoc};
 
-use super::{internal, lua, with_prompt_context};
+use super::{make_internal_error, make_lua_error, with_prompt_context};
 use crate::tests::location;
 use crate::{Frontmatter, Prompt};
 
@@ -275,15 +275,16 @@ fn a_lua_compile_failure_is_located_at_the_line_its_diagnostic_names() {
 
 #[test]
 fn a_parser_invariant_failure_is_located_at_its_rust_call_site_with_the_default_prose() {
-    let (fault, site) = (internal("parser: test"), std::panic::Location::caller());
+    let expected_line = line!() + 1;
+    let fault = make_internal_error("parser: test");
     let error = with_prompt_context(fault, Some("x"), FILE);
     assert_eq!(error.code, ErrorCode::Internal);
     assert_eq!(error.message, "internal invariant violated: parser: test");
     assert_eq!(
         error.at,
         Some(SourceLoc::line(
-            site.file(),
-            NonZeroU32::new(site.line()).expect("a line is non-zero")
+            file!(),
+            NonZeroU32::new(expected_line).expect("a line is non-zero")
         )),
         "the call site's Rust file and line survive the prompt context"
     );
@@ -293,7 +294,10 @@ fn a_parser_invariant_failure_is_located_at_its_rust_call_site_with_the_default_
 
 #[test]
 fn an_internal_failure_keeps_its_rust_location_in_the_prompt_context() {
-    let fault = runvil_lua::internal_at("a test invariant broke", std::panic::Location::caller());
+    let fault = runvil_lua::make_internal_at_error(
+        "a test invariant broke",
+        std::panic::Location::caller(),
+    );
     assert!(fault.at.is_some(), "an internal failure is located in Rust");
     let error = with_prompt_context(fault.clone(), Some("x"), FILE);
     assert_eq!(
@@ -308,7 +312,7 @@ fn an_internal_failure_keeps_its_rust_location_in_the_prompt_context() {
 fn a_lua_compiler_that_cannot_start_is_internal() {
     let message = mlua::Error::MemoryError("not enough memory".to_owned()).to_string();
     let code = ErrorCode::Internal;
-    let error = lua(&Error::new(code, message.clone(), code.prose()));
+    let error = make_lua_error(&Error::new(code, message.clone(), code.prose()));
     assert_eq!(error.code, ErrorCode::Internal);
     assert_eq!(error.message, message);
     assert_eq!(error.at, None);

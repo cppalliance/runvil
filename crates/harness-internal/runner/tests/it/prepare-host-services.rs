@@ -55,7 +55,7 @@ impl Pack for Greeter {
         Box::pin(async move {
             let greeting = cx
                 .service(&GREETING)
-                .ok_or_else(|| tool_error(ErrorCode::ToolOther, "no greeting in this run"))?;
+                .ok_or_else(|| make_tool_error(ErrorCode::ToolOther, "no greeting in this run"))?;
             Ok(ToolOutput::trusted(greeting.to_string()))
         })
     }

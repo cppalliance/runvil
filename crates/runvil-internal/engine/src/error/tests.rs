@@ -32,7 +32,7 @@ fn field(name: &str, value: &str) -> (String, ErrorField) {
 #[test]
 fn an_internal_fault_is_located_at_its_rust_call_site_and_ends_its_message_there() {
     let expected_line = line!() + 1;
-    let error = internal("a test invariant");
+    let error = make_internal_error("a test invariant");
     assert_eq!(error.code, ErrorCode::Internal);
     assert_eq!(
         error.message,
@@ -62,7 +62,7 @@ fn an_internal_fault_is_located_at_its_rust_call_site_and_ends_its_message_there
 
 #[test]
 fn a_lua_failure_keeps_its_text_and_reads_as_lua() {
-    let error = lua_runtime("messages must not be empty");
+    let error = make_lua_runtime_error("messages must not be empty");
     assert_eq!(error.code, ErrorCode::LuaRuntime);
     assert_eq!(error.message, "messages must not be empty");
     assert_eq!(error.prose, ErrorCode::LuaRuntime.prose());
@@ -93,7 +93,7 @@ fn a_cancel_has_no_location_and_reads_as_canceled() {
 
 #[test]
 fn an_unsupported_version_names_the_major_only_in_its_message() {
-    let error = unsupported_version(3);
+    let error = make_unsupported_version_error(3);
     assert_eq!(error.code, ErrorCode::UnsupportedVersion);
     assert_eq!(
         error.message,
@@ -111,7 +111,7 @@ fn an_unsupported_version_names_the_major_only_in_its_message() {
 fn a_refusal_notice_is_the_prose_and_the_whole_message_without_a_cause() {
     let notice = "the environment cannot satisfy this prompt:\n- role 'strong': requires a \
                   context of at least 200000 tokens; the model filling it provides 32000";
-    let error = requirements_unmet(notice, None);
+    let error = make_requirements_unmet_error(notice, None);
     assert_eq!(error.code, ErrorCode::RequirementsUnmet);
     assert_eq!(
         (error.message.as_str(), error.prose.as_str()),
@@ -126,7 +126,7 @@ fn a_refusal_notice_is_the_prose_and_the_whole_message_without_a_cause() {
 
 #[test]
 fn a_missing_model_names_its_section() {
-    let error = model_required("Only");
+    let error = make_model_required_error("Only");
     assert_eq!(error.code, ErrorCode::ModelRequired);
     assert_eq!(error.message, "model binding required for section Only");
     assert_eq!(error.prose, ErrorCode::ModelRequired.prose());
@@ -152,7 +152,7 @@ fn context_exhaustion_holds_its_reason_and_renders_it() {
         ),
         ("manual", "context exhausted: manual"),
     ] {
-        let error = context_exhausted(reason);
+        let error = make_context_exhausted_error(reason);
         assert_eq!(error.code, ErrorCode::ContextExhausted);
         assert_eq!(error.message, message);
         assert_eq!(
@@ -182,7 +182,7 @@ fn a_spent_quota_and_the_call_depth_cap_keep_their_codes_and_lua_reads_both_as_l
             "lua log byte quota exceeded",
         ),
     ] {
-        let error = lua_quota(resource);
+        let error = make_lua_quota_error(resource);
         assert_eq!(error.code, ErrorCode::LuaQuota);
         assert_eq!(error.message, text);
         assert_eq!(error.facts.get(&ErrorFact::Reason), Some(&Value::from(tag)));
@@ -193,7 +193,7 @@ fn a_spent_quota_and_the_call_depth_cap_keep_their_codes_and_lua_reads_both_as_l
         );
     }
     let text = "recursion exceeded cap of 8";
-    let error = call_depth_exceeded(8);
+    let error = make_call_depth_exceeded_error(8);
     assert_eq!(error.code, ErrorCode::CallDepthExceeded);
     assert_eq!(error.message, text);
     assert_eq!(error.facts.get(&ErrorFact::Reason), None);
@@ -210,7 +210,7 @@ fn a_spent_quota_and_the_call_depth_cap_keep_their_codes_and_lua_reads_both_as_l
 
 #[test]
 fn leaked_tasks_are_named_in_spawn_order_and_joined_in_the_table() {
-    let error = tasks_live(&[task("1.2"), task("1.10")]);
+    let error = make_tasks_live_error(&[task("1.2"), task("1.10")]);
     assert_eq!(error.code, ErrorCode::TasksLive);
     assert_eq!(
         error.message,
@@ -234,19 +234,19 @@ fn a_task_failure_names_its_task_in_its_fact_and_its_table() {
     let id = task("1.3");
     for (error, code, kind, message) in [
         (
-            task_not_owned(&id),
+            make_task_not_owned_error(&id),
             ErrorCode::TaskNotOwned,
             ErrorKind::TaskNotOwned,
             "task `1.3` is not a task this chain owns",
         ),
         (
-            task_consumed(&id),
+            make_task_consumed_error(&id),
             ErrorCode::TaskConsumed,
             ErrorKind::TaskConsumed,
             "task `1.3` was already delivered: a task's result is taken by one wait",
         ),
         (
-            task_canceled(&id),
+            make_task_canceled_error(&id),
             ErrorCode::TaskCanceled,
             ErrorKind::Canceled,
             "task `1.3` was canceled",
@@ -274,8 +274,8 @@ fn a_store_failure_takes_the_stores_code_and_facts_under_its_own_message() {
         old: "TODO".to_owned(),
         new: "DONE".to_owned(),
     };
-    let error = store_op(&op, &cause);
-    let expected = runvil_lua::store_error(&cause);
+    let error = make_store_op_error(&op, &cause);
+    let expected = runvil_lua::make_store_error(&cause);
     assert_eq!((error.code, &error.facts), (expected.code, &expected.facts));
     assert_eq!(error.message, crate::lua::store_error_message(&op, &cause));
     assert_eq!(error.prose, ErrorCode::Anchor.prose());
@@ -289,7 +289,7 @@ fn a_store_failure_takes_the_stores_code_and_facts_under_its_own_message() {
 
 #[test]
 fn a_determinism_violation_is_a_store_code_that_lua_reads_as_internal() {
-    let error = determinism("a.md: claimed by 1 and 2");
+    let error = make_determinism_error("a.md: claimed by 1 and 2");
     assert_eq!(error.code, ErrorCode::Determinism);
     assert_eq!(
         error.message,
@@ -307,9 +307,9 @@ fn a_determinism_violation_is_a_store_code_that_lua_reads_as_internal() {
 
 #[test]
 fn a_refused_tool_call_names_the_tool_and_its_text_is_its_prose() {
-    let out_of_scope = out_of_scope_tool("echo", true, &["other".to_owned()], true);
-    let unbound = unbound_tool("web/gone", &["web/fetch".to_owned()]);
-    let model_only = model_only_tool("web/render", "web/render");
+    let out_of_scope = make_out_of_scope_tool_error("echo", true, &["other".to_owned()], true);
+    let unbound = make_unbound_tool_error("web/gone", &["web/fetch".to_owned()]);
+    let model_only = make_model_only_tool_error("web/render", "web/render");
     for (error, code, kind, name) in [
         (
             &out_of_scope,
@@ -356,7 +356,7 @@ fn a_refused_tool_call_names_the_tool_and_its_text_is_its_prose() {
 
 #[test]
 fn an_unconverged_tool_loop_ends_a_run_with_its_own_code() {
-    let error = tool_loop_exhausted();
+    let error = make_tool_loop_exhausted_error();
     assert_eq!(error.code, ErrorCode::ToolLoopExhausted);
     assert_eq!(error.message, "tool-call loop did not converge");
     assert_eq!(
@@ -368,7 +368,7 @@ fn an_unconverged_tool_loop_ends_a_run_with_its_own_code() {
 
 #[test]
 fn broken_tool_sets_end_a_run_with_their_own_code_and_an_internal_table() {
-    let error = tool_sets("the sets broke a rule".to_owned());
+    let error = make_tool_sets_error("the sets broke a rule".to_owned());
     assert_eq!(error.code, ErrorCode::ToolSetsInvalid);
     assert_eq!(error.message, "the sets broke a rule");
     assert_eq!(error.prose, ErrorCode::ToolSetsInvalid.prose());

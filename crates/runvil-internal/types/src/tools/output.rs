@@ -68,7 +68,7 @@ impl ToolOutput {
 /// show the model. A cause goes in the message only, through
 /// [`Error::with_cause`].
 #[must_use]
-pub fn tool_error(code: ErrorCode, text: impl Into<String>) -> Error {
+pub fn make_tool_error(code: ErrorCode, text: impl Into<String>) -> Error {
     let text = text.into();
     Error::new(code, text.clone(), text)
 }

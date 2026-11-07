@@ -4,7 +4,7 @@
 use runvil_plugin::Error;
 use serde_json::Value;
 
-use crate::check::{invalid_arguments, refuse_blank, refuse_unknown};
+use crate::check::{make_invalid_arguments_error, refuse_blank, refuse_unknown};
 use crate::spec::Definition;
 
 /// What a call asks Read for.
@@ -35,7 +35,7 @@ pub(super) fn parse<'a>(definition: &Definition, args: &'a Value) -> Result<Requ
     let offset = integer(tool, "offset", args)?.map(|(offset, _)| offset);
     let limit = match integer(tool, "limit", args)? {
         Some((limit, given)) if limit < 1 => {
-            return Err(invalid_arguments(
+            return Err(make_invalid_arguments_error(
                 tool,
                 format!("`limit` must be at least 1, and the call passed {given}"),
             ));
@@ -63,7 +63,7 @@ fn integer<'a>(tool: &str, name: &str, args: &'a Value) -> Result<Option<(i64, &
     whole_number(value)
         .map(|number| Some((number, value)))
         .ok_or_else(|| {
-            invalid_arguments(
+            make_invalid_arguments_error(
                 tool,
                 format!(
                     "`{name}` must be a JSON integer that fits in 64 bits, \

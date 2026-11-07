@@ -10,9 +10,9 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use runvil::effect::{ToolCallOrigin, ToolCaller};
+use runvil::make_tool_error;
 use runvil::packs::RosterEntry;
 use runvil::timestamp::Timestamp;
-use runvil::tool_error;
 use runvil::vfs::{Origin, VfsRef};
 use runvil::{Error, ErrorCode};
 use runvil::{Prompt, Run, RunParams, RunSeed, Step};
@@ -61,7 +61,7 @@ impl Pack for Listed {
         match self.ready.as_deref() {
             Some("fails") => {
                 let reason = format!("{} will not be ready", self.name);
-                Box::pin(async move { Err(tool_error(ErrorCode::ToolOther, reason)) })
+                Box::pin(async move { Err(make_tool_error(ErrorCode::ToolOther, reason)) })
             }
             Some("pends") => Box::pin(std::future::pending()),
             _ => Box::pin(async { Ok(()) }),
@@ -115,7 +115,7 @@ fn listed_tool(id: &str) -> ToolInfo {
 /// provides no [`BACKEND`].
 fn backed(name: &PackId, _config: Value, services: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     if services.get(&BACKEND).is_none() {
-        return Err(tool_error(
+        return Err(make_tool_error(
             ErrorCode::ToolOther,
             "backed needs tests/backend, and this host provides none",
         ));

@@ -92,7 +92,10 @@ fn fanout_depth_cap_reads_the_chain_field() {
     let error = trace.error();
     assert_eq!(
         error,
-        &crate::test_support::with_author_prose(crate::error::call_depth_exceeded(8), 13),
+        &crate::test_support::with_author_prose(
+            crate::error::make_call_depth_exceeded_error(8),
+            13
+        ),
         "expected the typed depth-cap error on Alpha's fanout line"
     );
     assert_eq!(error.code, ErrorCode::CallDepthExceeded, "{error}");
@@ -118,9 +121,9 @@ fn an_uncaught_fanout_depth_error_lands_on_the_authors_fanout_line() {
 
 #[test]
 fn an_exhausted_arm_becomes_the_incomplete_stub_and_its_sibling_still_lands() {
-    // The `tool_loop_exhausted` arm rule: one arm's `models.loop` runs its
+    // The `make_tool_loop_exhausted_error` arm rule: one arm's `models.loop` runs its
     // round cap against a never-converging model and fails as
-    // `tool_loop_exhausted`; the shim turns that arm's slot into the
+    // `make_tool_loop_exhausted_error`; the shim turns that arm's slot into the
     // incomplete stub (`ok = false`, `exhausted = true`) and the fanout
     // continues, so the sibling's plain result lands beside it. Only the
     // looping arm touches the gateway, so the scripted replies serve one
@@ -191,7 +194,7 @@ fn an_exhausted_arm_becomes_the_incomplete_stub_and_its_sibling_still_lands() {
         recorder.events()
     );
     assert_eq!(
-        terminal_count(&trace, task_canceled),
+        terminal_count(&trace, make_task_canceled_error),
         0,
         "an exhausted arm cancels nothing: {:?}",
         recorder.events()
@@ -277,7 +280,7 @@ fn two_live_arms_appending_one_path_terminate_with_a_determinism_violation() {
     // exactly as two writes do - and under happens-before the conflict is
     // unconditional, because the arms never join each other before the
     // fanout's own rounds deliver them. The conflict is the fatal
-    // determinism violation, not a per-arm store error.
+    // make_determinism_error violation, not a per-arm store error.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Fanout\n\n\
         ## Parent\n\n\

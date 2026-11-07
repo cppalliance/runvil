@@ -4,7 +4,7 @@
 use runvil_plugin::Error;
 use serde_json::Value;
 
-use crate::check::{invalid_pattern, refuse_blank, refuse_unknown};
+use crate::check::{make_invalid_pattern_error, refuse_blank, refuse_unknown};
 use crate::matcher::Matcher;
 use crate::spec::Definition;
 
@@ -42,7 +42,7 @@ pub(super) fn parse<'a>(definition: &Definition, args: &'a Value) -> Result<Requ
         .flatten()
         .map(|pattern| {
             Matcher::new(pattern)
-                .map_err(|error| invalid_pattern(tool, "ignore_globs", pattern, error))
+                .map_err(|error| make_invalid_pattern_error(tool, "ignore_globs", pattern, error))
         })
         .collect::<Result<Vec<_>, Error>>()?;
     Ok(Request { target, ignore })

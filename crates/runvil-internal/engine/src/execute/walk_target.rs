@@ -87,7 +87,7 @@ pub(super) fn resolve_jump_target(
     jumper: &SectionPos,
 ) -> Result<JumpTarget> {
     let siblings = jumper.siblings(prompt);
-    let jumper_section = jumper.section(prompt).ok_or(error::internal(
+    let jumper_section = jumper.section(prompt).ok_or(error::make_internal_error(
         "a jumping section is absent from its sibling slice",
     ))?;
     let target = heading_address::resolve_visible(heading, Visible::of(siblings, jumper.index))?;
@@ -100,7 +100,7 @@ pub(super) fn resolve_jump_target(
     // `target` was resolved out of the visible set read from exactly these
     // two slices, so a miss here is an internal invariant violation, not a
     // user-facing Lua error.
-    let index = section_position(siblings, target).ok_or(error::internal(
+    let index = section_position(siblings, target).ok_or(error::make_internal_error(
         "resolved jump target is absent from the jumper's sibling slice",
     ))?;
     Ok(JumpTarget {
@@ -134,11 +134,14 @@ impl RequireOrigin {
             .map(str::parse)
             .collect::<std::result::Result<Vec<usize>, _>>()
             .map_err(|cause| {
-                error::internal_with_cause("a library key names no section position", &cause)
+                error::make_internal_with_cause_error(
+                    "a library key names no section position",
+                    &cause,
+                )
             })?;
-        let index = indices
-            .pop()
-            .ok_or(error::internal("a library key names no section position"))?;
+        let index = indices.pop().ok_or(error::make_internal_error(
+            "a library key names no section position",
+        ))?;
         let slice = indices
             .into_iter()
             .fold(SlicePath::root(), |path, ancestor| {
@@ -219,7 +222,11 @@ fn build_library(section: &Section, key: LibraryKey) -> Result<Library> {
             }
             // `Block` is `#[non_exhaustive]` across the crate seam; an
             // unlisted variant has no library form.
-            _ => return Err(error::internal("an unrecognized block kind cannot load")),
+            _ => {
+                return Err(error::make_internal_error(
+                    "an unrecognized block kind cannot load",
+                ));
+            }
         }
     }
     Ok(Library {

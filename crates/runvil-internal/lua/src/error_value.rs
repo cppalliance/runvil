@@ -4,13 +4,13 @@
 //! a Rust-raised error answered through the `(ok, result)` envelope, a
 //! Engine function's own failure (`tools.offer`, `models.get`, a `sys` or `var`
 //! guard) caught by `pcall`, or a shim raise such as
-//! `tool_loop_exhausted` - is one Lua table `{ kind, code, message, ... }`
+//! `make_tool_loop_exhausted_error` - is one Lua table `{ kind, code, message, ... }`
 //! under a shared metatable whose `__tostring` returns `message`. The
 //! message is the failure's prose, the text an author may hand a model,
 //! which a table rendered from a universal error placed on a prompt line
 //! puts after that line's `file:line`; a caller that branches reads
 //! `kind`, `code`, the stable tag of the failure's [`ErrorCode`], and the
-//! kind's own fields (such as `reason` for `context_exhausted` and
+//! kind's own fields (such as `reason` for `make_context_exhausted_error` and
 //! `finish_reason` for `empty_model_reply`; [`error_fields`] gives them
 //! all).
 //!
@@ -37,8 +37,8 @@ use serde_json::Value as Json;
 
 use crate::chunk_line::first_prompt_line;
 use crate::error::{
-    accepted_tags, author_line, authored_at, call_line, failure_text, internal, lua_runtime,
-    prompt_file, root_cause, root_text,
+    accepted_tags, author_line, authored_at, call_line, failure_text, make_internal_error,
+    make_lua_runtime_error, prompt_file, root_cause, root_text,
 };
 
 /// The registry key of the shared error metatable, created on first use per
@@ -229,12 +229,12 @@ impl ErrorField {
 
 /// The kind a failure with `code` renders as. A model round's failure is
 /// `model_failure`, or `empty_model_reply` for an empty reply, and a round
-/// with no model is `model_required`; every Lua-phase failure, an exhausted
+/// with no model is `make_model_required_error`; every Lua-phase failure, an exhausted
 /// quota and the call-depth cap included, is `lua`; a store operation's own
 /// failure is `store`; a canceled task's delivery is `canceled`, as any
 /// other cancel is; and a failure outside the prompt the author cannot act
 /// on (a parse failure, a failed tool freeze, a refused requirement, a
-/// determinism violation, an internal fault) is `internal`.
+/// make_determinism_error violation, an internal fault) is `internal`.
 fn kind_of(code: ErrorCode) -> ErrorKind {
     match code {
         ErrorCode::LuaRuntime
@@ -336,7 +336,7 @@ fn string_field(error: &Error, name: &str, key: ErrorFact) -> Vec<(String, Error
 }
 
 /// The `Tasks` fact's ids as one string joined by `, `, the `tasks` field
-/// of a `tasks_live` table.
+/// of a `make_tasks_live_error` table.
 fn joined_tasks(error: &Error) -> Vec<(String, ErrorField)> {
     let Some(Json::Array(tasks)) = error.facts.get(&ErrorFact::Tasks) else {
         return Vec::new();
@@ -415,7 +415,7 @@ const STORE_FACTS: [(&str, ErrorFact); 5] = [
 ];
 
 /// Returns the variant's own fields, without `reason`, in the shape
-/// `store_error` documents.
+/// `make_store_error` documents.
 fn store_error_fields(error: &runvil_vfs::VfsError) -> Vec<(String, ErrorField)> {
     use runvil_vfs::VfsError;
     let integer = |value: usize| ErrorField::Integer(i64::try_from(value).unwrap_or(i64::MAX));
@@ -466,7 +466,7 @@ fn store_error_fields(error: &runvil_vfs::VfsError) -> Vec<(String, ErrorField)>
 }
 
 /// Returns the full field set a store error value carries, `reason` first,
-/// in the shape [`store_error`] documents.
+/// in the shape [`make_store_error`] documents.
 #[cfg(any(test, feature = "test-support"))]
 #[must_use]
 pub fn store_error_value_fields(error: &runvil_vfs::VfsError) -> Vec<(String, ErrorField)> {
@@ -495,7 +495,7 @@ pub fn store_error_value_fields(error: &runvil_vfs::VfsError) -> Vec<(String, Er
 /// only the direct closures put the store's message ahead of the default
 /// prose.
 #[must_use]
-pub fn store_error(error: &runvil_vfs::VfsError) -> Error {
+pub fn make_store_error(error: &runvil_vfs::VfsError) -> Error {
     let code = store_error_code(error);
     let mut converted = Error::new(code, error.to_string(), code.prose());
     for (name, field) in store_error_fields(error) {
@@ -512,9 +512,9 @@ pub fn store_error(error: &runvil_vfs::VfsError) -> Error {
 }
 
 /// Returns the fields a store failure's universal error renders into its
-/// Lua error table, the inverse of [`store_error`]: the code's tag as
+/// Lua error table, the inverse of [`make_store_error`]: the code's tag as
 /// `reason`, then each store fact under the field name
-/// [`store_error`] documents for it, a string fact as a string and a
+/// [`make_store_error`] documents for it, a string fact as a string and a
 /// count or an offset as an integer.
 fn store_fact_fields(error: &Error) -> Vec<(String, ErrorField)> {
     let mut fields = vec![(
@@ -699,7 +699,9 @@ pub(crate) fn message_table(lua: &Lua, kind: ErrorKind, message: &str) -> mlua::
 pub(crate) fn install_error_value(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, (tag, fields): (String, Option<Table>)| {
         let kind = tag.parse::<ErrorKind>().map_err(|error| {
-            mlua::Error::external(crate::error::internal(format!("the shim raised {error}")))
+            mlua::Error::external(crate::error::make_internal_error(format!(
+                "the shim raised {error}"
+            )))
         })?;
         let fields = match fields {
             Some(fields) => fields,
@@ -738,8 +740,10 @@ fn classified(lua: &Lua, error: &mlua::Error) -> Error {
             | mlua::Error::FromLuaConversionError { .. }
             | mlua::Error::SerializeError(_)
             | mlua::Error::DeserializeError(_)
-            | mlua::Error::ExternalError(_)) => (lua_runtime(root.to_string()), root_text(error)),
-            root => return internal(root.to_string()),
+            | mlua::Error::ExternalError(_)) => {
+                (make_lua_runtime_error(root.to_string()), root_text(error))
+            }
+            root => return make_internal_error(root.to_string()),
         },
     };
     let line = traceback_line(error)
@@ -784,8 +788,8 @@ fn is_error_table(lua: &Lua, table: &Table) -> mlua::Result<bool> {
 /// The code a table of `kind` stands for when it names none, where
 /// `field` reads one of its string fields: a `canceled` table with a
 /// `task` field that parses is that task's cancellation and without one
-/// a cancel; a `task_not_owned` or `task_consumed` table is its
-/// task refusal only with such a field; a `context_exhausted` table is
+/// a cancel; a `make_task_not_owned_error` or `make_task_consumed_error` table is its
+/// task refusal only with such a field; a `make_context_exhausted_error` table is
 /// context exhaustion only with a `reason`; a `store` table is the store
 /// code its `reason` tag names, or `Backend`; and a kind whose failure
 /// needs structure the table does not hold is `LuaRuntime`.

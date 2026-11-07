@@ -7,7 +7,7 @@ use runvil::{ErrorCode, ErrorFact};
 use serde_json::Value;
 
 use super::*;
-use crate::config::invalid_env;
+use crate::config::make_invalid_env_error;
 
 /// Asserts `error` is a setup error for `reason`, naming `variable` when one
 /// is given, whose prose is its message.
@@ -31,7 +31,7 @@ fn assert_setup_error(error: &Error, reason: &str, variable: Option<&str>) {
 fn from_env_surfaces_non_unicode_value_instead_of_dropping_it() {
     let err = from_env_with(|name| {
         if name == "RUNVIL_GATEWAY_URL" {
-            Err(invalid_env(name))
+            Err(make_invalid_env_error(name))
         } else {
             Ok(Some("tok".to_owned()))
         }

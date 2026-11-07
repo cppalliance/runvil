@@ -13,18 +13,17 @@ use runvil_types::error::Error;
 use serde_json::Value;
 
 use crate::Result;
-use crate::model::empty_reply;
-use crate::model::error::invalid_parts;
+use crate::model::error::make_invalid_parts_error;
 
 /// The empty-reply error for a turn with no product.
-pub(crate) fn empty_reply_error() -> Error {
-    empty_reply(false)
+pub(crate) fn make_empty_reply_error() -> Error {
+    crate::model::make_empty_reply_error(false)
 }
 
 /// Refuses a blank tool-call id.
 pub(crate) fn check_call_id(id: &str) -> Result<()> {
     if id.trim().is_empty() {
-        return Err(invalid_parts("tool call id was blank"));
+        return Err(make_invalid_parts_error("tool call id was blank"));
     }
     Ok(())
 }
@@ -32,7 +31,7 @@ pub(crate) fn check_call_id(id: &str) -> Result<()> {
 /// Refuses a blank tool-call name.
 pub(crate) fn check_call_name(name: &str) -> Result<()> {
     if name.trim().is_empty() {
-        return Err(invalid_parts("tool call name was blank"));
+        return Err(make_invalid_parts_error("tool call name was blank"));
     }
     Ok(())
 }
@@ -47,14 +46,16 @@ pub(crate) fn check_call_name(name: &str) -> Result<()> {
 pub(crate) fn checked_call_arguments(arguments: Value) -> Result<serde_json::Map<String, Value>> {
     match arguments {
         Value::Object(map) => Ok(map),
-        _ => Err(invalid_parts("tool call arguments were not a JSON object")),
+        _ => Err(make_invalid_parts_error(
+            "tool call arguments were not a JSON object",
+        )),
     }
 }
 
 /// Records `id` in `seen`, refusing an id another call in the turn has.
 pub(crate) fn check_unique_call_id<'a>(seen: &mut HashSet<&'a str>, id: &'a str) -> Result<()> {
     if !seen.insert(id) {
-        return Err(invalid_parts(format!(
+        return Err(make_invalid_parts_error(format!(
             "duplicate tool call id {id:?} within one turn"
         )));
     }

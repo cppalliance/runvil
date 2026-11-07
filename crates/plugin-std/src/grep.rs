@@ -22,7 +22,7 @@ mod window;
 #[cfg(test)]
 mod tests;
 
-use runvil_plugin::{Access, Error, ErrorCode, ToolOutput, tool_error};
+use runvil_plugin::{Access, Error, ErrorCode, ToolOutput, make_tool_error};
 use serde_json::Value;
 
 use crate::spec::Definition;
@@ -57,6 +57,6 @@ async fn search<S: Source>(
 ) -> Result<ToolOutput, Error> {
     let found = find::find(source, tool, request, limits)
         .await
-        .map_err(|text| tool_error(ErrorCode::ToolOther, text))?;
+        .map_err(|text| make_tool_error(ErrorCode::ToolOther, text))?;
     Ok(render::render(&found, request, limits))
 }

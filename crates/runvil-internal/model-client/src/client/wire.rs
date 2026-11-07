@@ -12,7 +12,8 @@ use serde_json::Value;
 
 use super::Role;
 use crate::normalize::{
-    check_call_id, check_call_name, check_unique_call_id, checked_call_arguments, empty_reply_error,
+    check_call_id, check_call_name, check_unique_call_id, checked_call_arguments,
+    make_empty_reply_error,
 };
 
 /// One message in a chat-completions conversation.
@@ -382,7 +383,7 @@ impl Completion {
     ) -> Result<Completion, Error> {
         if let CompletionResult::ToolCalls(calls) = &result {
             if calls.is_empty() {
-                return Err(empty_reply_error());
+                return Err(make_empty_reply_error());
             }
             let mut seen = HashSet::new();
             for call in calls {

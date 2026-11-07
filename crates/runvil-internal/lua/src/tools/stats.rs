@@ -171,9 +171,14 @@ pub(crate) fn install_tool_call_counts(
         ),
         adhoc: adhoc.clone(),
     };
-    let tools: Table = lua.globals().raw_get("tools").map_err(error::lua)?;
-    let proxy = stats_proxy(lua, &stats).map_err(error::lua)?;
-    tools.raw_set("stats", proxy).map_err(error::lua)?;
+    let tools: Table = lua
+        .globals()
+        .raw_get("tools")
+        .map_err(error::make_lua_error)?;
+    let proxy = stats_proxy(lua, &stats).map_err(error::make_lua_error)?;
+    tools
+        .raw_set("stats", proxy)
+        .map_err(error::make_lua_error)?;
     Ok(counts)
 }
 

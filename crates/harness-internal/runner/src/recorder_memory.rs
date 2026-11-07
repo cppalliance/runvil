@@ -5,7 +5,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use runvil::{Error, ErrorFact};
 use serde_json::Value;
 
-use crate::recorder::{Record, RecorderFuture, RunId, RunMeta, RunRecorder, recorder_error};
+use crate::recorder::{Record, RecorderFuture, RunId, RunMeta, RunRecorder, make_recorder_error};
 
 /// A recorder that keeps every run in memory, for tests and doc examples.
 ///
@@ -84,14 +84,14 @@ fn slot(run: RunId) -> usize {
 /// The run `run`, if it exists and still takes writes.
 fn open_run(runs: &mut [MemoryRun], run: RunId) -> Result<&mut MemoryRun, Error> {
     let found = runs.get_mut(slot(run)).ok_or_else(|| {
-        refused(
+        make_refused_error(
             run,
             "unknown_run",
             format!("memory recorder: unknown run {run}"),
         )
     })?;
     if found.result.is_some() {
-        return Err(refused(
+        return Err(make_refused_error(
             run,
             "run_ended",
             format!("memory recorder: run {run} has ended"),
@@ -102,8 +102,8 @@ fn open_run(runs: &mut [MemoryRun], run: RunId) -> Result<&mut MemoryRun, Error>
 
 /// A write to `run` the recorder refuses for `reason`, with `text` as its
 /// cause.
-fn refused(run: RunId, reason: &str, text: String) -> Error {
-    let mut error = recorder_error(text);
+fn make_refused_error(run: RunId, reason: &str, text: String) -> Error {
+    let mut error = make_recorder_error(text);
     error.facts.insert(ErrorFact::Reason, Value::from(reason));
     error.facts.insert(ErrorFact::Run, Value::from(run.get()));
     error
@@ -113,7 +113,7 @@ impl RunRecorder for MemoryRecorder {
     fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
         Box::pin(async move {
             let mut runs = self.lock();
-            let id = i64::try_from(runs.len() + 1).map_err(recorder_error)?;
+            let id = i64::try_from(runs.len() + 1).map_err(make_recorder_error)?;
             runs.push(MemoryRun {
                 meta,
                 records: Vec::new(),

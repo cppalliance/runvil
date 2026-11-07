@@ -8,7 +8,7 @@ use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
 use runvil::ErrorCode;
-use runvil::model::{CompletionResult, RawExchange, completion_error};
+use runvil::model::{CompletionResult, RawExchange, make_completion_error};
 use serde_json::json;
 
 use super::*;
@@ -287,7 +287,7 @@ completion stream ended without the [DONE] sentinel"
 
 #[test]
 fn read_completion_stream_returns_the_source_failure_as_is() {
-    let timed_out = completion_error(ErrorCode::Timeout, "no chunk in time").with_cause(
+    let timed_out = make_completion_error(ErrorCode::Timeout, "no chunk in time").with_cause(
         &std::io::Error::new(std::io::ErrorKind::TimedOut, "deadline"),
     );
     let mut source = Canned(VecDeque::from([

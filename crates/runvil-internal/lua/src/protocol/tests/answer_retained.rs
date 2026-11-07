@@ -11,7 +11,7 @@ use crate::{CoroStep, LuaProgram};
 
 /// The typed error every case answers the block's `models.infer` with.
 fn quota() -> runvil_types::error::Error {
-    crate::lua_quota(crate::QuotaResource::LogEvent)
+    crate::make_lua_quota_error(crate::QuotaResource::LogEvent)
 }
 
 /// [`quota`] as it crossed into the block's VM, which names no file, at

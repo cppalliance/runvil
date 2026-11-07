@@ -18,7 +18,7 @@ use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
 use runvil::effect::Round;
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
-    completion_error, phrase,
+    make_completion_error, phrase,
 };
 use runvil::{Error, ErrorCode};
 use workshop_agents::{Conversation, TokioTimer};
@@ -40,7 +40,7 @@ impl InferenceBroker for Offline {
         _round: Round,
     ) -> BoxFuture<Result<Box<Completion>, Error>> {
         let code = ErrorCode::Unavailable;
-        Box::pin(async move { Err(completion_error(code, phrase(code))) })
+        Box::pin(async move { Err(make_completion_error(code, phrase(code))) })
     }
 }
 

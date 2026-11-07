@@ -29,13 +29,13 @@ impl Temperature {
     /// `out_of_range` when it falls outside `[0.0, 2.0]`.
     pub fn new(value: f64) -> std::result::Result<Temperature, Error> {
         if !value.is_finite() {
-            return Err(invalid_temperature(
+            return Err(make_invalid_temperature_error(
                 "not_finite",
                 "temperature must be finite".to_owned(),
             ));
         }
         if !(0.0..=TEMPERATURE_MAX).contains(&value) {
-            return Err(invalid_temperature(
+            return Err(make_invalid_temperature_error(
                 "out_of_range",
                 format!("temperature {value} is outside the supported range [0.0, 2.0]"),
             ));
@@ -52,7 +52,7 @@ impl Temperature {
 
 /// The error for a rejected temperature: an `InvalidValue` that names the
 /// `temperature` setting, with the broken rule as its reason.
-fn invalid_temperature(reason: &'static str, message: String) -> Error {
+fn make_invalid_temperature_error(reason: &'static str, message: String) -> Error {
     let mut error = Error::new(
         ErrorCode::InvalidValue,
         message,

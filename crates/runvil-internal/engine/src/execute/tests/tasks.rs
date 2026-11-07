@@ -278,7 +278,7 @@ fn spawn_shares_calls_depth_cap() {
         ```\n";
     // Every spawner parks on a store write after spawning, so whether a
     // spawner resumes before or after its child ends depends on the order
-    // the writes are answered in: the run ends `done` or `tasks_live`.
+    // the writes are answered in: the run ends `done` or `make_tasks_live_error`.
     // Either way the whole spawn cascade and the one refusal ran before
     // any answer arrived, which is what this test measures.
     let rig = Rig::run(scheduler_scenario(md));

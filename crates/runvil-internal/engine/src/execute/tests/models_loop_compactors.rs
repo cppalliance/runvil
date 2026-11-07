@@ -25,7 +25,7 @@ fn an_omitted_compactor_defaults_to_fail_with_typed_precheck_exhaustion() {
     let trace = loop_scenario(source).chat(&gateway).run();
     let error = trace.error();
     assert!(
-        error == &placed(crate::error::context_exhausted("precheck"), 13),
+        error == &placed(crate::error::make_context_exhausted_error("precheck"), 13),
         "the omitted compactor defaults to compactors.fail with the precheck reason, on the \
          loop's line, got {error:?}"
     );
@@ -72,7 +72,7 @@ fn an_explicit_compactors_fail_invocation_reports_the_provider_reason() {
     let trace = loop_scenario(source).chat(&gateway).run();
     let error = trace.error();
     assert!(
-        error == &placed(crate::error::context_exhausted("provider"), 13),
+        error == &placed(crate::error::make_context_exhausted_error("provider"), 13),
         "the explicit compactors.fail invocation reports the provider reason, got {error:?}"
     );
     assert_eq!(gateway.call_count(), 1, "the request left and was rejected");
@@ -94,7 +94,7 @@ fn an_uncaught_compactors_fail_with_a_callers_reason_ends_the_run_as_context_exh
         "the run's message holds the caller's reason, got: {error}"
     );
     assert!(
-        error == &placed(crate::error::context_exhausted("manual"), 13),
+        error == &placed(crate::error::make_context_exhausted_error("manual"), 13),
         "the reason survives as given, got {error:?}"
     );
     assert_eq!(
@@ -119,7 +119,7 @@ fn an_uncaught_direct_compactors_fail_ends_the_run_as_context_exhausted() {
         "the run's message holds the caller's reason, got: {error}"
     );
     assert!(
-        error == &placed(crate::error::context_exhausted("manual"), 12),
+        error == &placed(crate::error::make_context_exhausted_error("manual"), 12),
         "the reason survives as given, on the call's mapped line, got {error:?}"
     );
     assert_eq!(gateway.call_count(), 0, "no request leaves");

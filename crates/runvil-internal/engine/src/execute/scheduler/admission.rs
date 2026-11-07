@@ -175,7 +175,7 @@ impl Admission {
                 continue;
             }
             if !matches!(tree.kind(holder), ChainKind::Task) || self.is_queued(holder) {
-                return Err(error::internal(
+                return Err(error::make_internal_error(
                     "a resumed chain's slots belong to an admitted task",
                 ));
             }
@@ -191,7 +191,7 @@ impl Admission {
                 continue;
             }
             if !matches!(tree.kind(id), ChainKind::Task) {
-                return Err(error::internal("a queued chain backs a task"));
+                return Err(error::make_internal_error("a queued chain backs a task"));
             }
             holding.insert(id);
             count_slot(&mut used, tree, id);
@@ -365,7 +365,7 @@ impl Scheduler {
         let var = chain.var.clone();
         let (Some(owner), Some(target)) = (self.tasks.owner_of(&task), self.tasks.target_of(&task))
         else {
-            return Err(error::internal("a task chain has an entry"));
+            return Err(error::make_internal_error("a task chain has an entry"));
         };
         let target = target.to_owned();
         let emitter = Arc::clone(self.chains[owner].ctx.emitter());

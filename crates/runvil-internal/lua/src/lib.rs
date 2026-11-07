@@ -54,7 +54,7 @@
 //! Most of this crate's public items exist for `runvil-engine`'s
 //! executor, which drives the VM and the coroutine protocol; the facade
 //! re-exports the store protocol ([`VfsOp`], [`VfsOutcome`],
-//! [`store_error`]) and the roster entry ([`RosterEntry`]);
+//! [`make_store_error`]) and the roster entry ([`RosterEntry`]);
 //! `crates/runvil/public-api.txt` holds the full surface. The
 //! `test_support` module, built for this crate's tests and under the
 //! `test-support` feature, holds what tests reach beyond that surface.
@@ -132,15 +132,16 @@ pub use crate::coro::install_store_shims;
 pub use crate::dispatch::{ScriptReport, ToolDispatch, prepare_dispatch, prepare_model_dispatch};
 pub use crate::engine_globals::install_ui;
 pub use crate::engine_globals_store::{
-    run_store_op, store_error_message, store_failure, store_probe_message,
+    make_store_failure_error, run_store_op, store_error_message, store_probe_message,
 };
 pub use crate::error::{
-    QuotaResource, context_exhausted, internal, internal_at, lua_quota, lua_runtime, task_canceled,
-    task_consumed, task_not_owned, tool_loop_exhausted,
+    QuotaResource, make_context_exhausted_error, make_internal_at_error, make_internal_error,
+    make_lua_quota_error, make_lua_runtime_error, make_task_canceled_error,
+    make_task_consumed_error, make_task_not_owned_error, make_tool_loop_exhausted_error,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use crate::error_value::store_error_value_fields;
-pub use crate::error_value::{ErrorField, ErrorKind, error_fields, error_kind, store_error};
+pub use crate::error_value::{ErrorField, ErrorKind, error_fields, error_kind, make_store_error};
 pub use crate::globals::{RESERVED_NAMES, Reserved, reserved_name};
 pub use crate::messages::MessageList;
 pub use crate::prelude::install_preludes;

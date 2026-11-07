@@ -33,7 +33,7 @@ struct Failing;
 impl AskBroker for Failing {
     async fn wait(&self) -> Result<String, Error> {
         Err(
-            tool_error(ErrorCode::ToolBackend, "the operator's window closed")
+            make_tool_error(ErrorCode::ToolBackend, "the operator's window closed")
                 .with_cause(&std::io::Error::other("socket reset")),
         )
     }

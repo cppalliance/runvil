@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 use std::num::NonZeroU32;
 
-use super::{Error, ErrorCode, ErrorFact, SourceLoc, coordinates, failure, place};
+use super::{Error, ErrorCode, ErrorFact, SourceLoc, coordinates, make_failure_error, place};
 
 /// A cause with an optional cause of its own.
 #[derive(Debug)]
@@ -81,7 +81,7 @@ fn an_error_is_a_cancel_exactly_when_its_code_is_canceled() {
     );
     for code in ALL.into_iter().filter(|&code| code != ErrorCode::Canceled) {
         assert!(
-            !failure(code, "canceled: the run was canceled").is_canceled(),
+            !make_failure_error(code, "canceled: the run was canceled").is_canceled(),
             "{code:?} is a failure"
         );
     }
@@ -408,7 +408,7 @@ fn coordinates_formats_the_file_and_start_line() {
 
 #[test]
 fn a_parse_failures_located_message_ends_with_the_prompt_name_and_the_start_position() {
-    let mut error = failure(ErrorCode::StructureInvalid, "duplicate section");
+    let mut error = make_failure_error(ErrorCode::StructureInvalid, "duplicate section");
     assert_eq!(error.located_message(), "duplicate section");
     error.facts.insert(ErrorFact::Name, "greeter".into());
     assert_eq!(
@@ -436,7 +436,7 @@ fn a_parse_failures_located_message_ends_with_the_prompt_name_and_the_start_posi
 
 #[test]
 fn an_internal_failures_located_message_ends_with_its_rust_file_and_line() {
-    let mut error = failure(ErrorCode::Internal, "internal invariant violated: x");
+    let mut error = make_failure_error(ErrorCode::Internal, "internal invariant violated: x");
     assert_eq!(
         error.located_message(),
         "internal invariant violated: x",
@@ -457,7 +457,7 @@ fn an_internal_failures_located_message_ends_with_its_rust_file_and_line() {
 
 #[test]
 fn any_other_located_failure_ends_with_its_file_and_line() {
-    let mut error = failure(
+    let mut error = make_failure_error(
         ErrorCode::LuaCompile,
         "lua compilation error at x (line 2): y",
     );
@@ -478,7 +478,7 @@ fn any_other_located_failure_ends_with_its_file_and_line() {
 
 #[test]
 fn a_run_time_invalid_value_takes_the_located_form_not_the_parse_form() {
-    let mut error = failure(ErrorCode::InvalidValue, "unknown model role `bogus`");
+    let mut error = make_failure_error(ErrorCode::InvalidValue, "unknown model role `bogus`");
     error.facts.insert(ErrorFact::Name, "bogus".into());
     assert_eq!(
         error.located_message(),

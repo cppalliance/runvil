@@ -26,7 +26,7 @@ use std::sync::{Arc, Mutex};
 use mlua::{Lua, LuaSerdeExt, Value};
 use serde_json::Value as Json;
 
-use crate::error::{self, Result, lua_runtime};
+use crate::error::{self, Result, make_lua_runtime_error};
 use crate::sys::SYS_LIVE_POISONED;
 use crate::var::var_to_json;
 
@@ -108,24 +108,24 @@ where
         let var = var_to_json(lua).map_err(mlua::Error::external)?;
         let sys = sys_live
             .lock()
-            .map_err(|_| mlua::Error::external(error::internal(SYS_LIVE_POISONED)))?
+            .map_err(|_| mlua::Error::external(error::make_internal_error(SYS_LIVE_POISONED)))?
             .clone();
         let globals_lookup = |name: &str| -> Result<Option<Json>> {
             if name == "prose" {
-                return Err(lua_runtime(
+                return Err(make_lua_runtime_error(
                     "recursive {{ prose }}: prose cannot reference itself".to_owned(),
                 ));
             }
-            let value: Value = lua.globals().get(name).map_err(error::lua)?;
+            let value: Value = lua.globals().get(name).map_err(error::make_lua_error)?;
             match value {
                 Value::Nil => Ok(None),
                 Value::Function(_) | Value::UserData(_) | Value::Thread(_) => {
-                    Err(lua_runtime(format!(
+                    Err(make_lua_runtime_error(format!(
                         "global `{name}` is a {}; bare globals in prose must be JSON data",
                         value.type_name()
                     )))
                 }
-                other => Ok(Some(lua.from_value(other).map_err(error::lua)?)),
+                other => Ok(Some(lua.from_value(other).map_err(error::make_lua_error)?)),
             }
         };
         let rendered = render(ProseState {
@@ -138,11 +138,11 @@ where
         drop(guard);
         lua.create_string(&rendered)
     })
-    .map_err(error::lua)
+    .map_err(error::make_lua_error)
 }
 
 /// Returns the failure of a poisoned memo slot.
 #[track_caller]
 fn memo_poisoned() -> mlua::Error {
-    mlua::Error::external(error::internal("prose memo slot was poisoned"))
+    mlua::Error::external(error::make_internal_error("prose memo slot was poisoned"))
 }

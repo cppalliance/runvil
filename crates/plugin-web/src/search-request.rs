@@ -3,7 +3,7 @@
 //! cannot express. Only a value that passed [`SearchRequest::from_args`]
 //! becomes the provider's [`SearchQuery`].
 
-use runvil_plugin::{Error, ErrorCode, tool_error};
+use runvil_plugin::{Error, ErrorCode, make_tool_error};
 
 use super::{MAX_COUNT, MAX_DOMAINS, MAX_QUERY_LEN, MAX_STRING_LEN};
 use crate::provider::{Freshness, SafeSearch, SearchQuery};
@@ -46,7 +46,7 @@ impl SearchRequest {
     /// Deserializes and validates the raw call arguments.
     pub(super) fn from_args(args: serde_json::Value) -> Result<SearchRequest, Error> {
         let request: SearchRequest = serde_json::from_value(args).map_err(|error| {
-            tool_error(
+            make_tool_error(
                 ErrorCode::ToolInvalidArguments,
                 "web_search: invalid arguments",
             )
@@ -73,7 +73,7 @@ impl SearchRequest {
 
     /// Enforces the bounds the type alone cannot express.
     fn validate(&self) -> Result<(), Error> {
-        let invalid = |message: String| tool_error(ErrorCode::ToolInvalidArguments, message);
+        let invalid = |message: String| make_tool_error(ErrorCode::ToolInvalidArguments, message);
         if self.query.trim().is_empty() {
             return Err(invalid("web_search: query must not be empty".to_owned()));
         }

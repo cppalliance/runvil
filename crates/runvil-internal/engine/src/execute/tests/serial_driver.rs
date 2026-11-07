@@ -1,7 +1,7 @@
 //! The serial sans-IO driver over `Run`, and the properties it makes
 //! testable without a runtime or a gateway: a literal prompt that issues no
 //! effect, a three-arm fanout whose answers arrive in reverse order,
-//! determinism (two runs under the same params and answers produce
+//! make_determinism_error (two runs under the same params and answers produce
 //! identical effects, events, provenances, and `sys.id`s), the
 //! batching-pairing property (answers delivered one per step, all at once,
 //! and shuffled within a batch produce identical per-task effects and
@@ -139,7 +139,7 @@ fn a_three_arm_fanout_fed_its_answers_in_reverse_order_packs_results_in_collecti
 
 #[test]
 fn two_runs_under_the_same_params_and_answers_are_identical() {
-    // The determinism property: the same prompt, params, and answers
+    // The make_determinism_error property: the same prompt, params, and answers
     // produce the same text (the `sys.id`s in it), the same events in the
     // same order with the same provenances, and the same effects.
     let first = drive_batched(model_run(FANOUT), Batching::AllAtOnce);

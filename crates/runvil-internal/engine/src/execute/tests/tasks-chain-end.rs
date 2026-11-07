@@ -1,5 +1,5 @@
 //! The chain-end rules: a chain ending with live tasks fails as
-//! `tasks_live` naming the leaked ids (as the run's error at the root, as
+//! `make_tasks_live_error` naming the leaked ids (as the run's error at the root, as
 //! the call's answer for a `call` chain), the leaked tasks are abandoned;
 //! a running task's terminal names how its owner ended (returned, failed,
 //! or exhausted its tool loop); a task spawned in H1 belongs to the walk
@@ -37,7 +37,7 @@ fn no_task_reports(records: &[(String, Observation)]) -> bool {
 fn a_chain_ending_with_live_author_tasks_fails_as_tasks_live_naming_the_ids() {
     // The spawner ends while both children are live - neither was ever
     // admitted, since the spawner returned without suspending - so the
-    // run fails with `tasks_live` naming both ids in spawn order, and
+    // run fails with `make_tasks_live_error` naming both ids in spawn order, and
     // both tasks are abandoned because their owner returned. A task that
     // never ran reports no start and no terminal, though its entry still
     // reaches Abandoned.
@@ -52,7 +52,10 @@ fn a_chain_ending_with_live_author_tasks_fails_as_tasks_live_naming_the_ids() {
 
     assert_eq!(
         error,
-        &crate::test_support::placed(crate::error::tasks_live(&[task("0.0"), task("0.1")]), 12),
+        &crate::test_support::placed(
+            crate::error::make_tasks_live_error(&[task("0.0"), task("0.1")]),
+            12
+        ),
         "leaked ids in spawn order, on the line that spawned the first"
     );
     let text = error.to_string();
@@ -77,7 +80,7 @@ fn a_chain_ending_with_live_author_tasks_fails_as_tasks_live_naming_the_ids() {
 #[test]
 fn a_chain_failing_with_a_live_task_keeps_its_own_error_and_abandons_the_task() {
     // The spawner errors after spawning: the leak is the lesser fault, so
-    // the run's error is the spawner's own, not `tasks_live`; the task
+    // the run's error is the spawner's own, not `make_tasks_live_error`; the task
     // still ends with its owner, its entry Abandoned. The task was never
     // admitted - the spawner failed without suspending - so it reports no
     // start and no terminal.
@@ -157,7 +160,7 @@ fn a_returning_owner_abandons_its_running_task_as_owner_returned() {
     let rig = run_abandoning_a_running_task(scheduler_scenario(md), AbandonReason::OwnerReturned);
     assert_eq!(
         rig.trace().error(),
-        &crate::test_support::placed(crate::error::tasks_live(&[task("0.0")]), 12)
+        &crate::test_support::placed(crate::error::make_tasks_live_error(&[task("0.0")]), 12)
     );
 }
 
@@ -198,7 +201,7 @@ fn an_exhausted_tool_loop_abandons_its_running_task_as_tool_loop_exhausted() {
     let rig = run_abandoning_a_running_task(scenario, AbandonReason::ToolLoopExhausted);
     let error = rig.trace().error();
     assert!(
-        error == &crate::test_support::placed(crate::error::tool_loop_exhausted(), 17),
+        error == &crate::test_support::placed(crate::error::make_tool_loop_exhausted_error(), 17),
         "the owner's own error stands, on its loop's line: {error:?}"
     );
 }
@@ -225,7 +228,7 @@ fn moving_spawner_prompt(movement: &str) -> String {
     )
 }
 
-/// Drives `md` and asserts that the run fails `tasks_live` naming `0.0`
+/// Drives `md` and asserts that the run fails `make_tasks_live_error` naming `0.0`
 /// alone, with the task's entry Abandoned because its owner returned. The
 /// task never ran - neither chain suspended between the spawn and the
 /// end - so it reports no start and no terminal.
@@ -235,7 +238,7 @@ fn assert_task_outlives_movement(md: String) {
 
     assert_eq!(
         rig.trace().error(),
-        &crate::test_support::placed(crate::error::tasks_live(&[task("0.0")]), 12),
+        &crate::test_support::placed(crate::error::make_tasks_live_error(&[task("0.0")]), 12),
         "the walk still owns the task when the sibling returns, spawned on the spawner's line"
     );
     assert_eq!(
@@ -270,7 +273,7 @@ fn a_task_survives_its_spawning_sections_jump() {
 #[test]
 fn a_call_chain_ending_with_a_live_task_answers_tasks_live_to_its_caller() {
     // The leak is the call's answer, not the run's error: the caller's
-    // `pcall` sees the `tasks_live` kind with the leaked ids in `tasks`,
+    // `pcall` sees the `make_tasks_live_error` kind with the leaked ids in `tasks`,
     // and the task ended with the call chain that owned it.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Tasks\n\n\
@@ -310,7 +313,7 @@ fn a_call_chain_ending_with_a_live_task_answers_tasks_live_to_its_caller() {
 
 #[test]
 fn a_fanout_arm_leaking_a_task_fails_on_the_arms_own_spawn_line() {
-    // The arm's `tasks_live` is placed in the arm, on its spawn's line,
+    // The arm's `make_tasks_live_error` is placed in the arm, on its spawn's line,
     // before the fanout delivers it, so the parent's re-raise and the run
     // keep that line rather than the parent's `tasks.fanout` line.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
@@ -373,7 +376,7 @@ fn a_task_spawned_in_h1_belongs_to_the_main_walk() {
 
     assert_eq!(
         rig.trace().error(),
-        &crate::test_support::placed(crate::error::tasks_live(&[task("0.0")]), 10),
+        &crate::test_support::placed(crate::error::make_tasks_live_error(&[task("0.0")]), 10),
         "the walk owns H1's task and leaks it, placed on the H1's spawn"
     );
     assert_eq!(

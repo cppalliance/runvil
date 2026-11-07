@@ -36,7 +36,7 @@ pub(super) fn echo_tool() -> FnTool {
 /// The fixture Pack's `tools/replace`, which echoes its `value` argument
 /// and which only a model may call.
 #[track_caller]
-pub(super) fn model_only_tool() -> FnTool {
+pub(super) fn make_model_only_tool_error() -> FnTool {
     FnTool::new("tools/replace", value_schema(), |args| {
         let value = require_string_arg(&args, "value")?;
         Ok(ToolOutput::trusted(format!("replaced: {value}")))
@@ -67,7 +67,7 @@ fn require_string_arg<'a>(
     key: &str,
 ) -> std::result::Result<&'a str, runvil_types::error::Error> {
     args.get(key).and_then(Value::as_str).ok_or_else(|| {
-        tool_error(
+        make_tool_error(
             ErrorCode::ToolInvalidArguments,
             format!("fixture tool requires a string `{key}` argument"),
         )
@@ -102,7 +102,10 @@ pub(super) fn failing_tool() -> FnTool {
         // The cause lands in the error's message only; the model reads the
         // prose, which stays the tool's own text.
         let cause = std::io::Error::other("upstream socket reset");
-        Err(tool_error(ErrorCode::ToolBackend, "the tool's own backend failed").with_cause(&cause))
+        Err(
+            make_tool_error(ErrorCode::ToolBackend, "the tool's own backend failed")
+                .with_cause(&cause),
+        )
     })
     .description("Always fail.")
 }

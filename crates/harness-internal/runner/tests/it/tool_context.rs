@@ -8,7 +8,7 @@ use std::sync::Arc;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::recorder::MemoryRecorder;
 use runvil::cancel::CancelHandle;
-use runvil::tool_error;
+use runvil::make_tool_error;
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
@@ -68,7 +68,9 @@ impl Pack for Record {
         Box::pin(async move {
             cx.access()
                 .write("/from-tool.md", WRITTEN.as_bytes())
-                .map_err(|error| tool_error(ErrorCode::ToolOther, format!("record: {error}")))?;
+                .map_err(|error| {
+                    make_tool_error(ErrorCode::ToolOther, format!("record: {error}"))
+                })?;
             Ok(ToolOutput::trusted(format!("{:?}", cx.origin().caller)))
         })
     }

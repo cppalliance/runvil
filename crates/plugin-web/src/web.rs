@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use runvil_plugin::{
     Error, ErrorCode, HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceKey,
-    ToolContext, ToolId, ToolInfo, ToolOutput, tool_error,
+    ToolContext, ToolId, ToolInfo, ToolOutput, make_tool_error,
 };
 use serde_json::{Value, json};
 use tokio::runtime::Handle;
@@ -78,19 +78,19 @@ fn construct(
     services: &HostServices,
 ) -> Result<Arc<dyn Pack>, Error> {
     if !(config.is_null() || config == json!({})) {
-        return Err(tool_error(
+        return Err(make_tool_error(
             ErrorCode::ToolOther,
             "web takes no configuration",
         ));
     }
     let provider = services.get(&SEARCH_PROVIDER).ok_or_else(|| {
-        tool_error(
+        make_tool_error(
             ErrorCode::ToolOther,
             "web needs runvil/search-provider, and this host provides none",
         )
     })?;
     let runtime = services.get(&TOKIO_RUNTIME).ok_or_else(|| {
-        tool_error(
+        make_tool_error(
             ErrorCode::ToolOther,
             "web needs runvil/tokio-runtime, and this host provides none",
         )
@@ -108,7 +108,8 @@ impl Web {
     fn new(name: &PackId, fetch: WebFetch, search: WebSearch) -> Result<Web, Error> {
         let id = |tool: &str| {
             ToolId::parse(&format!("{name}/{tool}")).map_err(|e| {
-                tool_error(ErrorCode::ToolBackend, "web could not name its tools").with_cause(&e)
+                make_tool_error(ErrorCode::ToolBackend, "web could not name its tools")
+                    .with_cause(&e)
             })
         };
         let tools = vec![
@@ -154,7 +155,7 @@ impl Pack for Web {
             match cx.tool().name() {
                 "fetch" => self.fetch.call(args).await,
                 "search" => self.search.call(args).await,
-                other => Err(tool_error(
+                other => Err(make_tool_error(
                     ErrorCode::ToolOther,
                     format!("web has no tool named {other}"),
                 )),

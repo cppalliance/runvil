@@ -68,7 +68,7 @@ static GLOBALS_PROGRAM: LazyLock<Result<LuaProgram>> =
 /// and the replacements cannot be installed.
 pub(crate) fn install(lua: &Lua) -> Result<()> {
     let globals = lua.globals();
-    let state = lua.create_table().map_err(error::lua)?;
+    let state = lua.create_table().map_err(error::make_lua_error)?;
     let refuse_argv = refusal(lua, crate::argv::ASSIGNMENT_REFUSAL)?;
     let refuse_prose = refusal(lua, crate::prose::ASSIGNMENT_REFUSAL)?;
     let refuse_messages = refusal(lua, crate::messages::ASSIGNMENT_REFUSAL)?;
@@ -83,16 +83,18 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
             refuse_prose,
             refuse_messages,
         ))
-        .map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
     lua.set_named_registry_value(STATE_REGISTRY, state)
-        .map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
     globals
         .raw_set("setmetatable", replace_metatable)
-        .map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
     globals
         .raw_set("getmetatable", read_metatable)
-        .map_err(error::lua)?;
-    globals.set_metatable(Some(guard)).map_err(error::lua)
+        .map_err(error::make_lua_error)?;
+    globals
+        .set_metatable(Some(guard))
+        .map_err(error::make_lua_error)
 }
 
 /// Freezes `argv` on the guard: reads return `frozen`, and every
@@ -103,8 +105,12 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
 /// be written.
 pub(crate) fn freeze_argv(lua: &Lua, frozen: Value) -> Result<()> {
     let state = state(lua)?;
-    state.raw_set("argv", frozen).map_err(error::lua)?;
-    state.raw_set("argv_frozen", true).map_err(error::lua)
+    state
+        .raw_set("argv", frozen)
+        .map_err(error::make_lua_error)?;
+    state
+        .raw_set("argv_frozen", true)
+        .map_err(error::make_lua_error)
 }
 
 /// Puts `render` in the `prose` slot, nil leaving `prose` reading nil, and
@@ -115,8 +121,10 @@ pub(crate) fn freeze_argv(lua: &Lua, frozen: Value) -> Result<()> {
 /// be read or written.
 pub(crate) fn replace_prose(lua: &Lua, render: Value) -> Result<Value> {
     let state = state(lua)?;
-    let replaced = state.raw_get("prose").map_err(error::lua)?;
-    state.raw_set("prose", render).map_err(error::lua)?;
+    let replaced = state.raw_get("prose").map_err(error::make_lua_error)?;
+    state
+        .raw_set("prose", render)
+        .map_err(error::make_lua_error)?;
     Ok(replaced)
 }
 
@@ -127,7 +135,9 @@ pub(crate) fn replace_prose(lua: &Lua, render: Value) -> Result<Value> {
 /// Returns a `LuaRuntime` failure if the guard's slot table is missing or cannot
 /// be written.
 pub(crate) fn set_messages(lua: &Lua, list: AnyUserData) -> Result<()> {
-    state(lua)?.raw_set("messages", list).map_err(error::lua)
+    state(lua)?
+        .raw_set("messages", list)
+        .map_err(error::make_lua_error)
 }
 
 /// The section's list, as the `messages` slot holds it.
@@ -138,10 +148,10 @@ pub(crate) fn set_messages(lua: &Lua, list: AnyUserData) -> Result<()> {
 pub(crate) fn messages(lua: &Lua) -> Result<AnyUserData> {
     match state(lua)?
         .raw_get::<Value>("messages")
-        .map_err(error::lua)?
+        .map_err(error::make_lua_error)?
     {
         Value::UserData(list) => Ok(list),
-        _ => Err(error::internal(
+        _ => Err(error::make_internal_error(
             "the section's messages list is not installed",
         )),
     }
@@ -149,13 +159,14 @@ pub(crate) fn messages(lua: &Lua) -> Result<AnyUserData> {
 
 /// The guard's slot table.
 fn state(lua: &Lua) -> Result<Table> {
-    lua.named_registry_value(STATE_REGISTRY).map_err(error::lua)
+    lua.named_registry_value(STATE_REGISTRY)
+        .map_err(error::make_lua_error)
 }
 
 /// An Engine function that raises `message` as a runtime error.
 fn refusal(lua: &Lua, message: &'static str) -> Result<Function> {
     lua.create_function(move |_, ()| -> mlua::Result<()> { Err(mlua::Error::runtime(message)) })
-        .map_err(error::lua)
+        .map_err(error::make_lua_error)
 }
 
 /// Why a name is reserved in a section VM's global namespace.

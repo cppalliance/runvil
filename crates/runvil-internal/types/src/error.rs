@@ -45,7 +45,7 @@ impl Error {
     /// with no `task` after another suspending call.
     #[must_use]
     pub fn canceled() -> Error {
-        failure(
+        make_failure_error(
             ErrorCode::Canceled,
             "canceled: the run was canceled or this call was stopped",
         )
@@ -207,7 +207,7 @@ impl SourceLoc {
 /// Places `error` in the prompt `file`. This is the only code that gives a
 /// location its prompt file or turns a known line into a prompt location:
 /// the parser's span constructors build spans with no file, which this
-/// completes, and the Lua crate's `internal_at` writes Rust locations.
+/// completes, and the Lua crate's `make_internal_at_error` writes Rust locations.
 ///
 /// An [`ErrorCode::Internal`] error comes back unchanged, so it keeps its
 /// Rust location. Any other error that has a location keeps it, so the
@@ -230,7 +230,7 @@ pub fn place(mut error: Error, file: &str, line: Option<NonZeroU32>) -> Error {
 
 /// Builds a failure with `code`, `message`, and the code's default prose.
 #[must_use]
-pub fn failure(code: ErrorCode, message: impl Into<String>) -> Error {
+pub fn make_failure_error(code: ErrorCode, message: impl Into<String>) -> Error {
     Error::new(code, message, code.prose())
 }
 

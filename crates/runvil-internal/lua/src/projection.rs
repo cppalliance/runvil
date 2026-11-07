@@ -37,7 +37,7 @@ use runvil_model_client::client::Message;
 use runvil_model_client::detail::message_from_validated_parts;
 use serde_json::Value;
 
-use crate::error::{Result, lua_runtime};
+use crate::error::{Result, make_lua_runtime_error};
 use crate::protocol::{ContentPart, MessageContent, MessageRecord, NonEmpty, RecordRole};
 
 /// Validates and projects one author-built message list into the wire
@@ -61,7 +61,7 @@ fn validate(messages: &[MessageRecord]) -> Result<()> {
     if system_len > 1 {
         for (position, record) in messages[..system_len].iter().enumerate() {
             if matches!(record.content, MessageContent::Parts(_)) {
-                return Err(lua_runtime(format!(
+                return Err(make_lua_runtime_error(format!(
                     "messages[{}] is a system message with content parts; only plain \
                      text system messages can be composed",
                     position + 1
@@ -79,7 +79,7 @@ fn validate(messages: &[MessageRecord]) -> Result<()> {
         let index = position + 1;
         match &record.role {
             RecordRole::System if position >= system_len => {
-                return Err(lua_runtime(format!(
+                return Err(make_lua_runtime_error(format!(
                     "messages[{index}] is a system message outside the leading system block"
                 )));
             }
@@ -87,7 +87,7 @@ fn validate(messages: &[MessageRecord]) -> Result<()> {
                 reject_unanswered(pending.as_ref())?;
                 for call in &record.tool_calls {
                     if !seen.insert(call.id.as_str()) {
-                        return Err(lua_runtime(format!(
+                        return Err(make_lua_runtime_error(format!(
                             "messages[{index}] tool call id {:?} duplicates an earlier \
                              tool call",
                             call.id
@@ -113,7 +113,7 @@ fn validate(messages: &[MessageRecord]) -> Result<()> {
                         }
                     }
                     Some(_) | None => {
-                        return Err(lua_runtime(format!(
+                        return Err(make_lua_runtime_error(format!(
                             "messages[{index}] is an orphan tool record: no pending \
                              assistant tool call with id {id:?}"
                         )));
@@ -135,7 +135,7 @@ fn reject_unanswered(pending: Option<&(usize, Vec<&str>)>) -> Result<()> {
     if let Some((index, unanswered)) = pending
         && let Some(id) = unanswered.first()
     {
-        return Err(lua_runtime(format!(
+        return Err(make_lua_runtime_error(format!(
             "messages[{index}] tool call {id:?} has no tool result"
         )));
     }

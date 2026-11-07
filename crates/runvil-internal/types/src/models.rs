@@ -10,7 +10,7 @@ use std::num::NonZeroU32;
 use serde::Deserialize;
 
 use crate::error::Error;
-use crate::names::invalid_id;
+use crate::names::make_invalid_id_error;
 
 /// The stable identity of one catalogued model.
 ///
@@ -74,7 +74,7 @@ impl ModelId {
         } else {
             return Ok(());
         };
-        Err(invalid_id(
+        Err(make_invalid_id_error(
             format!("invalid model id: {field} {reason}"),
             value,
         ))
@@ -253,7 +253,7 @@ impl ModelCatalog {
         for (index, model) in models.iter().enumerate() {
             if models[..index].iter().any(|prior| prior.id() == model.id()) {
                 let identity = format!("{}/{}", model.id().server(), model.id().name());
-                return Err(invalid_id(
+                return Err(make_invalid_id_error(
                     format!("duplicate model identity in catalog: {identity}"),
                     &identity,
                 ));

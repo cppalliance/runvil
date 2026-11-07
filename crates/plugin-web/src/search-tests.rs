@@ -247,7 +247,7 @@ async fn success_body_with_empty_url_is_rejected() {
     );
 }
 
-fn transport_failure() -> Result<SearchResults, SearchError> {
+fn make_transport_failure_error() -> Result<SearchResults, SearchError> {
     Err(SearchError::with_source(
         SearchErrorKind::Transport,
         "request failed",
@@ -264,7 +264,7 @@ fn backend_failure() -> Result<SearchResults, SearchError> {
 
 #[tokio::test]
 async fn provider_errors_map_their_kind_and_message_and_keep_the_cause_out_of_the_prose() {
-    let (tool, _fake) = tool_answering(transport_failure);
+    let (tool, _fake) = tool_answering(make_transport_failure_error);
     let err = tool
         .call(serde_json::json!({ "query": "hi" }))
         .await

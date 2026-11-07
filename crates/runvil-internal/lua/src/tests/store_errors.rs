@@ -354,7 +354,7 @@ fn a_raised_store_error_renders_an_integer_count_and_the_prose() {
         old: "TODO".to_owned(),
         new: "DONE".to_owned(),
     };
-    let mut error = crate::store_error(&anchor);
+    let mut error = crate::make_store_error(&anchor);
     error.message = crate::store_error_message(&op, &anchor);
     assert!(
         error.message.contains("include more surrounding text"),

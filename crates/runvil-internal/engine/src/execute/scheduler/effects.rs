@@ -60,7 +60,7 @@ pub(super) enum Continuation {
     ToolCall(ToolCallContinuation),
     /// A [`Vfs`](Effect::Vfs) effect: the operation the chain
     /// yielded, from which the answer's succeeded/failed observation, its
-    /// failure's model-facing message, and its determinism classification
+    /// failure's model-facing message, and its make_determinism_error classification
     /// render under the call surface the author used.
     Vfs(VfsOp),
     /// The internal timer behind a timed wait, naming the timer's task: the

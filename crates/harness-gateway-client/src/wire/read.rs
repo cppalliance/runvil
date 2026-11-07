@@ -18,7 +18,7 @@ use serde_json::Value;
 
 use super::delta::StreamDelta;
 use super::stream::{Applied, SseScanner, StreamAccumulator};
-use crate::failure::malformed;
+use crate::failure::make_malformed_error;
 
 /// A response body that a transport supplies one chunk at a time.
 ///
@@ -34,7 +34,7 @@ use crate::failure::malformed;
 ///    [`read_body_capped`]. It bounds the body's length and escapes its
 ///    control characters with [`escape_controls`](crate::escape_controls).
 ///    It then fails the round with the error that
-///    [`classify_http_failure`](crate::classify_http_failure) returns.
+///    [`make_classify_http_failure_error`](crate::make_classify_http_failure_error) returns.
 /// 4. Otherwise, it passes the source to [`read_completion_stream`]. The
 ///    returned [`Completion`] answers the effect.
 ///
@@ -50,7 +50,7 @@ pub trait ChunkSource {
     /// When a read fails, the implementation returns the [`Error`] that
     /// the round fails with. Its code is `Timeout` when the read ran out of
     /// time and `Transport` otherwise. Build it with
-    /// [`completion_error`](runvil::model::completion_error) and attach the
+    /// [`make_completion_error`](runvil::model::make_completion_error) and attach the
     /// transport's own error with [`Error::with_cause`].
     fn next_chunk(&mut self) -> impl Future<Output = Result<Option<Self::Chunk>, Error>> + Send;
 }
@@ -79,7 +79,7 @@ pub async fn read_body_capped<S: ChunkSource>(
     if let Some(len) = content_length
         && len > cap
     {
-        return Err(malformed(format!(
+        return Err(make_malformed_error(format!(
             "response body of {len} bytes exceeds the {cap}-byte limit"
         )));
     }
@@ -87,7 +87,7 @@ pub async fn read_body_capped<S: ChunkSource>(
     while let Some(chunk) = source.next_chunk().await? {
         let bytes = chunk.as_ref();
         if body.len() as u64 + bytes.len() as u64 > cap {
-            return Err(malformed(format!(
+            return Err(make_malformed_error(format!(
                 "response body exceeds the {cap}-byte limit"
             )));
         }
@@ -142,7 +142,7 @@ pub async fn read_completion_stream<S: ChunkSource>(
         let bytes = chunk.as_ref();
         received += bytes.len() as u64;
         if received > max_bytes {
-            return Err(malformed(format!(
+            return Err(make_malformed_error(format!(
                 "response stream exceeds the {max_bytes}-byte limit"
             )));
         }
@@ -167,7 +167,7 @@ pub async fn read_completion_stream<S: ChunkSource>(
     // accumulation may be missing the tail, so it must never pass for a
     // complete turn.
     if !done {
-        return Err(malformed(
+        return Err(make_malformed_error(
             "completion stream ended without the [DONE] sentinel",
         ));
     }

@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex};
 
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind};
 use harness_runner::{Harness, HostContext};
+use runvil::make_tool_error;
 use runvil::model::{Completion, CompletionResult, ToolCall};
-use runvil::tool_error;
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
     HostServices, ModelInfo, Pack, PackFuture, PackId, PackInfo, PackRegistry, RenderContext,
@@ -142,7 +142,7 @@ fn construct(
     services: &HostServices,
 ) -> Result<Arc<dyn Pack>, Error> {
     let seen = services.get(&SEEN).ok_or_else(|| {
-        tool_error(
+        make_tool_error(
             ErrorCode::ToolOther,
             "the render Pack needs tests/render-seen",
         )

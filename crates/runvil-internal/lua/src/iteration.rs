@@ -28,7 +28,7 @@
 //! position, so `next` falls back to the trailing segment such keys occupy,
 //! the best a stateless resume can do.
 //! Rebuilding
-//! costs `O(n log n)` per step; section tables are small and the determinism
+//! costs `O(n log n)` per step; section tables are small and the make_determinism_error
 //! is the point. The ordering covers boolean keys, finite number keys, and
 //! valid UTF-8 string keys, the only keys a payload the run log stores can
 //! hold. Every other key (a table, function, userdata, or thread, a
@@ -53,10 +53,14 @@ pub(crate) fn install_deterministic_iteration(lua: &Lua) -> Result<()> {
     let globals = lua.globals();
     let next_fn = lua
         .create_function(deterministic_next)
-        .map_err(error::lua)?;
-    globals.raw_set("next", &next_fn).map_err(error::lua)?;
-    let pairs_fn = lua.create_function(pairs).map_err(error::lua)?;
-    globals.raw_set("pairs", pairs_fn).map_err(error::lua)
+        .map_err(error::make_lua_error)?;
+    globals
+        .raw_set("next", &next_fn)
+        .map_err(error::make_lua_error)?;
+    let pairs_fn = lua.create_function(pairs).map_err(error::make_lua_error)?;
+    globals
+        .raw_set("pairs", pairs_fn)
+        .map_err(error::make_lua_error)
 }
 
 /// One table key and its position in the deterministic walk order.

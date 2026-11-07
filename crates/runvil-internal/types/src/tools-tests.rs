@@ -1,5 +1,5 @@
 //! Tests for `ToolId`, `ToolInfo`, `ToolCatalog`, tool output trust, and
-//! `tool_error`.
+//! `make_tool_error`.
 
 use serde_json::json;
 
@@ -59,9 +59,9 @@ fn tool_catalog_is_send_and_sync() {
 
 #[test]
 fn a_tool_error_shows_its_text_as_message_and_prose_and_keeps_a_cause_out_of_the_prose() {
-    use super::tool_error;
+    use super::make_tool_error;
     use crate::error::ErrorCode;
-    let error = tool_error(ErrorCode::ToolBackend, "backend failed");
+    let error = make_tool_error(ErrorCode::ToolBackend, "backend failed");
     assert_eq!(error.code, ErrorCode::ToolBackend);
     assert_eq!(error.message, "backend failed");
     assert_eq!(error.prose, "backend failed");

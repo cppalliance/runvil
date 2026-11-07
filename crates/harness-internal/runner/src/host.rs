@@ -40,7 +40,7 @@ use runvil::model::ModelInfo;
 use runvil::packs::{Prelude, RosterEntry};
 use runvil::vfs::Access;
 use runvil::{Error, ErrorCode};
-use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput, tool_error};
+use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput, make_tool_error};
 use runvil_plugin::{
     HostServices, Pack, PackId, PackInfo, PackRegistry, RenderContext, ServiceId, ToolContext,
 };
@@ -415,7 +415,7 @@ impl ToolPerformer for HostRunContext {
                     alias = %alias,
                     "a ToolCall names a tool of no usable Pack of the run"
                 );
-                return Err(tool_error(
+                return Err(make_tool_error(
                     ErrorCode::ToolOther,
                     format!("tool `{alias}` ({tool}) belongs to no usable Pack of this run"),
                 ));

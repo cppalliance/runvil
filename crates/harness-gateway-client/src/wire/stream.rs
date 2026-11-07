@@ -26,10 +26,10 @@ use runvil::metrics::ClientTiming;
 use runvil::model::{Completion, RawExchange};
 use serde_json::{Map, Value};
 
-use super::classify::classify_stream_error;
+use super::classify::make_classify_stream_error;
 use super::delta::StreamDelta;
 use super::parse::{normalize, response_metadata};
-use crate::failure::{decoded, malformed};
+use crate::failure::{decoded, make_malformed_error};
 
 /// Splits a raw SSE byte stream into `data:` payloads.
 ///
@@ -148,7 +148,7 @@ impl StreamAccumulator {
     /// # Errors
     /// Returns an [`Error`] with code `MalformedResponse` when the
     /// payload is not valid JSON or a recognized field has the wrong
-    /// shape, and the [`classify_stream_error`] result when the payload is
+    /// shape, and the [`make_classify_stream_error`] result when the payload is
     /// a mid-stream error envelope (`Transport` unless its text names a
     /// known cause).
     pub(super) fn apply(
@@ -159,8 +159,9 @@ impl StreamAccumulator {
         if data == "[DONE]" {
             return Ok(Applied::Done);
         }
-        let chunk: Value = serde_json::from_str(data)
-            .map_err(|error| malformed("stream chunk was not valid JSON").with_cause(&error))?;
+        let chunk: Value = serde_json::from_str(data).map_err(|error| {
+            make_malformed_error("stream chunk was not valid JSON").with_cause(&error)
+        })?;
         // A mid-stream `error` envelope is how the gateway (and llama.cpp)
         // report a failure after the 200 has already been sent: the
         // completion died in flight, so it is a transport failure unless
@@ -170,7 +171,7 @@ impl StreamAccumulator {
                 .get("message")
                 .and_then(Value::as_str)
                 .unwrap_or("stream error envelope omitted its message");
-            return Err(classify_stream_error(&escape_controls(message, 2000)));
+            return Err(make_classify_stream_error(&escape_controls(message, 2000)));
         }
         if let Some(Value::String(model)) = chunk.get("model")
             && !model.is_empty()
@@ -190,7 +191,7 @@ impl StreamAccumulator {
             None | Some(Value::Null) => return Ok(Applied::Chunk { delta: false }),
             Some(Value::Array(choices)) => choices,
             Some(_) => {
-                return Err(malformed(
+                return Err(make_malformed_error(
                     "stream chunk `choices` was present but not an array",
                 ));
             }
@@ -211,7 +212,7 @@ impl StreamAccumulator {
         on_delta: &impl Fn(StreamDelta),
     ) -> Result<bool, Error> {
         let Some(index) = choice.get("index").and_then(Value::as_u64) else {
-            return Err(malformed("stream choice had no integer index"));
+            return Err(make_malformed_error("stream choice had no integer index"));
         };
         // Mirror the buffered normalizer: the first choice is the turn.
         if index != 0 {
@@ -221,7 +222,7 @@ impl StreamAccumulator {
             None | Some(Value::Null) => {}
             Some(Value::String(reason)) => self.finish_reason = Some(reason.clone()),
             Some(_) => {
-                return Err(malformed(
+                return Err(make_malformed_error(
                     "stream choice `finish_reason` was present but not a string",
                 ));
             }
@@ -231,7 +232,7 @@ impl StreamAccumulator {
             None | Some(Value::Null) => return Ok(false),
             Some(delta @ Value::Object(_)) => delta,
             Some(_) => {
-                return Err(malformed(
+                return Err(make_malformed_error(
                     "stream choice `delta` was present but not an object",
                 ));
             }
@@ -262,7 +263,7 @@ impl StreamAccumulator {
                 }
             }
             Some(_) => {
-                return Err(malformed(
+                return Err(make_malformed_error(
                     "stream delta `tool_calls` was present but not an array",
                 ));
             }
@@ -273,21 +274,25 @@ impl StreamAccumulator {
     /// Merges one tool-call fragment into its index-keyed buffer.
     fn apply_tool_fragment(&mut self, fragment: &Value) -> Result<(), Error> {
         let Some(index) = fragment.get("index").and_then(Value::as_u64) else {
-            return Err(malformed("stream tool-call fragment had no integer index"));
+            return Err(make_malformed_error(
+                "stream tool-call fragment had no integer index",
+            ));
         };
         let parts = self.tool_calls.entry(index).or_default();
         match fragment.get("id") {
             None | Some(Value::Null) => {}
             Some(Value::String(id)) => parts.id.push_str(id),
             Some(_) => {
-                return Err(malformed("stream tool-call fragment `id` was not a string"));
+                return Err(make_malformed_error(
+                    "stream tool-call fragment `id` was not a string",
+                ));
             }
         }
         let function = match fragment.get("function") {
             None | Some(Value::Null) => return Ok(()),
             Some(function @ Value::Object(_)) => function,
             Some(_) => {
-                return Err(malformed(
+                return Err(make_malformed_error(
                     "stream tool-call fragment `function` was not an object",
                 ));
             }
@@ -300,7 +305,7 @@ impl StreamAccumulator {
                 None | Some(Value::Null) => {}
                 Some(Value::String(piece)) => slot.push_str(piece),
                 Some(_) => {
-                    return Err(malformed(format!(
+                    return Err(make_malformed_error(format!(
                         "stream tool-call fragment `{key}` was not a string"
                     )));
                 }
@@ -343,7 +348,7 @@ impl StreamAccumulator {
             )
         {
             let reason = self.finish_reason.unwrap_or_default();
-            return Err(malformed(format!(
+            return Err(make_malformed_error(format!(
                 "tool-call batch truncated by finish_reason {reason:?}: \
                  partial arguments must not execute"
             )));
@@ -442,7 +447,7 @@ fn append_string_fragment(
             slot.get_or_insert_with(String::new).push_str(text);
             Ok(Some(text.clone()))
         }
-        Some(_) => Err(malformed(format!(
+        Some(_) => Err(make_malformed_error(format!(
             "stream delta `{label}` was present but not a string"
         ))),
     }
@@ -462,7 +467,7 @@ fn append_string_fragment(
 ///
 /// A transport passes the error body of a response with a failure status
 /// through this function before it hands the body to
-/// [`classify_http_failure`](crate::classify_http_failure). Every transport
+/// [`make_classify_http_failure_error`](crate::make_classify_http_failure_error). Every transport
 /// therefore truncates and escapes a backend body by the same rule.
 #[must_use]
 pub fn escape_controls(body: &str, max: usize) -> String {

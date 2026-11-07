@@ -156,7 +156,7 @@ impl HostServices {
     ///
     /// # Errors
     /// Returns an [`InvalidValue`](ErrorCode::InvalidValue) error that names
-    /// the literal, with the reason `invalid_id` when the id literal of `key`
+    /// the literal, with the reason `make_invalid_id_error` when the id literal of `key`
     /// fails to parse as a two-segment `namespace/name` id, and
     /// `duplicate_id` when the map already holds a provider under that
     /// literal, whatever the provider's type. The map stays as it was on
@@ -168,14 +168,14 @@ impl HostServices {
     ) -> Result<(), Error> {
         let literal = key.id.literal;
         if GlobalName::parse(literal).is_err() || literal.matches('/').count() != 1 {
-            return Err(refusal(
+            return Err(make_refusal_error(
                 "invalid_id",
                 format!("service id {literal} is not a namespace/name id"),
                 literal,
             ));
         }
         if self.entries.contains_key(literal) {
-            return Err(refusal(
+            return Err(make_refusal_error(
                 "duplicate_id",
                 format!("a service with id {literal} is already provided"),
                 literal,
@@ -232,7 +232,7 @@ impl fmt::Debug for HostServices {
 /// The refusal of a provider: an `InvalidValue` that names the id literal,
 /// with the broken rule as its reason. Its prose is its message, which names
 /// the id and the rule.
-fn refusal(reason: &'static str, message: String, literal: &str) -> Error {
+fn make_refusal_error(reason: &'static str, message: String, literal: &str) -> Error {
     let mut error = Error::new(ErrorCode::InvalidValue, message.clone(), message);
     error.facts.insert(ErrorFact::Name, Value::from(literal));
     error.facts.insert(ErrorFact::Reason, Value::from(reason));

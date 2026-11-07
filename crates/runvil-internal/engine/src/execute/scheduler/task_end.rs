@@ -5,7 +5,7 @@
 //! every live task it owns is abandoned - its entry moves to `Abandoned`,
 //! its terminal observation names how the owner ended, and its backing
 //! chain aborts with everything it owns in turn. A task left live is the
-//! author's bug, so the owner's own outcome becomes `tasks_live` naming the
+//! author's bug, so the owner's own outcome becomes `make_tasks_live_error` naming the
 //! leaked ids. Tasks survive a section's fall-through and a `jump` - those
 //! move the walk within one chain - and end with the chain itself: the root
 //! walk, a `call` child, or another task (a fanout arm among them). The H1
@@ -42,7 +42,9 @@ impl Scheduler {
         let emitter = Arc::clone(chain.ctx.emitter());
         let succeeded = outcome.is_ok();
         let Some(entry) = self.tasks.complete(&task, outcome) else {
-            return Err(error::internal("a task chain's end implies its entry"));
+            return Err(error::make_internal_error(
+                "a task chain's end implies its entry",
+            ));
         };
         let owner = entry.owner;
         emitter.emit(&entry.target, |execution, section, provenance| {
@@ -93,7 +95,7 @@ impl Scheduler {
                     .first()
                     .and_then(|task| self.tasks.spawn_line_of(task));
                 Err(place(
-                    error::tasks_live(&leaked),
+                    error::make_tasks_live_error(&leaked),
                     self.ctx.prompt().file(),
                     line,
                 ))
@@ -138,7 +140,7 @@ impl Scheduler {
     /// abandoned entry once its owner is gone. An internal timer's entry ends
     /// the same way but reports nothing and never counts as leaked: it is
     /// the wait's detail, not a task the author started. Returns the
-    /// abandoned ids in spawn order, for the owner's `tasks_live` outcome;
+    /// abandoned ids in spawn order, for the owner's `make_tasks_live_error` outcome;
     /// the caller discards them for an owner that is itself being aborted,
     /// whose outcome no one receives.
     pub(super) fn abandon_owned_tasks(

@@ -75,7 +75,7 @@ use tracing::Instrument as _;
 
 use crate::harness::StopSignal;
 use crate::performers::{BoxFuture, Performers};
-use crate::recorder::{Record, RecordKind, RunId, RunRecorder, recorder_error, refused};
+use crate::recorder::{Record, RecordKind, RunId, RunRecorder, make_recorder_error, refused};
 
 /// The message of the failure a stalled run ends with.
 const STALLED: &str = "the effect loop has nothing to await for a pending run";
@@ -412,7 +412,7 @@ impl Driver {
     async fn commit_events(&mut self, events: Vec<Event>) -> Result<(), Error> {
         for event in events {
             let payload = serde_json::to_value(&event)
-                .map_err(|error| refused(self.run_id, recorder_error(error)))?;
+                .map_err(|error| refused(self.run_id, make_recorder_error(error)))?;
             self.append(record(event.provenance(), RecordKind::Event, None, payload))
                 .await?;
         }

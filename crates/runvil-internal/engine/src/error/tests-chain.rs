@@ -14,8 +14,12 @@ use crate::prompt::Prompt;
 
 #[test]
 fn an_internal_failure_built_with_a_cause_shows_its_text_once() {
-    let expected_line = line!() + 1;
-    let error = internal_with_cause("a test invariant", &std::io::Error::other("the cause"));
+    // The call does not fit beside `let error`, so rustfmt puts the
+    // function name on the following line, and that line is the one
+    // `track_caller` records.
+    let expected_line = line!() + 2;
+    let error =
+        make_internal_with_cause_error("a test invariant", &std::io::Error::other("the cause"));
     assert_eq!(error.code, ErrorCode::Internal);
     assert_eq!(
         error.message,
@@ -35,7 +39,8 @@ fn an_internal_failure_built_with_a_cause_shows_its_text_once() {
 #[test]
 fn a_requirements_refusal_appends_its_cause_once_after_the_notice() {
     let notice = "the environment cannot satisfy this prompt:\n- the H1 gate failed";
-    let error = requirements_unmet(notice, Some(&lua_runtime("assertion failed")));
+    let error =
+        make_requirements_unmet_error(notice, Some(&make_lua_runtime_error("assertion failed")));
     assert_eq!(error.message, format!("{notice}: assertion failed"));
     assert_eq!(error.prose, notice, "the notice alone is the model's text");
     assert_eq!(
@@ -51,7 +56,7 @@ fn a_requirements_refusal_appends_its_cause_once_after_the_notice() {
 fn a_schema_build_failure_names_the_alias_and_ends_with_the_refusal() {
     let refusal = runvil_model_client::detail::tool_schema_new("echo", "", serde_json::json!([]))
         .expect_err("an array is not an object schema");
-    let error = bind_schema("echo", &refusal);
+    let error = make_bind_schema_error("echo", &refusal);
     assert_eq!(error.code, ErrorCode::ToolSchemaInvalid);
     assert_eq!(
         error.message,
@@ -81,7 +86,7 @@ fn a_schema_build_failure_names_the_alias_and_ends_with_the_refusal() {
 #[test]
 fn a_model_failure_holds_its_cause_in_the_run_message_and_not_in_its_table() {
     let transport = ErrorCode::Transport;
-    let error = crate::model::completion_error(transport, crate::model::phrase(transport))
+    let error = crate::model::make_completion_error(transport, crate::model::phrase(transport))
         .with_cause(&std::io::Error::other("connection reset by peer"));
     assert_eq!(
         failed(&error),
@@ -111,7 +116,7 @@ fn the_lua_crates_failures_end_a_run_with_their_own_code_and_text() {
         "S",
     )
     .expect_err("the block must not compile");
-    let tool = runvil_types::tools::tool_error(ErrorCode::ToolBackend, "the backend refused");
+    let tool = runvil_types::tools::make_tool_error(ErrorCode::ToolBackend, "the backend refused");
     let info = runvil_types::tools::ToolInfo::new(
         runvil_types::tools::ToolId::parse("tools/echo").expect("a valid tool id"),
         "echo tool",
@@ -127,7 +132,7 @@ fn the_lua_crates_failures_end_a_run_with_their_own_code_and_text() {
         crate::lua::ScriptReport { turn: 0 },
     )
     .expect_err("the tool's failure fails the dispatch");
-    let mut not_found = runvil_lua::store_error(&VfsError::NotFound {
+    let mut not_found = runvil_lua::make_store_error(&VfsError::NotFound {
         path: "a.md".to_owned(),
     });
     "not found: a.md".clone_into(&mut not_found.message);
@@ -140,7 +145,7 @@ fn the_lua_crates_failures_end_a_run_with_their_own_code_and_text() {
                 .to_owned(),
         ),
         (
-            runvil_lua::internal_at("a test invariant", site),
+            runvil_lua::make_internal_at_error("a test invariant", site),
             ErrorCode::Internal,
             format!(
                 "internal invariant violated: a test invariant (at {}:{})",
@@ -154,12 +159,12 @@ fn the_lua_crates_failures_end_a_run_with_their_own_code_and_text() {
             "tool call failure: the backend refused".to_owned(),
         ),
         (
-            lua_quota(QuotaResource::LogEvent),
+            make_lua_quota_error(QuotaResource::LogEvent),
             ErrorCode::LuaQuota,
             "lua log event quota exceeded".to_owned(),
         ),
         (
-            task_canceled(&"0.1".parse().expect("the test task id parses")),
+            make_task_canceled_error(&"0.1".parse().expect("the test task id parses")),
             ErrorCode::TaskCanceled,
             "task `0.1` was canceled".to_owned(),
         ),
@@ -231,7 +236,7 @@ fn a_parse_failure_run_raises_names_the_prompt_and_its_file() {
     let code = ErrorCode::StructureInvalid;
     let message = "not a runvil prompt: no runvil version";
     let stamped = crate::prompt::detail::with_prompt_context(
-        runvil_types::error::failure(code, message),
+        runvil_types::error::make_failure_error(code, message),
         "greeter",
         "agents/greeter.md",
     );
@@ -253,7 +258,7 @@ fn a_parse_failure_run_raises_names_the_prompt_and_its_file() {
 
 #[test]
 fn a_store_probe_failure_names_a_missing_store_and_keeps_the_fixed_text_otherwise() {
-    let missing = store(&VfsError::NoStore);
+    let missing = make_store_error(&VfsError::NoStore);
     assert_eq!(missing.code, ErrorCode::NoStore);
     assert_eq!(
         missing.message,
@@ -262,7 +267,7 @@ fn a_store_probe_failure_names_a_missing_store_and_keeps_the_fixed_text_otherwis
     let backend = VfsError::Backend {
         message: "the disk is gone".to_owned(),
     };
-    let failure = store(&backend);
+    let failure = make_store_error(&backend);
     assert_eq!(failure.code, ErrorCode::Backend);
     assert_eq!(
         failure.message,

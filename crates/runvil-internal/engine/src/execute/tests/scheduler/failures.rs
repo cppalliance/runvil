@@ -144,7 +144,7 @@ fn fatal_arm_aborts_an_in_flight_sibling() {
     // cancels the live sibling before it re-raises, so the cancel orphans
     // the sibling's effect, drops its round, and fires the
     // sibling's TaskCanceled BEFORE the parent's chunk failure - a shim
-    // that raised first would leak the sibling into `tasks_live`. The
+    // that raised first would leak the sibling into `make_tasks_live_error`. The
     // sibling's round is never answered, so the run cannot have waited
     // on it.
     let gateway = ScriptedChat::new(vec![text("boom-answer")]);
@@ -177,7 +177,7 @@ fn fatal_arm_aborts_an_in_flight_sibling() {
         recorder.events()
     );
     assert_eq!(
-        terminal_count(rig.trace(), task_canceled),
+        terminal_count(rig.trace(), make_task_canceled_error),
         1,
         "the in-flight sibling reports canceled: {:?}",
         recorder.events()
@@ -191,7 +191,7 @@ fn fatal_arm_aborts_an_in_flight_sibling() {
     let events = rig.trace().events();
     let canceled_at = events
         .iter()
-        .position(task_canceled)
+        .position(make_task_canceled_error)
         .expect("the sibling's canceled event fired");
     let parent_failed_at = events
         .iter()
@@ -283,7 +283,8 @@ fn cancellation_while_suspended_in_a_fanout_arm_cancels_the_run() {
         recorder.events()
     );
     assert_eq!(
-        terminal_count(rig.trace(), task_canceled) + terminal_count(rig.trace(), task_failed),
+        terminal_count(rig.trace(), make_task_canceled_error)
+            + terminal_count(rig.trace(), task_failed),
         0,
         "a stranded arm reports no cancel or failure of its own: {:?}",
         recorder.events()
@@ -349,7 +350,7 @@ fn a_spawn_failure_mid_fanout_cancels_the_queued_arms() {
         recorder.events()
     );
     assert_eq!(
-        terminal_count(rig.trace(), task_canceled),
+        terminal_count(rig.trace(), make_task_canceled_error),
         0,
         "a task that never started reports no terminal: {:?}",
         recorder.events()

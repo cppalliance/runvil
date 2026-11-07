@@ -15,7 +15,7 @@ mod walk;
 #[cfg(test)]
 mod tests;
 
-use runvil_plugin::{Access, Error, ErrorCode, FileType, ToolOutput, VfsError, tool_error};
+use runvil_plugin::{Access, Error, ErrorCode, FileType, ToolOutput, VfsError, make_tool_error};
 use serde_json::Value;
 
 use crate::refusal::{missing_root, not_a_directory, refusal};
@@ -49,7 +49,7 @@ fn list_directory(
     cap: usize,
 ) -> Result<ToolOutput, Error> {
     let target = request.target;
-    let message = |text: String| tool_error(ErrorCode::ToolOther, text);
+    let message = |text: String| make_tool_error(ErrorCode::ToolOther, text);
     let failed = |error: VfsError| message(refusal(tool, target, &error));
     let stat = match access.stat(target) {
         Ok(stat) => stat,

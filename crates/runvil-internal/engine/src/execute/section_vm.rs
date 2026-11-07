@@ -194,11 +194,11 @@ where
     // they follow the yield shims.
     let installed = crate::lua::install_preludes(vm.lua(), setup.preludes);
     // A store conflict the direct closures recorded while a prelude
-    // installed ends the run with a determinism violation when the install
+    // installed ends the run with a make_determinism_error violation when the install
     // returns - caught by `pcall` or not - so the conflict wins over the
     // install's own outcome.
     if let Some(detail) = vm.take_store_conflict() {
-        return Err(error::determinism(&detail));
+        return Err(error::make_determinism_error(&detail));
     }
     installed?;
     // `require` follows the preludes, so a prelude that calls it while it

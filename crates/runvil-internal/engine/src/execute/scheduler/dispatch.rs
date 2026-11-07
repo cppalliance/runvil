@@ -206,7 +206,7 @@ impl ChainOps<'_> {
                 .frame()?
                 .vm()
                 .current_model()?
-                .ok_or_else(|| error::model_required(chain.section_name()))?
+                .ok_or_else(|| error::make_model_required_error(chain.section_name()))?
         };
         // A nested infer round consumes only the accumulated completion;
         // its `Infer` origin tells the caller its live deltas have no
@@ -240,7 +240,11 @@ impl ChainOps<'_> {
         let view = Arc::new(self.scope()?.store_view(&access).map_err(|cause| {
             let chain = &*self.chain;
             let line = chain.frame().ok().and_then(|frame| frame.vm().call_line());
-            place(error::store(&cause), chain.ctx.prompt().file(), line)
+            place(
+                error::make_store_error(&cause),
+                chain.ctx.prompt().file(),
+                line,
+            )
         })?);
         let effect = Effect::Vfs {
             access: view,

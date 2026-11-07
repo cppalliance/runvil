@@ -5,7 +5,7 @@ use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use serde_json::Value;
 
 use super::super::{
-    ErrorField, ErrorKind, error_fields, error_kind, store_error, store_error_value_fields,
+    ErrorField, ErrorKind, error_fields, error_kind, make_store_error, store_error_value_fields,
 };
 use super::every_store_failure;
 
@@ -62,7 +62,7 @@ fn leaked_tasks_render_as_one_string_joined_by_commas() {
 #[test]
 fn every_store_failure_renders_the_fields_its_variant_gives() {
     for (failure, code) in every_store_failure() {
-        let converted = store_error(&failure);
+        let converted = make_store_error(&failure);
         assert_eq!(
             rendered(&converted),
             (

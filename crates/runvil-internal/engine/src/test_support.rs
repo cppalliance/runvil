@@ -28,7 +28,7 @@
 
 use runvil_types::error::{Error, ErrorCode};
 use runvil_types::event::Event;
-use runvil_types::tools::tool_error;
+use runvil_types::tools::make_tool_error;
 
 use crate::execute::{Effect, EffectAnswer, EffectId, IssuedEffect, Run, Step};
 use crate::lua::run_store_op;
@@ -127,7 +127,7 @@ pub fn perform_locally(
     match effect {
         Effect::Chat { .. } => chat(effect),
         Effect::Render { offered, .. } => EffectAnswer::Render(offered.clone()),
-        Effect::ToolCall { alias, .. } => EffectAnswer::ToolCall(Err(tool_error(
+        Effect::ToolCall { alias, .. } => EffectAnswer::ToolCall(Err(make_tool_error(
             ErrorCode::ToolOther,
             format!("no tool is bound as {alias} in this test"),
         ))),
@@ -210,7 +210,7 @@ pub(crate) fn drive_step(
                 // is held, so a pending step that issued nothing while
                 // holding nothing has nothing to wait on: an invariant
                 // failure reported rather than a hang.
-                return Some(Err(crate::error::internal(
+                return Some(Err(crate::error::make_internal_error(
                     "the serial driver was handed a pending run with no effect to answer",
                 )));
             }

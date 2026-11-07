@@ -58,7 +58,7 @@ impl GlobalName {
     /// - a segment contains any other character outside the set.
     pub fn parse(s: &str) -> Result<GlobalName, Error> {
         GlobalName::validate(s)
-            .map_err(|reason| invalid_id(format!("invalid global name: {reason}"), s))
+            .map_err(|reason| make_invalid_id_error(format!("invalid global name: {reason}"), s))
     }
 
     /// Parses `s` as [`GlobalName::parse`] does, but returns only the
@@ -160,7 +160,7 @@ pub fn is_alias(name: &str) -> bool {
 /// [`InvalidValue`](ErrorCode::InvalidValue) whose message says what was
 /// rejected and why, such as `invalid Pack id: segments must not be empty`,
 /// with the rejected text as its `Name` fact.
-pub(crate) fn invalid_id(message: String, rejected: &str) -> Error {
+pub(crate) fn make_invalid_id_error(message: String, rejected: &str) -> Error {
     let mut error = Error::new(
         ErrorCode::InvalidValue,
         message,

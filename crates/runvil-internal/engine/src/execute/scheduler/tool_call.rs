@@ -77,7 +77,7 @@ use super::{CallSite, ChainOps, Continuation, ToolCallContinuation, prompt_origi
 /// the id of every catalog tool, in id order, so the message reads
 /// required versus actual. The `tool_call` arm's answer for an unresolved
 /// name.
-fn unbound_tool_call(tool_set: &ToolSet, name: &str) -> Error {
+fn make_unbound_tool_call_error(tool_set: &ToolSet, name: &str) -> Error {
     let mut ids: Vec<_> = tool_set
         .catalog()
         .tools()
@@ -86,7 +86,7 @@ fn unbound_tool_call(tool_set: &ToolSet, name: &str) -> Error {
         .collect();
     ids.sort();
     let ids: Vec<String> = ids.into_iter().map(ToString::to_string).collect();
-    error::unbound_tool(name, &ids)
+    error::make_unbound_tool_error(name, &ids)
 }
 
 /// Where one tool call is answered, with the binding it resolved to, so a
@@ -208,9 +208,12 @@ impl ChainOps<'_> {
         let chain = &mut *self.chain;
         let emitter = Arc::clone(chain.ctx.emitter());
         let section = chain.section_name().to_owned();
-        let call = chain.frame_mut()?.pop_adhoc_call().ok_or(error::internal(
-            "an adhoc tool's completion closes the call that opened it",
-        ))?;
+        let call = chain
+            .frame_mut()?
+            .pop_adhoc_call()
+            .ok_or(error::make_internal_error(
+                "an adhoc tool's completion closes the call that opened it",
+            ))?;
         let answer = match outcome {
             AdhocToolOutcome::Returned(text) => {
                 emitter.report(&section, event_lifecycle::TOOL_CALL_SUCCEEDED);
@@ -263,7 +266,7 @@ impl ChainOps<'_> {
         if site.call_id().is_some() {
             let (binding, set) = vm
                 .rendered_target(name)
-                .ok_or_else(|| unbound_tool_call(tool_set, name))?;
+                .ok_or_else(|| make_unbound_tool_call_error(tool_set, name))?;
             if set == OfferMode::Dynamic || DiscoveryTool::of(binding.id()).is_some() {
                 return Ok(ToolRoute::Discovery(binding));
             }
@@ -277,13 +280,16 @@ impl ChainOps<'_> {
             return Ok(ToolRoute::Adhoc(binding));
         }
         let Some(info) = tool.and_then(|tool| tool_set.catalog().get(&tool)) else {
-            return Err(unbound_tool_call(tool_set, name));
+            return Err(make_unbound_tool_call_error(tool_set, name));
         };
         // A script cannot know the arguments a render shapes for a model,
         // so a model-only tool refuses the call while the catalog keeps
         // naming it.
         if info.model_only_call {
-            return Err(error::model_only_tool(name, &info.id.to_string()));
+            return Err(error::make_model_only_tool_error(
+                name,
+                &info.id.to_string(),
+            ));
         }
         Ok(ToolRoute::Catalog(ToolBinding::from_info(
             &info.id.to_string(),
@@ -364,7 +370,7 @@ impl ChainOps<'_> {
                 | Answer::Chat(_)
                 | Answer::ToolCallsResult(_)
                 | Answer::Store(_),
-            ) => Err(error::internal(
+            ) => Err(error::make_internal_error(
                 "a batched call lands as plain text or a failure",
             )),
         };
@@ -372,7 +378,7 @@ impl ChainOps<'_> {
             Some(Parked::Batch(batch)) => batch.get_mut(slot).filter(|open| open.is_none()),
             _ => None,
         }
-        .ok_or(error::internal(
+        .ok_or(error::make_internal_error(
             "a batched call's answer fills an open slot of its chain's batch",
         ))?;
         *open = Some(landed);
@@ -473,15 +479,9 @@ impl ChainOps<'_> {
         site: CallSite,
     ) -> Result<Dispatched> {
         let tool = DiscoveryTool::of(binding.id());
-        let frozen =
-            self.chain
-                .frame()?
-                .vm()
-                .messages()
-                .rendered_tools()
-                .ok_or(error::internal(
-                    "a model call's section holds its frozen sets",
-                ))?;
+        let frozen = self.chain.frame()?.vm().messages().rendered_tools().ok_or(
+            error::make_internal_error("a model call's section holds its frozen sets"),
+        )?;
         let discovered = match tool {
             Some(DiscoveryTool::Search) => search(&frozen, &args)?,
             Some(DiscoveryTool::Call) => reach(&frozen, args),
@@ -598,7 +598,7 @@ impl ChainOps<'_> {
                 chain.access()?,
                 prompt_origin(&prompt, &binding.id().to_string(), chain.blocks(&prompt)),
             )
-            .map_err(|cause| error::store(&cause))?;
+            .map_err(|cause| error::make_store_error(&cause))?;
         let exec = access.id();
         let effect = Effect::ToolCall {
             tool: binding.id().clone(),
@@ -770,7 +770,7 @@ fn cut(description: &str) -> Cow<'_, str> {
 fn listing(listed: &impl Serialize) -> Result<Discovered> {
     serde_json::to_string(listed)
         .map(Discovered::Listing)
-        .map_err(|_| error::internal("a discovery listing serializes"))
+        .map_err(|_| error::make_internal_error("a discovery listing serializes"))
 }
 
 /// The JSON type of `value`, for a refusal.

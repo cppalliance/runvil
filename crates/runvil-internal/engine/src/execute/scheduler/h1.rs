@@ -50,7 +50,7 @@ impl Scheduler {
             .ctx
             .vfs()
             .acquire_scope(origin)
-            .map_err(|cause| error::store(&cause))?;
+            .map_err(|cause| error::make_store_error(&cause))?;
         self.scope = Some(scope);
         // The pass's one frame takes the root lineage's entry 0, and the
         // walk that follows continues its counters (see `Chain::lineage`).
@@ -88,7 +88,9 @@ impl Scheduler {
         let prompt = self.prompt();
         let chain = &mut self.chains[id];
         let Some(Entered { frame, block, .. }) = chain.entered.take() else {
-            return Err(error::internal("the H1 pass ends with a live frame"));
+            return Err(error::make_internal_error(
+                "the H1 pass ends with a live frame",
+            ));
         };
         let line = block.lua_line(chain.blocks(&prompt));
         let var = frame

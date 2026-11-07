@@ -38,7 +38,7 @@ pub use runvil_types::tools::ToolCatalog;
 pub use runvil_types::tools::ToolId;
 pub use runvil_types::tools::ToolInfo;
 pub use runvil_types::tools::ToolOutput;
-pub use runvil_types::tools::tool_error;
+pub use runvil_types::tools::make_tool_error;
 
 pub mod effect {
     //! The outside work a run asks for, the answers it takes back, and the
@@ -89,9 +89,9 @@ pub mod model {
     pub use runvil_model_client::model::ModelBinding;
     pub use runvil_model_client::model::ModelInvocation;
     pub use runvil_model_client::model::Temperature;
-    pub use runvil_model_client::model::completion_error;
-    pub use runvil_model_client::model::context_overflow;
-    pub use runvil_model_client::model::empty_reply;
+    pub use runvil_model_client::model::make_completion_error;
+    pub use runvil_model_client::model::make_context_overflow_error;
+    pub use runvil_model_client::model::make_empty_reply_error;
     pub use runvil_model_client::model::phrase;
     pub use runvil_types::models::ModelCatalog;
     pub use runvil_types::models::ModelId;
@@ -132,7 +132,7 @@ pub mod vfs {
     pub use runvil_engine::perform_vfs_op;
     pub use runvil_lua::VfsOp;
     pub use runvil_lua::VfsOutcome;
-    pub use runvil_lua::store_error;
+    pub use runvil_lua::make_store_error;
     pub use runvil_vfs::Access;
     pub use runvil_vfs::AcquireContext;
     pub use runvil_vfs::AllowAll;

@@ -29,7 +29,7 @@ fn the_first_chunk_consumes_the_configured_log_budget() {
         "Budget",
     )
     .expect_err("the second log must exhaust the configured budget");
-    let quota = crate::lua_quota(crate::QuotaResource::LogEvent);
+    let quota = crate::make_lua_quota_error(crate::QuotaResource::LogEvent);
     assert!(
         (error.code, &error.message, &error.facts) == (quota.code, &quota.message, &quota.facts),
         "log-budget exhaustion must surface as a typed LuaQuota: {error:?}"

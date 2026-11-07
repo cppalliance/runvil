@@ -64,7 +64,7 @@ pub(super) fn install_offer(
             let mut offers = offering
                 .offers
                 .lock()
-                .map_err(|_| mlua::Error::external(error::internal(OFFERS_POISONED)))?;
+                .map_err(|_| mlua::Error::external(error::make_internal_error(OFFERS_POISONED)))?;
             for target in targets {
                 match target {
                     OfferTarget::Tool(id) => offers.add_tool(id, mode),
@@ -73,8 +73,8 @@ pub(super) fn install_offer(
             }
             Ok(())
         })
-        .map_err(error::lua)?;
-    tools.set(key, offer).map_err(error::lua)
+        .map_err(error::make_lua_error)?;
+    tools.set(key, offer).map_err(error::make_lua_error)
 }
 
 /// Refuses the offer verb `verb` once `list` holds the section's frozen sets.
@@ -137,9 +137,9 @@ impl Offering {
                 if let Ok(pack) = object.borrow::<LuaPackHandle>() {
                     return Ok(OfferTarget::Pack(pack.name().clone()));
                 }
-                Err(wrong_type(verb, entry, index))
+                Err(make_wrong_type_error(verb, entry, index))
             }
-            other => Err(wrong_type(verb, other, index)),
+            other => Err(make_wrong_type_error(verb, other, index)),
         }
     }
 
@@ -219,7 +219,7 @@ fn array(verb: &str, table: &Table) -> mlua::Result<Vec<Value>> {
     for index in 1..=count {
         let entry: Value = table.get(index)?;
         if matches!(entry, Value::Nil | Value::Table(_)) {
-            return Err(wrong_type(verb, &entry, Some(index)));
+            return Err(make_wrong_type_error(verb, &entry, Some(index)));
         }
         entries.push(entry);
     }
@@ -243,7 +243,7 @@ fn array(verb: &str, table: &Table) -> mlua::Result<Vec<Value>> {
 
 /// The refusal of `entry`, at `index` of an array or alone, as a value
 /// that names no tool or Pack.
-fn wrong_type(verb: &str, entry: &Value, index: Option<usize>) -> mlua::Error {
+fn make_wrong_type_error(verb: &str, entry: &Value, index: Option<usize>) -> mlua::Error {
     let kind = entry.type_name();
     mlua::Error::external(match index {
         Some(index) => format!(

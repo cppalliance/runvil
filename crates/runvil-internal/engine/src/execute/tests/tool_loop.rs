@@ -47,7 +47,10 @@ fn tool_loop_gives_up_after_exactly_the_configured_cap() {
         .chat(&gateway)
         .run();
     let error = trace.error();
-    assert_eq!(error, &placed(crate::error::tool_loop_exhausted(), 15));
+    assert_eq!(
+        error,
+        &placed(crate::error::make_tool_loop_exhausted_error(), 15)
+    );
     assert_eq!(
         gateway.call_count(),
         cap,
@@ -57,7 +60,7 @@ fn tool_loop_gives_up_after_exactly_the_configured_cap() {
 
 #[test]
 fn tool_loop_exhaustion_is_readable_at_the_call_site_after_whole_exchanges() {
-    // The raise is pcall-able as the `tool_loop_exhausted` kind with the
+    // The raise is pcall-able as the `make_tool_loop_exhausted_error` kind with the
     // typed error's remedy prose, and every round before it appended a
     // complete exchange: the list holds no half-answered batch at the cap.
     let gateway = ScriptedChat::new(never_converging_script(2));
@@ -98,7 +101,10 @@ fn tool_loop_uses_the_default_cap_when_unspecified() {
         .chat(&gateway)
         .run();
     let error = trace.error();
-    assert_eq!(error, &placed(crate::error::tool_loop_exhausted(), 14));
+    assert_eq!(
+        error,
+        &placed(crate::error::make_tool_loop_exhausted_error(), 14)
+    );
     assert_eq!(gateway.call_count(), default_cap);
 }
 
@@ -227,7 +233,10 @@ fn repeated_calls_to_a_failing_tool_exit_at_the_iteration_cap() {
         .chat(&gateway)
         .run();
     let error = trace.error();
-    assert_eq!(error, &placed(crate::error::tool_loop_exhausted(), 15));
+    assert_eq!(
+        error,
+        &placed(crate::error::make_tool_loop_exhausted_error(), 15)
+    );
     assert_eq!(
         gateway.call_count(),
         cap,

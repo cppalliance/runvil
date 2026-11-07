@@ -383,6 +383,7 @@ pub fn runvil::ids::ChainId::child(&self, index: u32) -> Self
 pub fn runvil::ids::ChainId::entry(&self, index: u32) -> alloc::string::String
 pub fn runvil::ids::ChainId::root() -> Self
 pub fn runvil::ids::Provenance::new(task: runvil::ids::TaskId, seq: u32) -> runvil::ids::Provenance
+pub fn runvil::make_tool_error(code: runvil::ErrorCode, text: impl core::convert::Into<alloc::string::String>) -> runvil::Error
 pub fn runvil::metrics::CallMetrics::new() -> runvil::metrics::CallMetrics
 pub fn runvil::metrics::CallMetrics::with_client(self, client: core::option::Option<runvil::metrics::ClientTiming>) -> runvil::metrics::CallMetrics
 pub fn runvil::metrics::CallMetrics::with_llama(self, llama: core::option::Option<runvil::metrics::LlamaTimings>) -> runvil::metrics::CallMetrics
@@ -484,9 +485,9 @@ pub fn runvil::model::ToolCall::name(&self) -> &str
 pub fn runvil::model::ToolSchema::description(&self) -> &str
 pub fn runvil::model::ToolSchema::name(&self) -> &str
 pub fn runvil::model::ToolSchema::parameters(&self) -> &serde_json::value::Value
-pub fn runvil::model::completion_error(code: runvil::ErrorCode, message: impl core::convert::Into<alloc::string::String>) -> runvil::Error
-pub fn runvil::model::context_overflow(prompt_tokens: core::option::Option<u32>, window: core::option::Option<u32>, message: impl core::convert::Into<alloc::string::String>) -> runvil::Error
-pub fn runvil::model::empty_reply(reasoning_present: bool) -> runvil::Error
+pub fn runvil::model::make_completion_error(code: runvil::ErrorCode, message: impl core::convert::Into<alloc::string::String>) -> runvil::Error
+pub fn runvil::model::make_context_overflow_error(prompt_tokens: core::option::Option<u32>, window: core::option::Option<u32>, message: impl core::convert::Into<alloc::string::String>) -> runvil::Error
+pub fn runvil::model::make_empty_reply_error(reasoning_present: bool) -> runvil::Error
 pub fn runvil::model::phrase(code: runvil::ErrorCode) -> &'static str
 pub fn runvil::packs::GlobalName::parse(s: &str) -> core::result::Result<runvil::packs::GlobalName, runvil::Error>
 pub fn runvil::packs::PackId::contains(&self, tool: &runvil::ToolId) -> bool
@@ -520,7 +521,6 @@ pub fn runvil::prompt::Frontmatter::uses(&self) -> &[runvil::packs::PackRef]
 pub fn runvil::prompt::RoleRequirements::min_context(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
 pub fn runvil::prompt::RoleRequirements::thinking(&self) -> core::option::Option<bool>
 pub fn runvil::timestamp::Timestamp::to_rfc3339(self) -> alloc::string::String
-pub fn runvil::tool_error(code: runvil::ErrorCode, text: impl core::convert::Into<alloc::string::String>) -> runvil::Error
 pub fn runvil::vfs::Access::append(&self, path: &str, contents: &[u8]) -> core::result::Result<(), runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::close(self) -> core::result::Result<(), runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::copy(&self, from: &str, to: &str) -> core::result::Result<(), runvil::vfs::VfsError>
@@ -599,8 +599,8 @@ pub fn runvil::vfs::VfsRefBuilder::mount(self, prefix: &str, backend: impl runvi
 pub fn runvil::vfs::VfsRefBuilder::on_op(self, sink: impl core::ops::function::Fn(runvil::vfs::OpEvent<'_>) + core::marker::Send + core::marker::Sync + 'static) -> runvil::vfs::VfsRefBuilder
 pub fn runvil::vfs::VfsRefBuilder::policy(self, policy: impl runvil::vfs::Policy + core::marker::Sync + 'static) -> runvil::vfs::VfsRefBuilder
 pub fn runvil::vfs::VfsRefBuilder::store(self, root: &str, backend: impl runvil::vfs::Vfs + 'static) -> runvil::vfs::VfsRefBuilder
+pub fn runvil::vfs::make_store_error(error: &runvil::vfs::VfsError) -> runvil::Error
 pub fn runvil::vfs::perform_vfs_op(access: &runvil::vfs::Access, op: runvil::vfs::VfsOp) -> core::result::Result<runvil::vfs::VfsOutcome, runvil::vfs::VfsError>
-pub fn runvil::vfs::store_error(error: &runvil::vfs::VfsError) -> runvil::Error
 pub mod runvil::cancel
 pub mod runvil::effect
 pub mod runvil::event

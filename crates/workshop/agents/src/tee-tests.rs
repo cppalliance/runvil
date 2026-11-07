@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use harness::record::{
     MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder, RunSeed,
-    recorder_error,
+    make_recorder_error,
 };
 use runvil::Error;
 use runvil::event::Event;
@@ -69,7 +69,7 @@ impl RunRecorder for Watching {
             .unwrap()
             .push(self.conversation.transcript(0).len());
         if self.refuse {
-            return Box::pin(async { Err(recorder_error("the log is full")) });
+            return Box::pin(async { Err(make_recorder_error("the log is full")) });
         }
         self.inner.append(run, record)
     }

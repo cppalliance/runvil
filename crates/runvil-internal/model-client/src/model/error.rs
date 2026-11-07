@@ -43,7 +43,7 @@ pub fn phrase(code: ErrorCode) -> &'static str {
 /// both its message and its prose. `code` is one of the model codes, and
 /// `message` is its phrase, extended as the module page says.
 #[must_use]
-pub fn completion_error(code: ErrorCode, message: impl Into<String>) -> Error {
+pub fn make_completion_error(code: ErrorCode, message: impl Into<String>) -> Error {
     let message = message.into();
     Error::new(code, message.clone(), message)
 }
@@ -54,11 +54,11 @@ pub fn completion_error(code: ErrorCode, message: impl Into<String>) -> Error {
 /// side channel was dropped rather than used as answer text. A caller that
 /// knows the backend's finish reason adds it as the `FinishReason` fact.
 #[must_use]
-pub fn empty_reply(reasoning_present: bool) -> Error {
+pub fn make_empty_reply_error(reasoning_present: bool) -> Error {
     if reasoning_present {
-        specific(ErrorCode::EmptyReply, REASONING_IGNORED)
+        make_specific_error(ErrorCode::EmptyReply, REASONING_IGNORED)
     } else {
-        phrased(ErrorCode::EmptyReply)
+        make_phrased_error(ErrorCode::EmptyReply)
     }
 }
 
@@ -66,12 +66,12 @@ pub fn empty_reply(reasoning_present: bool) -> Error {
 /// stated: the prompt tokens as the `Count` fact and the window as the
 /// `Limit` fact. A count the provider omitted is absent.
 #[must_use]
-pub fn context_overflow(
+pub fn make_context_overflow_error(
     prompt_tokens: Option<u32>,
     window: Option<u32>,
     message: impl Into<String>,
 ) -> Error {
-    let mut error = completion_error(ErrorCode::ContextOverflow, message);
+    let mut error = make_completion_error(ErrorCode::ContextOverflow, message);
     if let Some(tokens) = prompt_tokens {
         error.facts.insert(ErrorFact::Count, Value::from(tokens));
     }
@@ -82,19 +82,19 @@ pub fn context_overflow(
 }
 
 /// Builds a failure whose text is the code's fixed phrase.
-pub(crate) fn phrased(code: ErrorCode) -> Error {
-    completion_error(code, phrase(code))
+pub(crate) fn make_phrased_error(code: ErrorCode) -> Error {
+    make_completion_error(code, phrase(code))
 }
 
 /// Builds a failure whose text is the code's fixed phrase extended with `: `
 /// and a specific this crate wrote.
-fn specific(code: ErrorCode, specific: impl std::fmt::Display) -> Error {
-    completion_error(code, format!("{}: {specific}", phrase(code)))
+fn make_specific_error(code: ErrorCode, specific: impl std::fmt::Display) -> Error {
+    make_completion_error(code, format!("{}: {specific}", phrase(code)))
 }
 
 /// Builds an `InvalidParts` failure naming which part was refused.
-pub(crate) fn invalid_parts(part: impl std::fmt::Display) -> Error {
-    specific(ErrorCode::InvalidParts, part)
+pub(crate) fn make_invalid_parts_error(part: impl std::fmt::Display) -> Error {
+    make_specific_error(ErrorCode::InvalidParts, part)
 }
 
 #[cfg(test)]

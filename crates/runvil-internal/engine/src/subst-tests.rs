@@ -375,7 +375,9 @@ fn non_json_bare_global_is_an_error() {
     let sys = json!({});
     let globals = |name: &str| {
         assert_eq!(name, "f");
-        Err(crate::error::lua_runtime("global `f` is a function"))
+        Err(crate::error::make_lua_runtime_error(
+            "global `f` is a function",
+        ))
     };
     let sources = Sources {
         globals: &globals,

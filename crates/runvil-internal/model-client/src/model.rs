@@ -12,7 +12,9 @@
 pub(crate) mod error;
 mod options;
 
-pub use error::{completion_error, context_overflow, empty_reply, phrase};
+pub use error::{
+    make_completion_error, make_context_overflow_error, make_empty_reply_error, phrase,
+};
 pub use options::{CompletionOptions, ModelBinding, ModelInvocation, ModelSet, Temperature};
 // `runvil-lua` names the model id through this path; the rest of the catalog
 // vocabulary is imported from `runvil-types` directly.

@@ -9,7 +9,8 @@ use runvil_types::event_lifecycle;
 
 use crate::chunk_line::{PROMPT_CHUNK_PREFIX, compile_line, map_chunk_line_to_absolute};
 use crate::error::{
-    self, Error, Result, authored_at, failure_text, lua_compile, lua_runtime, root_text,
+    self, Error, Result, authored_at, failure_text, make_lua_compile_error, make_lua_runtime_error,
+    root_text,
 };
 
 /// The statement every prompt block compiles behind, on its first line so
@@ -111,7 +112,7 @@ impl LuaProgram {
         let chunk_name = format!("{PROMPT_CHUNK_PREFIX}{source_line}");
         let guarded = format!("{FRAME_GUARD}{source}");
         let compiled = compiler()
-            .map_err(|error| error::internal(error.to_string()))
+            .map_err(|error| error::make_internal_error(error.to_string()))
             .and_then(|lua| {
                 compile_chunk(&lua, &guarded, &chunk_name).map_err(|error| {
                     let diagnostic = match &error {
@@ -120,7 +121,7 @@ impl LuaProgram {
                     };
                     let line = compile_line(&chunk_name, source_line, &diagnostic);
                     authored_at(
-                        lua_compile(location, source_line.get(), &error.to_string()),
+                        make_lua_compile_error(location, source_line.get(), &error.to_string()),
                         file,
                         Some(line),
                         failure_text(&diagnostic),
@@ -161,7 +162,7 @@ impl LuaProgram {
     pub fn compile_internal(source: &str, chunk_name: &str) -> Result<Self> {
         let bytecode = compiler()
             .and_then(|lua| compile_chunk(&lua, source, chunk_name))
-            .map_err(error::lua)?;
+            .map_err(error::make_lua_error)?;
         Ok(Self {
             source: source.to_owned(),
             bytecode,
@@ -194,7 +195,7 @@ impl LuaProgram {
     pub fn load(&self, lua: &Lua) -> Result<Function> {
         lua.load(self.bytecode.as_slice())
             .into_function()
-            .map_err(error::lua)
+            .map_err(error::make_lua_error)
     }
 
     /// Maps a Lua runtime failure to its ordered core outcome, for a chunk
@@ -249,7 +250,7 @@ impl LuaProgram {
         });
         let (failure, what) = match kept {
             Some(kept) => (kept.clone(), kept.message.clone()),
-            None => (lua_runtime(mapped), root_text(error)),
+            None => (make_lua_runtime_error(mapped), root_text(error)),
         };
         authored_at(failure, file, line, failure_text(&what))
     }
@@ -279,7 +280,9 @@ mod tests {
     use crate::chunk_line::{
         compile_line, first_prompt_line, map_chunk_line_to_absolute, prompt_line,
     };
-    use crate::error::{QuotaResource, context_exhausted, internal, lua_quota};
+    use crate::error::{
+        QuotaResource, make_context_exhausted_error, make_internal_error, make_lua_quota_error,
+    };
 
     /// The file every program here comes from.
     const FILE: &str = "agents/a.md";
@@ -411,7 +414,7 @@ mod tests {
 
     #[test]
     fn a_raised_internal_failure_keeps_its_rust_location_through_the_mapping() {
-        let fault = internal("a test invariant broke");
+        let fault = make_internal_error("a test invariant broke");
         assert!(fault.at.is_some(), "an internal failure is located in Rust");
         let program = compiled("local x = 1\nfail()", 5);
         let mapped = program.map_runtime_error_among(&raised_through(&program, &fault), &[], FILE);
@@ -423,7 +426,7 @@ mod tests {
 
     #[test]
     fn a_raised_context_exhaustion_is_placed_on_its_mapped_line() {
-        let exhausted = context_exhausted("precheck");
+        let exhausted = make_context_exhausted_error("precheck");
         let program = compiled("local x = 1\nfail()", 5);
         let mapped =
             program.map_runtime_error_among(&raised_through(&program, &exhausted), &[], FILE);
@@ -476,13 +479,15 @@ mod tests {
         let lua = Lua::new();
         let log = lua
             .create_function(|_, ()| -> mlua::Result<()> {
-                Err(mlua::Error::external(lua_quota(QuotaResource::LogEvent)))
+                Err(mlua::Error::external(make_lua_quota_error(
+                    QuotaResource::LogEvent,
+                )))
             })
             .expect("the callback builds");
         lua.globals().set("log", log).expect("the global installs");
         let program = compiled("local x = 1\nlog()", 7);
         let mapped = program.map_runtime_error_among(&raised(&program, &lua), &[], FILE);
-        let quota = lua_quota(QuotaResource::LogEvent);
+        let quota = make_lua_quota_error(QuotaResource::LogEvent);
         assert_eq!(
             (mapped.code, &mapped.message, &mapped.facts),
             (ErrorCode::LuaQuota, &quota.message, &quota.facts)

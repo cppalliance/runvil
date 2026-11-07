@@ -183,7 +183,7 @@ fn a_batch_names_the_tool_behind_each_wire_name_an_adhoc_one_included() {
 
 #[test]
 fn an_out_of_scope_tool_name_fails_the_round_with_out_of_scope_tool() {
-    // Readable at the call site as the `out_of_scope_tool` kind with the
+    // Readable at the call site as the `make_out_of_scope_tool_error` kind with the
     // loop's exact message, and typed when it escapes the section.
     let gateway = ScriptedChat::new(vec![calls(&[("call_1", "rogue", "{}")])]);
     let source = one_section(
@@ -226,7 +226,7 @@ fn an_out_of_scope_tool_name_fails_the_round_with_out_of_scope_tool() {
     assert_eq!(
         trace.error(),
         &placed(
-            crate::error::out_of_scope_tool("rogue", false, &["echo".to_owned()], false),
+            crate::error::make_out_of_scope_tool_error("rogue", false, &["echo".to_owned()], false),
             14
         )
     );

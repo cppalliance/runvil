@@ -51,7 +51,7 @@ fn an_ok_spawn_answer_resumes_the_task_id_as_its_path_text() {
 /// The quota failure every failed answer here holds, and the same failure
 /// as it crossed into a VM with no call line, with its author prose.
 fn quota_and_answered() -> (Error, Error) {
-    let quota = crate::lua_quota(crate::QuotaResource::LogEvent);
+    let quota = crate::make_lua_quota_error(crate::QuotaResource::LogEvent);
     let mut answered = quota.clone();
     answered.prose = format!(
         "lua log event quota exceeded. {}",
@@ -82,7 +82,7 @@ fn a_failed_tool_answer_keeps_the_tools_prose_and_names_coordinates_only_when_lo
     let lua = Lua::new();
     crate::error::set_prompt_file(&lua, "agents/a.md");
     let prose = "the backend refused; try another source";
-    let failure = crate::error::tool(runvil_types::tools::tool_error(
+    let failure = crate::error::tool(runvil_types::tools::make_tool_error(
         ErrorCode::ToolBackend,
         prose,
     ));

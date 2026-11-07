@@ -66,7 +66,7 @@ pub mod record {
     pub use harness_runner::recorder::RunId;
     pub use harness_runner::recorder::RunMeta;
     pub use harness_runner::recorder::RunRecorder;
-    pub use harness_runner::recorder::recorder_error;
+    pub use harness_runner::recorder::make_recorder_error;
     pub use runvil::RunSeed;
 }
 

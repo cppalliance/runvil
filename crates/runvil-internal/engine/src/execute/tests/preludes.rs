@@ -3,7 +3,7 @@
 //! included, and the libraries a section requires see them; a prelude
 //! that fails to load or whose global collides fails the run as a Lua
 //! failure before it issues any effect; a store conflict a prelude's
-//! install-time write meets ends the run with a determinism violation,
+//! install-time write meets ends the run with a make_determinism_error violation,
 //! caught or not; and a prelude's functions, called from a block, reach
 //! the yielding store and tool shims.
 

@@ -14,7 +14,7 @@ use super::{
     Compactor, OverflowReason, UsageAnchor, exhaustion_detail, install_compactors, output_reserve,
     precheck,
 };
-use crate::error::{Error, context_exhausted, lua_runtime};
+use crate::error::{Error, make_context_exhausted_error, make_lua_runtime_error};
 use crate::messages::MessageList;
 use crate::scope::RenderedTools;
 use crate::tests::user;
@@ -75,7 +75,7 @@ fn fail_raises_typed_exhaustion_for_a_provider_overflow() {
     let error = fail_invoked(OverflowReason::Provider);
     assert_eq!(
         error,
-        context_exhausted("provider"),
+        make_context_exhausted_error("provider"),
         "the default policy must raise typed context exhaustion"
     );
 }
@@ -85,7 +85,7 @@ fn fail_invocation_raises_typed_exhaustion_holding_the_reason() {
     for reason in [OverflowReason::Precheck, OverflowReason::Provider] {
         assert_eq!(
             fail_invoked(reason),
-            context_exhausted(reason.tag()),
+            make_context_exhausted_error(reason.tag()),
             "the exhaustion must hold the invoking reason's tag"
         );
     }
@@ -119,7 +119,7 @@ fn compactors_fail_raises_typed_exhaustion_with_any_reason_from_lua() {
 
 #[test]
 fn the_exhaustion_message_details_an_overflow_tag_and_otherwise_gives_the_reason() {
-    let message = |reason: &str| context_exhausted(reason).message;
+    let message = |reason: &str| make_context_exhausted_error(reason).message;
     assert_eq!(
         message("precheck"),
         "context exhausted: the request precheck overflowed the model's context window"
@@ -198,13 +198,13 @@ fn compactors_clear_raises_outside_a_compactor_and_leaves_the_records() {
         .expect_err("compactors.clear refuses outside a compactor");
     assert_eq!(
         raised_crate_error_ref(&error),
-        &lua_runtime(outside),
+        &make_lua_runtime_error(outside),
         "the Lua raise holds the lua-kind refusal"
     );
     let refused = Compactor::Clear.invoke(&list, "precheck");
     assert_eq!(
         refused,
-        Err(lua_runtime(outside)),
+        Err(make_lua_runtime_error(outside)),
         "the policy refuses the same way from Rust"
     );
     assert_eq!(list.to_records(), vec![user("one")], "no record is removed");

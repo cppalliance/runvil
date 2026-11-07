@@ -126,7 +126,7 @@ fn task_failed(event: &Event) -> bool {
 }
 
 /// Whether `event` reports a task its owner canceled.
-fn task_canceled(event: &Event) -> bool {
+fn make_task_canceled_error(event: &Event) -> bool {
     matches!(event, Event::TaskCanceled { .. })
 }
 

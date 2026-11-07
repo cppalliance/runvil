@@ -14,7 +14,7 @@ use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
     Error, ErrorCode, HostServices, ModelId, ModelInfo, OutputTrust, Pack, PackFuture, PackId,
     PackInfo, RenderContext, ServiceId, ServiceKey, ThinkingMode, ToolContext, ToolId, ToolInfo,
-    ToolOutput, tool_error,
+    ToolOutput, make_tool_error,
 };
 use serde_json::{Value, json};
 
@@ -46,19 +46,19 @@ fn construct(
     services: &HostServices,
 ) -> Result<Arc<dyn Pack>, Error> {
     if !config.is_null() {
-        return Err(tool_error(
+        return Err(make_tool_error(
             ErrorCode::ToolOther,
             "greeter takes no configuration",
         ));
     }
     let greeting = services.get(&GREETING).ok_or_else(|| {
-        tool_error(
+        make_tool_error(
             ErrorCode::ToolOther,
             "greeter needs acme/greeting, and this Host provides none",
         )
     })?;
     let id = ToolId::parse(&format!("{name}/greet")).map_err(|e| {
-        tool_error(ErrorCode::ToolBackend, "greeter could not name its tool").with_cause(&e)
+        make_tool_error(ErrorCode::ToolBackend, "greeter could not name its tool").with_cause(&e)
     })?;
     let tools = vec![ToolInfo::new(
         id,
@@ -82,7 +82,7 @@ impl Pack for Greeter {
             match cx.tool().name() {
                 "greet" => {
                     let visitor = cx.service(&VISITOR).ok_or_else(|| {
-                        tool_error(ErrorCode::ToolOther, "no visitor is in this run")
+                        make_tool_error(ErrorCode::ToolOther, "no visitor is in this run")
                     })?;
                     let mark = args.get("mark").and_then(Value::as_str).unwrap_or(".");
                     Ok(ToolOutput::untrusted(format!(
@@ -90,7 +90,7 @@ impl Pack for Greeter {
                         self.greeting
                     )))
                 }
-                other => Err(tool_error(
+                other => Err(make_tool_error(
                     ErrorCode::ToolOther,
                     format!("greeter has no tool named {other}"),
                 )),

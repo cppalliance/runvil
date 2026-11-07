@@ -10,7 +10,7 @@ use std::time::Duration;
 use plugin_web::{
     SearchError, SearchErrorKind, SearchProvider, SearchQuery, SearchResult, SearchResults,
 };
-use runvil::tool_error;
+use runvil::make_tool_error;
 use runvil::{Error, ErrorCode};
 
 use crate::config::{GatewayEndpoint, SecretString};
@@ -162,7 +162,7 @@ impl GatewaySearch {
             .send()
             .await
             .map_err(|source| {
-                tool_error(ErrorCode::ToolTransport, "request failed").with_cause(&source)
+                make_tool_error(ErrorCode::ToolTransport, "request failed").with_cause(&source)
             })?;
 
         let status = response.status();
@@ -178,13 +178,13 @@ impl GatewaySearch {
                     } else {
                         sanitize_diagnostic(&body)
                     };
-                    return Err(tool_error(
+                    return Err(make_tool_error(
                         ErrorCode::ToolBackend,
                         format!("backend returned {code}: {body}"),
                     ));
                 }
                 Err(source) => {
-                    return Err(tool_error(
+                    return Err(make_tool_error(
                         ErrorCode::ToolBackend,
                         format!("backend returned {code}, and its error body could not be read"),
                     )
@@ -197,7 +197,7 @@ impl GatewaySearch {
         // overflow), then parse the promised JSON shape.
         let body = read_capped(response, MAX_RESPONSE_BODY).await?;
         serde_json::from_str(&body).map_err(|source| {
-            tool_error(ErrorCode::ToolBackend, "malformed search response").with_cause(&source)
+            make_tool_error(ErrorCode::ToolBackend, "malformed search response").with_cause(&source)
         })
     }
 }
@@ -301,7 +301,7 @@ async fn read_bounded(mut response: reqwest::Response, limit: usize) -> Result<S
     let mut buffer: Vec<u8> = Vec::new();
     while buffer.len() < limit {
         let chunk = response.chunk().await.map_err(|source| {
-            tool_error(ErrorCode::ToolTransport, "reading response failed").with_cause(&source)
+            make_tool_error(ErrorCode::ToolTransport, "reading response failed").with_cause(&source)
         })?;
         let Some(chunk) = chunk else { break };
         let take = (limit - buffer.len()).min(chunk.len());
@@ -319,10 +319,10 @@ async fn read_bounded(mut response: reqwest::Response, limit: usize) -> Result<S
 async fn read_capped(mut response: reqwest::Response, limit: usize) -> Result<String, Error> {
     let mut buffer: Vec<u8> = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|source| {
-        tool_error(ErrorCode::ToolTransport, "reading response failed").with_cause(&source)
+        make_tool_error(ErrorCode::ToolTransport, "reading response failed").with_cause(&source)
     })? {
         if buffer.len() + chunk.len() > limit {
-            return Err(tool_error(
+            return Err(make_tool_error(
                 ErrorCode::ToolBackend,
                 format!("response body exceeded {limit} bytes"),
             ));
@@ -330,7 +330,8 @@ async fn read_capped(mut response: reqwest::Response, limit: usize) -> Result<St
         buffer.extend_from_slice(&chunk);
     }
     String::from_utf8(buffer).map_err(|source| {
-        tool_error(ErrorCode::ToolBackend, "response body was not valid UTF-8").with_cause(&source)
+        make_tool_error(ErrorCode::ToolBackend, "response body was not valid UTF-8")
+            .with_cause(&source)
     })
 }
 

@@ -7,7 +7,7 @@
 //!
 //! This module holds vocabulary only: the implementation-free
 //! [`ToolInfo`] and the caller-supplied [`ToolCatalog`] of `ToolInfo` values,
-//! trusted output ([`ToolOutput`], [`OutputTrust`]), the [`tool_error`] a
+//! trusted output ([`ToolOutput`], [`OutputTrust`]), the [`make_tool_error`] a
 //! failed call returns, and a call's [`ToolCallOrigin`]. The implementation
 //! trait behind a tool info (`Pack`) is the Plugin contract's, in
 //! `runvil-plugin`, which the `plugin-*` crates implement; the prompt
@@ -23,7 +23,7 @@ mod registry;
 pub use ids::ToolId;
 pub use info::ToolInfo;
 pub use origin::{ToolCallOrigin, ToolCaller};
-pub use output::{OutputTrust, ToolOutput, tool_error};
+pub use output::{OutputTrust, ToolOutput, make_tool_error};
 pub use registry::ToolCatalog;
 
 #[cfg(test)]

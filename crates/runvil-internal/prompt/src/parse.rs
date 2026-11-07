@@ -106,7 +106,7 @@ impl Prompt {
     fn parse_frontmatter(input: &str) -> Result<(Frontmatter, SplitSource)> {
         let split = frontmatter::split_frontmatter(input)?;
         let frontmatter: Frontmatter = serde_yaml_ng::from_str(&split.yaml)
-            .map_err(|cause| error::frontmatter_decode(&cause))?;
+            .map_err(|cause| error::make_frontmatter_decode_error(&cause))?;
         contract::check_distinct_packs(frontmatter.uses())
             .and_then(|()| contract::check_no_reserved_pack(frontmatter.uses()))
             .map_err(|refusal| error::on_line(refusal, split.key_lines.get("uses").copied()))?;
@@ -131,7 +131,7 @@ impl Prompt {
             .collect();
         let [h1_index] = h1_positions.as_slice() else {
             if h1_positions.is_empty() {
-                return Err(error::failure(
+                return Err(error::make_failure_error(
                     ErrorCode::StructureInvalid,
                     "prompt requires an H1 title",
                 ));
@@ -147,14 +147,14 @@ impl Prompt {
                 listed.join(", ")
             );
             return Err(error::on_line(
-                error::failure(ErrorCode::StructureInvalid, message),
+                error::make_failure_error(ErrorCode::StructureInvalid, message),
                 lines.get(1).copied().and_then(NonZeroU32::new),
             ));
         };
         let h1 = &headings[*h1_index];
         if h1.title.is_empty() {
             return Err(error::on_line(
-                error::failure(
+                error::make_failure_error(
                     ErrorCode::StructureInvalid,
                     "prompt H1 title must not be empty",
                 ),

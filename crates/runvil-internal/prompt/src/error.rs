@@ -10,8 +10,8 @@
 use std::num::NonZeroU32;
 use std::ops::Range;
 
-pub(crate) use runvil_lua::internal;
-pub(crate) use runvil_types::error::failure;
+pub(crate) use runvil_lua::make_internal_error;
+pub(crate) use runvil_types::error::make_failure_error;
 use runvil_types::error::{Error, ErrorCode, ErrorFact, SourceLoc, coordinates, place};
 use runvil_types::packs::PackId;
 
@@ -32,22 +32,22 @@ pub(crate) fn on_line(error: Error, line: Option<NonZeroU32>) -> Error {
 /// line and byte column. It is `None` when either end is out of bounds or
 /// its arithmetic overflows - an invariant break that must not replace the
 /// original failure.
-pub(crate) fn failure_at(
+pub(crate) fn make_failure_at_error(
     code: ErrorCode,
     message: impl Into<String>,
     body: &str,
     span: Range<usize>,
     frontmatter_lines: u32,
 ) -> Error {
-    let mut error = failure(code, message);
+    let mut error = make_failure_error(code, message);
     error.at = span_location(body, span, frontmatter_lines);
     error
 }
 
 /// Builds the frontmatter failure for a refused `uses:` list: `reason` is
 /// its `Reason` fact and the refused Pack id its `Name` fact.
-pub(crate) fn pack_refusal(reason: &str, pack: &PackId, message: String) -> Error {
-    let mut error = failure(ErrorCode::FrontmatterInvalid, message);
+pub(crate) fn make_pack_refusal_error(reason: &str, pack: &PackId, message: String) -> Error {
+    let mut error = make_failure_error(ErrorCode::FrontmatterInvalid, message);
     error.facts.insert(ErrorFact::Reason, reason.into());
     error.facts.insert(ErrorFact::Name, pack.to_string().into());
     error
@@ -59,8 +59,8 @@ pub(crate) fn pack_refusal(reason: &str, pack: &PackId, message: String) -> Erro
 /// The location is the file position the YAML parser reported: its line
 /// and column when it reported both, or the whole line when the column is
 /// unknown.
-pub(crate) fn frontmatter_decode(cause: &serde_yaml_ng::Error) -> Error {
-    let mut error = failure(
+pub(crate) fn make_frontmatter_decode_error(cause: &serde_yaml_ng::Error) -> Error {
+    let mut error = make_failure_error(
         ErrorCode::FrontmatterInvalid,
         format!("invalid frontmatter: {cause}"),
     );
@@ -88,8 +88,8 @@ pub(crate) fn frontmatter_decode(cause: &serde_yaml_ng::Error) -> Error {
 ///
 /// A compile failure is located on the file line its diagnostic names, as
 /// the compiler located it.
-pub(crate) fn lua(cause: &Error) -> Error {
-    let mut error = failure(cause.code, cause.message.clone());
+pub(crate) fn make_lua_error(cause: &Error) -> Error {
+    let mut error = make_failure_error(cause.code, cause.message.clone());
     error.at.clone_from(&cause.at);
     error
 }

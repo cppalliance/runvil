@@ -24,12 +24,12 @@
 //! diagnostic naming it.
 
 use runvil::metrics::{CallMetrics, LlamaTimings, Usage, VllmMetrics};
-use runvil::model::{CompletionResult, ToolCall, empty_reply};
+use runvil::model::{CompletionResult, ToolCall, make_empty_reply_error};
 use runvil::{Error, ErrorFact};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::failure::{decoded, malformed};
+use crate::failure::{decoded, make_malformed_error};
 
 /// A parsed assistant turn: outcome plus payload-free metadata.
 #[derive(Debug, Clone, PartialEq)]
@@ -62,26 +62,36 @@ struct TurnContext<'a> {
 /// type.
 fn turn_context(body: &Value) -> Result<TurnContext<'_>, Error> {
     let choices = match body.get("choices") {
-        None => return Err(malformed("no choices in response")),
+        None => return Err(make_malformed_error("no choices in response")),
         Some(Value::Array(choices)) => choices,
-        Some(_) => return Err(malformed("`choices` was present but not an array")),
+        Some(_) => {
+            return Err(make_malformed_error(
+                "`choices` was present but not an array",
+            ));
+        }
     };
     let choice = choices
         .first()
-        .ok_or_else(|| malformed("response had zero choices"))?;
+        .ok_or_else(|| make_malformed_error("response had zero choices"))?;
     if !choice.is_object() {
-        return Err(malformed("`choices[0]` was not an object"));
+        return Err(make_malformed_error("`choices[0]` was not an object"));
     }
     let finish_reason = match choice.get("finish_reason") {
         None | Some(Value::Null) => None,
         Some(Value::String(reason)) => Some(reason.clone()),
-        Some(_) => return Err(malformed("`finish_reason` was present but not a string")),
+        Some(_) => {
+            return Err(make_malformed_error(
+                "`finish_reason` was present but not a string",
+            ));
+        }
     };
     let message = choice
         .get("message")
-        .ok_or_else(|| malformed("choice had no message"))?;
+        .ok_or_else(|| make_malformed_error("choice had no message"))?;
     if !message.is_object() {
-        return Err(malformed("`message` was present but not an object"));
+        return Err(make_malformed_error(
+            "`message` was present but not an object",
+        ));
     }
     let reasoning_content = extract_reasoning(message)?;
     Ok(TurnContext {
@@ -109,7 +119,11 @@ pub(super) fn normalize(body: &Value) -> Result<NormalizedTurn, Error> {
     let tool_calls = match message.get("tool_calls") {
         None | Some(Value::Null) => None,
         Some(Value::Array(calls)) => Some(calls),
-        Some(_) => return Err(malformed("`tool_calls` was present but not an array")),
+        Some(_) => {
+            return Err(make_malformed_error(
+                "`tool_calls` was present but not an array",
+            ));
+        }
     };
     if let Some(raw_calls) = tool_calls.filter(|calls| !calls.is_empty()) {
         let calls = parse_openai_tool_calls(raw_calls)?;
@@ -125,7 +139,11 @@ pub(super) fn normalize(body: &Value) -> Result<NormalizedTurn, Error> {
     let content = match message.get("content") {
         None | Some(Value::Null) => None,
         Some(Value::String(text)) => Some(text.as_str()),
-        Some(_) => return Err(malformed("`content` was present but not a string")),
+        Some(_) => {
+            return Err(make_malformed_error(
+                "`content` was present but not a string",
+            ));
+        }
     };
     // Whitespace-only content is not a product; classify with `trim`, but
     // preserve the original nonblank payload verbatim.
@@ -137,7 +155,7 @@ pub(super) fn normalize(body: &Value) -> Result<NormalizedTurn, Error> {
         });
     }
 
-    let mut error = empty_reply(reasoning_content.is_some());
+    let mut error = make_empty_reply_error(reasoning_content.is_some());
     if let Some(reason) = finish_reason {
         error
             .facts
@@ -158,7 +176,7 @@ fn parse_openai_tool_calls(raw_calls: &[Value]) -> Result<Vec<ToolCall>, Error> 
     let mut calls = Vec::with_capacity(raw_calls.len());
     for raw in raw_calls {
         if !raw.is_object() {
-            return Err(malformed("tool call was not an object"));
+            return Err(make_malformed_error("tool call was not an object"));
         }
         // `type` must be present and name a function call: the OpenAI protocol
         // invariant requires `"type": "function"`, so a missing, null,
@@ -166,7 +184,7 @@ fn parse_openai_tool_calls(raw_calls: &[Value]) -> Result<Vec<ToolCall>, Error> 
         match raw.get("type") {
             Some(Value::String(kind)) if kind == "function" => {}
             _ => {
-                return Err(malformed(
+                return Err(make_malformed_error(
                     "tool call `type` must be the string \"function\"",
                 ));
             }
@@ -174,29 +192,35 @@ fn parse_openai_tool_calls(raw_calls: &[Value]) -> Result<Vec<ToolCall>, Error> 
         let id = raw
             .get("id")
             .and_then(Value::as_str)
-            .ok_or_else(|| malformed("tool call had no string id"))?;
+            .ok_or_else(|| make_malformed_error("tool call had no string id"))?;
         let function = raw
             .get("function")
-            .ok_or_else(|| malformed("tool call had no function"))?;
+            .ok_or_else(|| make_malformed_error("tool call had no function"))?;
         if !function.is_object() {
-            return Err(malformed("tool call `function` was not an object"));
+            return Err(make_malformed_error(
+                "tool call `function` was not an object",
+            ));
         }
         let name = function
             .get("name")
             .and_then(Value::as_str)
-            .ok_or_else(|| malformed("tool call had no string name"))?;
+            .ok_or_else(|| make_malformed_error("tool call had no string name"))?;
         // OpenAI encodes `function.arguments` as a JSON string. It must be
         // present, a string, and valid JSON; missing, null, non-string, and
         // invalid-JSON values are all rejected rather than coerced.
         let arguments = match function.get("arguments") {
             Some(Value::String(raw_args)) => {
                 serde_json::from_str::<Value>(raw_args).map_err(|error| {
-                    malformed(format!("tool call arguments were not valid JSON: {error}"))
+                    make_malformed_error(format!(
+                        "tool call arguments were not valid JSON: {error}"
+                    ))
                 })?
             }
-            None | Some(Value::Null) => return Err(malformed("tool call arguments were missing")),
+            None | Some(Value::Null) => {
+                return Err(make_malformed_error("tool call arguments were missing"));
+            }
             Some(_) => {
-                return Err(malformed(
+                return Err(make_malformed_error(
                     "tool call arguments were not a JSON-encoded string",
                 ));
             }
@@ -224,7 +248,7 @@ fn extract_reasoning(message: &Value) -> Result<Option<String>, Error> {
                 }
             }
             Some(_) => {
-                return Err(malformed(format!(
+                return Err(make_malformed_error(format!(
                     "`{key}` reasoning field was present but not a string"
                 )));
             }

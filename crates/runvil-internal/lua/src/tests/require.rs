@@ -70,7 +70,9 @@ fn resolver(
             })
             .map(|(_, _, library)| library.clone())
             .ok_or_else(|| {
-                crate::lua_runtime(format!("no section `{heading}` within reach of require"))
+                crate::make_lua_runtime_error(format!(
+                    "no section `{heading}` within reach of require"
+                ))
             })
     }
 }

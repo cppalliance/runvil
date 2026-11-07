@@ -50,7 +50,7 @@ use crate::files::stage_input;
 use crate::host::HostContext;
 use crate::performers::{InferenceBroker, Performers, Timer};
 use crate::recorder::{
-    Record, RecordKind, RunId, RunMeta, RunRecorder, of_run, recorder_error, refused,
+    Record, RecordKind, RunId, RunMeta, RunRecorder, make_recorder_error, of_run, refused,
 };
 
 /// What the caller owns and preparation borrows: the Host's built
@@ -300,7 +300,7 @@ fn event_record(event: &Event) -> Result<Record, Error> {
         task_seq: provenance.seq,
         kind: RecordKind::Event,
         effect_id: None,
-        payload: serde_json::to_value(event).map_err(recorder_error)?,
+        payload: serde_json::to_value(event).map_err(make_recorder_error)?,
     })
 }
 

@@ -71,7 +71,7 @@ fn vfs_observations(op: &VfsOp) -> Option<(Lifecycle, Lifecycle)> {
 }
 
 /// Classifies one store operation's failure for the answer channel. A
-/// claims-model conflict becomes the fatal determinism violation: the
+/// claims-model conflict becomes the fatal make_determinism_error violation: the
 /// driver intercepts it at the answer boundary and ends the run on the
 /// spot rather than resuming it into Lua, so no author `pcall` can catch
 /// it. Every other failure returns as the call's answer as a store
@@ -80,10 +80,10 @@ fn vfs_observations(op: &VfsOp) -> Option<(Lifecycle, Lifecycle)> {
 /// aborts the chunk uncaught.
 fn classify_vfs_failure(op: &VfsOp, cause: &VfsError) -> Error {
     match cause {
-        VfsError::Conflict { detail, .. } => error::determinism(detail),
+        VfsError::Conflict { detail, .. } => error::make_determinism_error(detail),
         // `VfsError` is `#[non_exhaustive]` across the crate seam; every
         // other failure is the call's answer.
-        cause => error::store_op(op, cause),
+        cause => error::make_store_op_error(op, cause),
     }
 }
 
@@ -186,7 +186,7 @@ impl Scheduler {
                 | EffectAnswer::ToolCall(_)
                 | EffectAnswer::Vfs(_),
             ) => {
-                return Err(error::internal(
+                return Err(error::make_internal_error(
                     "an effect's answer must be of the effect's own kind",
                 ));
             }

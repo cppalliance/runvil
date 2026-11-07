@@ -6,7 +6,7 @@ use super::*;
 /// The broker-reported context overflow every round of the overflowing
 /// model fails with.
 fn context_overflow() -> runvil_types::error::Error {
-    runvil_model_client::model::context_overflow(
+    runvil_model_client::model::make_context_overflow_error(
         Some(5000),
         Some(4096),
         "the request is larger than the model's context window",

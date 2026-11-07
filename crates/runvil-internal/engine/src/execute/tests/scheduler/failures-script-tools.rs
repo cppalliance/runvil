@@ -5,7 +5,7 @@
 
 use super::*;
 use crate::execute::tests::fixtures::{
-    echo_tool, model_only_tool, structured_tool, untrusted_echo_tool,
+    echo_tool, make_model_only_tool_error, structured_tool, untrusted_echo_tool,
 };
 
 #[test]
@@ -57,7 +57,7 @@ fn a_script_tools_call_with_an_unbound_name_lists_the_offered_ids() {
     assert_eq!(
         trace.error(),
         &crate::test_support::placed(
-            crate::error::unbound_tool("tools/missing", &["tools/echo".to_owned()]),
+            crate::error::make_unbound_tool_error("tools/missing", &["tools/echo".to_owned()]),
             13
         )
     );
@@ -95,12 +95,12 @@ fn a_script_tools_call_of_a_model_only_tool_is_refused_naming_it() {
         ```\n";
     let trace = scheduler_scenario(md)
         .offer("echo", echo_tool())
-        .offer("replace", model_only_tool())
+        .offer("replace", make_model_only_tool_error())
         .run();
     assert_eq!(
         trace.error(),
         &crate::test_support::placed(
-            crate::error::model_only_tool("tools/replace", "tools/replace"),
+            crate::error::make_model_only_tool_error("tools/replace", "tools/replace"),
             13
         )
     );
@@ -120,7 +120,7 @@ fn a_script_pcall_catches_the_model_only_refusal_and_the_run_goes_on() {
         return 'caught'\n\
         ```\n";
     let trace = scheduler_scenario(md)
-        .offer("replace", model_only_tool())
+        .offer("replace", make_model_only_tool_error())
         .run();
     assert_eq!(trace.text(), "caught", "the run continues after the catch");
 }
@@ -138,7 +138,7 @@ fn a_script_tools_call_of_a_model_only_tool_by_its_object_is_refused_the_same_wa
         return tools.call(tool, { value = 'hi' })\n\
         ```\n";
     let trace = scheduler_scenario(md)
-        .offer("replace", model_only_tool())
+        .offer("replace", make_model_only_tool_error())
         .run();
     let error = trace.error();
     assert_eq!(error.code, ErrorCode::ModelOnlyTool, "got {error:?}");
@@ -161,7 +161,7 @@ fn a_model_only_tool_is_still_offerable_alone_and_with_its_pack() {
         return 'offered'\n\
         ```\n";
     let trace = scheduler_scenario(md)
-        .offer("replace", model_only_tool())
+        .offer("replace", make_model_only_tool_error())
         .run();
     assert_eq!(trace.text(), "offered");
 }

@@ -43,7 +43,10 @@ fn trusted_listing_tool() -> FnTool {
 /// `tools/failing_listing`, which describes tools and always fails.
 fn failing_listing_tool() -> FnTool {
     FnTool::new("tools/failing_listing", no_arguments(), |_| {
-        Err(tool_error(ErrorCode::ToolOther, "the servers are down"))
+        Err(make_tool_error(
+            ErrorCode::ToolOther,
+            "the servers are down",
+        ))
     })
     .description("List the tools of servers that are down.")
     .describes_tools()

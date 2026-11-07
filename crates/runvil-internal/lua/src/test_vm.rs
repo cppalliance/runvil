@@ -106,7 +106,11 @@ pub(crate) fn run_chunk(
     .inject_test_values(args, sys, &access.access)
     .map_err(|failure| failure.teardown(emitter, section))?;
     vm.install_engine_globals(emitter, section, &access.scope)?;
-    let returned: MultiValue = vm.lua().load(source).eval().map_err(error::lua)?;
+    let returned: MultiValue = vm
+        .lua()
+        .load(source)
+        .eval()
+        .map_err(error::make_lua_error)?;
     let returned = scalar_return(returned)?;
     let var = vm.var()?;
     Ok(LuaOutcome { returned, var })

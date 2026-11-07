@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use harness::pack::{HostContext, HostServices, PackRegistry};
-use runvil::tool_error;
+use runvil::make_tool_error;
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
     Pack, PackFuture, PackId, PackInfo, ServiceId, ServiceKey, ToolContext, ToolId, ToolInfo,
@@ -69,7 +69,7 @@ fn construct(
     _services: &HostServices,
 ) -> Result<Arc<dyn Pack>, Error> {
     let id = ToolId::parse(&format!("{name}/ask")).map_err(|e| {
-        tool_error(
+        make_tool_error(
             ErrorCode::ToolBackend,
             "the fixture could not name its ask tool",
         )
@@ -96,7 +96,7 @@ impl Pack for Asker {
     ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             let broker = cx.service(&BROKER).ok_or_else(|| {
-                tool_error(ErrorCode::ToolOther, "no operator is connected to this run")
+                make_tool_error(ErrorCode::ToolOther, "no operator is connected to this run")
             })?;
             broker.wait().await.map(ToolOutput::trusted)
         })

@@ -93,7 +93,7 @@ fn construct_starting(
         .get(&STARTUPS)
         .and_then(|startups| startups.get(&name.to_string()).cloned())
         .ok_or_else(|| {
-            tool_error(
+            make_tool_error(
                 ErrorCode::ToolOther,
                 format!("{name} needs its startup in tests/startups, and this host provides none"),
             )
@@ -120,13 +120,13 @@ impl Pack for Starting {
                 .wait_for(|phase| !matches!(phase, Phase::Starting))
                 .await
                 .map_err(|_closed| {
-                    tool_error(
+                    make_tool_error(
                         ErrorCode::ToolOther,
                         "the test dropped the fixture's startup",
                     )
                 })?;
             match settled {
-                Phase::Failed(reason) => Err(tool_error(ErrorCode::ToolOther, reason)),
+                Phase::Failed(reason) => Err(make_tool_error(ErrorCode::ToolOther, reason)),
                 Phase::Starting | Phase::Ready => Ok(()),
             }
         })

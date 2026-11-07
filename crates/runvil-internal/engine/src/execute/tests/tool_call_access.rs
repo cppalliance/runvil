@@ -28,7 +28,7 @@ const FILES: &str = "test/tools/files";
 #[track_caller]
 fn files_tool() -> FnTool {
     FnTool::new(FILES, json!({ "type": "object" }), |_| {
-        Err(tool_error(
+        Err(make_tool_error(
             ErrorCode::ToolOther,
             "the suite's driver performs this tool",
         ))
@@ -42,7 +42,7 @@ fn use_access(
     access: &Access,
     args: &Value,
 ) -> std::result::Result<ToolOutput, runvil_types::error::Error> {
-    let failed = |error: VfsError| tool_error(ErrorCode::ToolOther, error.to_string());
+    let failed = |error: VfsError| make_tool_error(ErrorCode::ToolOther, error.to_string());
     if let Some(path) = args["read"].as_str() {
         return access
             .read_string(path)

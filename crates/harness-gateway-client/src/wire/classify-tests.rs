@@ -5,10 +5,10 @@
 use runvil::model::phrase;
 use runvil::{Error, ErrorCode, ErrorFact};
 
-use super::{classify_http_failure, classify_stream_error};
+use super::{make_classify_http_failure_error, make_classify_stream_error};
 
 fn code_of(status: u16, body: &str) -> ErrorCode {
-    classify_http_failure(status, body).code
+    make_classify_http_failure_error(status, body).code
 }
 
 /// The `(prompt_tokens, window)` counts an overflow names as its `Count`
@@ -119,7 +119,7 @@ fn an_overflow_phrase_on_another_status_is_not_an_overflow() {
 
 #[test]
 fn the_openai_token_counts_are_read_from_the_message() {
-    let error = classify_http_failure(
+    let error = make_classify_http_failure_error(
         400,
         "This model's maximum context length is 4096 tokens. However, your messages \
          resulted in 5120 tokens. Please reduce the length of the messages.",
@@ -130,21 +130,22 @@ fn the_openai_token_counts_are_read_from_the_message() {
 
 #[test]
 fn the_greater_than_maximum_token_counts_are_read_from_the_message() {
-    let error = classify_http_failure(400, "prompt is too long: 205000 tokens > 200000 maximum");
+    let error =
+        make_classify_http_failure_error(400, "prompt is too long: 205000 tokens > 200000 maximum");
     assert_eq!(error.code, ErrorCode::ContextOverflow);
     assert_eq!(overflow(&error), (Some(205_000), Some(200_000)));
 }
 
 #[test]
 fn an_overflow_that_states_no_counts_leaves_them_unset() {
-    let error = classify_http_failure(400, "context_length_exceeded");
+    let error = make_classify_http_failure_error(400, "context_length_exceeded");
     assert_eq!(error.code, ErrorCode::ContextOverflow);
     assert_eq!(overflow(&error), (None, None));
 }
 
 #[test]
 fn a_count_too_large_for_u32_is_left_unset() {
-    let error = classify_http_failure(
+    let error = make_classify_http_failure_error(
         400,
         "maximum context length is 99999999999 tokens, however you sent 5 tokens",
     );
@@ -205,7 +206,7 @@ fn every_other_5xx_is_a_server_error() {
 #[test]
 fn a_401_or_403_is_unavailable_with_the_credentials_phrase() {
     for status in [401, 403] {
-        let error = classify_http_failure(status, "bad key");
+        let error = make_classify_http_failure_error(status, "bad key");
         assert_eq!(error.code, ErrorCode::Unavailable);
         assert_eq!(
             error.prose,
@@ -255,7 +256,7 @@ fn a_body_that_matches_no_rule_is_rejected_never_a_success() {
 
 #[test]
 fn the_prose_names_the_code_and_the_status_and_the_message_adds_the_body() {
-    let error = classify_http_failure(503, "upstream <busy>");
+    let error = make_classify_http_failure_error(503, "upstream <busy>");
     assert_eq!(error.prose, "the model backend is overloaded (status 503)");
     assert_eq!(
         error.message,
@@ -308,7 +309,7 @@ fn each_http_code_carries_its_fixed_phrase_and_the_status_suffix() {
         ),
     ];
     for (status, body, prose) in cases {
-        let error = classify_http_failure(*status, body);
+        let error = make_classify_http_failure_error(*status, body);
         assert_eq!(error.prose, *prose, "status {status}, {body:?}");
         assert_eq!(error.message, format!("{prose}: {body}"));
     }
@@ -317,18 +318,18 @@ fn each_http_code_carries_its_fixed_phrase_and_the_status_suffix() {
 #[test]
 fn a_429_is_rate_limited_unless_its_body_names_a_spent_quota() {
     assert_eq!(
-        classify_http_failure(429, "slow down").code,
+        make_classify_http_failure_error(429, "slow down").code,
         ErrorCode::RateLimited
     );
     assert_eq!(
-        classify_http_failure(429, "insufficient_quota").code,
+        make_classify_http_failure_error(429, "insufficient_quota").code,
         ErrorCode::QuotaExhausted
     );
 }
 
 #[test]
 fn provider_text_stays_in_the_message_and_out_of_the_prose() {
-    let error = classify_http_failure(503, "upstream <busy>");
+    let error = make_classify_http_failure_error(503, "upstream <busy>");
     assert!(error.prose.starts_with(phrase(ErrorCode::Overloaded)));
     assert!(!error.prose.contains("upstream"));
     assert!(error.message.ends_with(": upstream <busy>"));
@@ -337,13 +338,13 @@ fn provider_text_stays_in_the_message_and_out_of_the_prose() {
 #[test]
 fn the_classifier_keeps_only_the_body_it_was_given() {
     let body = "x".repeat(2000);
-    let error = classify_http_failure(400, &body);
+    let error = make_classify_http_failure_error(400, &body);
     assert_eq!(error.message, format!("{}: {body}", error.prose));
 }
 
 #[test]
 fn an_in_stream_envelope_naming_a_context_limit_is_an_overflow_without_a_status() {
-    let error = classify_stream_error(
+    let error = make_classify_stream_error(
         "This model's maximum context length is 4096 tokens, however you sent 5000 tokens",
     );
     assert_eq!(error.code, ErrorCode::ContextOverflow);
@@ -361,22 +362,22 @@ fn an_in_stream_envelope_naming_a_context_limit_is_an_overflow_without_a_status(
 #[test]
 fn an_in_stream_envelope_applies_the_other_body_text_rules() {
     assert_eq!(
-        classify_stream_error("overloaded_error: try again").code,
+        make_classify_stream_error("overloaded_error: try again").code,
         ErrorCode::Overloaded
     );
     assert_eq!(
-        classify_stream_error("insufficient_quota").code,
+        make_classify_stream_error("insufficient_quota").code,
         ErrorCode::QuotaExhausted
     );
     assert_eq!(
-        classify_stream_error("blocked by content_filter").code,
+        make_classify_stream_error("blocked by content_filter").code,
         ErrorCode::Refused
     );
 }
 
 #[test]
 fn an_in_stream_envelope_that_matches_no_rule_stays_a_transport_failure() {
-    let error = classify_stream_error("upstream\\ndied");
+    let error = make_classify_stream_error("upstream\\ndied");
     assert_eq!(error.code, ErrorCode::Transport);
     assert_eq!(error.prose, "the connection to the model backend failed");
     assert_eq!(

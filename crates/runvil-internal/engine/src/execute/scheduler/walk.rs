@@ -57,7 +57,7 @@ impl Scheduler {
             .ctx
             .vfs()
             .acquire_scope(origin)
-            .map_err(|cause| error::store(&cause))?;
+            .map_err(|cause| error::make_store_error(&cause))?;
         self.scope = Some(scope);
         self.start_root_chain(
             ChainKind::Root,
@@ -180,7 +180,9 @@ impl ChainOps<'_> {
             mut frame, block, ..
         }) = chain.entered.take()
         else {
-            return Err(error::internal("a section end implies a live frame"));
+            return Err(error::make_internal_error(
+                "a section end implies a live frame",
+            ));
         };
         chain.var = frame
             .read_var()
@@ -215,7 +217,7 @@ impl ChainOps<'_> {
                 mut frame, block, ..
             }) = chain.entered.take()
             else {
-                return Err(error::internal("a jump implies a live frame"));
+                return Err(error::make_internal_error("a jump implies a live frame"));
             };
             chain.var = frame
                 .read_var()
@@ -246,7 +248,7 @@ impl ChainOps<'_> {
         if chain.kind.is_h1() {
             let sections = h1_visible_sections(&prompt);
             let target = heading_address::resolve_visible(heading, Visible::all(sections))?;
-            let index = section_position(sections, target).ok_or(error::internal(
+            let index = section_position(sections, target).ok_or(error::make_internal_error(
                 "a resolved H1 target is absent from the top-level slice",
             ))?;
             return Ok(JumpTarget {

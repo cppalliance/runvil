@@ -3,7 +3,7 @@
 use std::str::FromStr;
 
 use crate::error::Error;
-use crate::names::{GlobalName, invalid_id};
+use crate::names::{GlobalName, make_invalid_id_error};
 use crate::packs::PackId;
 
 /// Identifies a tool by its Pack's local name and the Pack's own segments.
@@ -31,7 +31,8 @@ impl ToolId {
     /// contains any other character outside the set of lowercase ASCII
     /// letters, digits, `-`, `_`, and `.`.
     pub fn parse(id: &str) -> Result<ToolId, Error> {
-        let invalid = |reason: &str| invalid_id(format!("invalid tool id: {reason}"), id);
+        let invalid =
+            |reason: &str| make_invalid_id_error(format!("invalid tool id: {reason}"), id);
         let name = GlobalName::validate(id).map_err(invalid)?;
         if name.segments().len() < 2 {
             return Err(invalid(

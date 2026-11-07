@@ -212,8 +212,10 @@ fn a_raised_error_table_with_a_caller_code_ends_the_run_with_an_internal_error()
 
 #[test]
 fn a_model_error_with_a_caller_code_ends_the_run_with_an_internal_error() {
-    let refused =
-        runvil_types::error::failure(ErrorCode::RecorderFailed, "the recorder refused the round");
+    let refused = runvil_types::error::make_failure_error(
+        ErrorCode::RecorderFailed,
+        "the recorder refused the round",
+    );
     let trace = Scenario::new(one_section("return models.infer('hi')"))
         .bound()
         .chat_with(move |_| EffectAnswer::Chat(Err(refused.clone())))

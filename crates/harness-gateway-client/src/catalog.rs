@@ -6,8 +6,8 @@ use runvil::Error;
 use runvil::model::{ModelCatalog, ModelId, ModelInfo, ThinkingMode};
 use serde::Deserialize;
 
-use crate::failure::{malformed, transport_failure, with_detail};
-use crate::wire::classify::classify_http_failure;
+use crate::failure::{make_malformed_error, make_transport_failure_error, with_detail};
+use crate::wire::classify::make_classify_http_failure_error;
 use crate::wire::stream::escape_controls;
 
 /// Wire shape of one entry from gateway `GET /v1/models`.
@@ -59,14 +59,18 @@ async fn read_catalog_body_capped(
     if let Some(len) = response.content_length()
         && len > cap
     {
-        return Err(malformed(format!(
+        return Err(make_malformed_error(format!(
             "model list body of {len} bytes exceeds the {cap}-byte limit"
         )));
     }
     let mut body: Vec<u8> = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(transport_failure)? {
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(make_transport_failure_error)?
+    {
         if body.len() as u64 + chunk.len() as u64 > cap {
-            return Err(malformed(format!(
+            return Err(make_malformed_error(format!(
                 "model list body exceeds the {cap}-byte limit"
             )));
         }
@@ -140,16 +144,16 @@ async fn get_authed(url: String, token: &str) -> std::result::Result<reqwest::Re
         .bearer_auth(token)
         .send()
         .await
-        .map_err(transport_failure)?;
+        .map_err(make_transport_failure_error)?;
     let status = response.status();
     if status.is_success() {
         return Ok(response);
     }
     let body = match read_error_body_bounded(response, MAX_CATALOG_ERROR_BODY).await {
         Ok(body) => body,
-        Err(source) => return Err(transport_failure(source)),
+        Err(source) => return Err(make_transport_failure_error(source)),
     };
-    Err(classify_http_failure(status.as_u16(), &body))
+    Err(make_classify_http_failure_error(status.as_u16(), &body))
 }
 
 /// Fetches a [`ModelCatalog`] from the Gateway's `/models` endpoint.
@@ -162,7 +166,7 @@ async fn get_authed(url: String, token: &str) -> std::result::Result<reqwest::Re
 /// Returns an [`Error`]. Its [`code`](Error::code) is:
 ///
 /// - `Transport` or `Timeout` when the HTTP request or a response read fails;
-/// - the code [`classify_http_failure`] picks for the response when the
+/// - the code [`make_classify_http_failure_error`] picks for the response when the
 ///   Gateway returns a status outside the 2xx range;
 /// - `MalformedResponse` when the body is not a valid model list.
 pub async fn fetch_model_catalog(
@@ -179,7 +183,7 @@ pub async fn fetch_model_catalog(
     let list: ModelsListResponse = serde_json::from_slice(&body).map_err(|error| {
         // MODEL-009: keep the decode error in the message and out of the
         // prose, while the classification stays `MalformedResponse`.
-        malformed("model list response was not valid JSON").with_cause(&error)
+        make_malformed_error("model list response was not valid JSON").with_cause(&error)
     })?;
     let mut models = Vec::with_capacity(list.data.len());
     for entry in list.data {
@@ -190,17 +194,17 @@ pub async fn fetch_model_catalog(
             continue;
         };
         let id = ModelId::gateway(entry.id).map_err(|error| {
-            malformed(format!("model catalog entry has an invalid id: {error}"))
+            make_malformed_error(format!("model catalog entry has an invalid id: {error}"))
         })?;
         let context = NonZeroU32::new(context).ok_or_else(|| {
             with_detail(
-                malformed("a model declares a zero-token context window"),
+                make_malformed_error("a model declares a zero-token context window"),
                 &escape_controls(id.name(), MAX_CATALOG_ERROR_BODY),
             )
         })?;
         let thinking = entry.thinking.ok_or_else(|| {
             with_detail(
-                malformed("a model declares a context window but no thinking mode"),
+                make_malformed_error("a model declares a context window but no thinking mode"),
                 &escape_controls(id.name(), MAX_CATALOG_ERROR_BODY),
             )
         })?;
@@ -212,7 +216,7 @@ pub async fn fetch_model_catalog(
     }
     ModelCatalog::new(models).map_err(|error| {
         with_detail(
-            malformed("gateway returned an inconsistent model catalog"),
+            make_malformed_error("gateway returned an inconsistent model catalog"),
             &escape_controls(&error.to_string(), MAX_CATALOG_ERROR_BODY),
         )
     })

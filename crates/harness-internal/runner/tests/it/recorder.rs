@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use harness_runner::display_chain;
 use harness_runner::recorder::{
-    MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder, recorder_error,
+    MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder, make_recorder_error,
 };
 use runvil::{ErrorCode, ErrorFact};
 use serde_json::json;
@@ -305,7 +305,7 @@ impl Error for DiskFull {}
 
 #[test]
 fn a_recorder_error_keeps_its_cause_in_the_message_only() {
-    let error = recorder_error(DiskFull);
+    let error = make_recorder_error(DiskFull);
 
     assert_eq!(error.code, ErrorCode::RecorderFailed);
     assert_eq!(
@@ -318,7 +318,7 @@ fn a_recorder_error_keeps_its_cause_in_the_message_only() {
 
 #[test]
 fn a_recorder_error_takes_a_plain_message() {
-    let error = recorder_error("the store is read-only");
+    let error = make_recorder_error("the store is read-only");
 
     assert_eq!(
         display_chain(&error),

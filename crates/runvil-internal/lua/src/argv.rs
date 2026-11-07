@@ -43,9 +43,11 @@ pub(crate) const ASSIGNMENT_REFUSAL: &str = "argv is frozen outside H1: assign i
 pub(crate) fn install_writable(lua: &Lua, argv: Option<&Json>) -> Result<()> {
     let value = match argv {
         None | Some(Json::Null) => Value::Nil,
-        Some(json) => lua.to_value(json).map_err(error::lua)?,
+        Some(json) => lua.to_value(json).map_err(error::make_lua_error)?,
     };
-    lua.globals().raw_set("argv", value).map_err(error::lua)
+    lua.globals()
+        .raw_set("argv", value)
+        .map_err(error::make_lua_error)
 }
 
 /// Installs `argv` frozen, the mode of every section but H1: the value H1
@@ -74,26 +76,26 @@ fn frozen_json_value(lua: &Lua, value: &Json) -> Result<Value> {
         Json::Array(values) => {
             let data = lua
                 .create_table_with_capacity(values.len(), 0)
-                .map_err(error::lua)?;
+                .map_err(error::make_lua_error)?;
             data.set_metatable(Some(lua.array_metatable()))
-                .map_err(error::lua)?;
+                .map_err(error::make_lua_error)?;
             for (index, value) in values.iter().enumerate() {
                 data.raw_set(index + 1, frozen_json_value(lua, value)?)
-                    .map_err(error::lua)?;
+                    .map_err(error::make_lua_error)?;
             }
             freeze_table(lua, data).map(Value::Table)
         }
         Json::Object(values) => {
             let data = lua
                 .create_table_with_capacity(0, values.len())
-                .map_err(error::lua)?;
+                .map_err(error::make_lua_error)?;
             for (key, value) in values {
                 data.raw_set(key.as_str(), frozen_json_value(lua, value)?)
-                    .map_err(error::lua)?;
+                    .map_err(error::make_lua_error)?;
             }
             freeze_table(lua, data).map(Value::Table)
         }
-        scalar => lua.to_value(scalar).map_err(error::lua),
+        scalar => lua.to_value(scalar).map_err(error::make_lua_error),
     }
 }
 
@@ -113,5 +115,5 @@ fn freeze_table(lua: &Lua, data: mlua::Table) -> Result<mlua::Table> {
         },
         "argv is frozen",
     )
-    .map_err(error::lua)
+    .map_err(error::make_lua_error)
 }

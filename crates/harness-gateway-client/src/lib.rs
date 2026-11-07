@@ -42,8 +42,8 @@
 //!   decodes whole.
 //! - [`escape_controls`] cuts a backend error body to a length limit and
 //!   escapes its control characters.
-//! - [`classify_http_failure`] turns a failure status and its body into an
-//!   error of the matching model code. [`classify_stream_error`] does
+//! - [`make_classify_http_failure_error`] turns a failure status and its body into an
+//!   error of the matching model code. [`make_classify_stream_error`] does
 //!   the same for an error envelope that arrives inside the stream.
 //!
 //! The client, or another broker, owns the connection and supplies the
@@ -79,8 +79,8 @@ pub use config::GatewayEndpoint;
 pub use config::SecretString;
 pub use search::GatewaySearch;
 pub use transport::GatewayChat;
-pub use wire::classify::classify_http_failure;
-pub use wire::classify::classify_stream_error;
+pub use wire::classify::make_classify_http_failure_error;
+pub use wire::classify::make_classify_stream_error;
 pub use wire::delta::StreamDelta;
 pub use wire::read::ChunkSource;
 pub use wire::read::read_body_capped;

@@ -46,7 +46,12 @@ fn model_calling_an_offered_but_unscoped_tool_is_a_hard_error() {
     assert_eq!(
         error,
         &placed(
-            crate::error::out_of_scope_tool("global_tool", true, &["scoped".to_owned()], false),
+            crate::error::make_out_of_scope_tool_error(
+                "global_tool",
+                true,
+                &["scoped".to_owned()],
+                false
+            ),
             14
         )
     );
@@ -79,7 +84,12 @@ fn model_calling_an_advertised_tool_by_canonical_id_gets_no_not_offered_suffix()
     assert_eq!(
         error,
         &placed(
-            crate::error::out_of_scope_tool("tools/scoped", false, &["scoped".to_owned()], false),
+            crate::error::make_out_of_scope_tool_error(
+                "tools/scoped",
+                false,
+                &["scoped".to_owned()],
+                false
+            ),
             14
         )
     );
@@ -110,7 +120,12 @@ fn model_calling_a_defined_but_unoffered_adhoc_tool_gets_no_not_offered_suffix()
     assert_eq!(
         error,
         &placed(
-            crate::error::out_of_scope_tool("grab", false, &["scoped".to_owned()], false),
+            crate::error::make_out_of_scope_tool_error(
+                "grab",
+                false,
+                &["scoped".to_owned()],
+                false
+            ),
             15
         )
     );
@@ -181,7 +196,7 @@ fn with_dynamic_offers_a_name_outside_both_sets_fails_listing_only_the_static_se
     assert_eq!(
         trace.error(),
         &placed(
-            crate::error::out_of_scope_tool("rogue", false, &aliases, true),
+            crate::error::make_out_of_scope_tool_error("rogue", false, &aliases, true),
             18
         )
     );
@@ -234,7 +249,7 @@ fn a_static_tool_wearing_a_discovery_wire_name_does_not_claim_a_dynamic_set() {
     assert_eq!(
         error,
         &placed(
-            crate::error::out_of_scope_tool(
+            crate::error::make_out_of_scope_tool_error(
                 "rogue",
                 false,
                 &["GetDynamicTools".to_owned(), "CallDynamicTool".to_owned()],
@@ -268,7 +283,12 @@ fn model_calling_pure_unknown_tool_is_a_hard_error() {
     assert_eq!(
         error,
         &placed(
-            crate::error::out_of_scope_tool("nonexistent", false, &["echo".to_owned()], false),
+            crate::error::make_out_of_scope_tool_error(
+                "nonexistent",
+                false,
+                &["echo".to_owned()],
+                false
+            ),
             14
         )
     );

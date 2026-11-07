@@ -4,7 +4,7 @@
 //! A setup error happens before the client sends its first request. It is
 //! an [`InvalidValue`](ErrorCode::InvalidValue) whose message names the
 //! environment variable or the rule that failed, never a key, and whose
-//! `Reason` fact is `missing_env`, `invalid_env`, or `invalid_config`.
+//! `Reason` fact is `make_missing_env_error`, `make_invalid_env_error`, or `invalid_config`.
 
 use std::fmt;
 
@@ -12,8 +12,8 @@ use runvil::{Error, ErrorCode, ErrorFact};
 use serde_json::Value;
 
 /// The setup error for a required environment variable that is not set.
-pub(crate) fn missing_env(name: &str) -> Error {
-    let mut error = setup_error(
+pub(crate) fn make_missing_env_error(name: &str) -> Error {
+    let mut error = make_setup_error(
         "missing_env",
         format!("missing environment variable: {name}"),
     );
@@ -23,8 +23,8 @@ pub(crate) fn missing_env(name: &str) -> Error {
 
 /// The setup error for an environment variable whose value is not valid
 /// Unicode.
-pub(crate) fn invalid_env(name: &str) -> Error {
-    let mut error = setup_error(
+pub(crate) fn make_invalid_env_error(name: &str) -> Error {
+    let mut error = make_setup_error(
         "invalid_env",
         format!("environment variable is set but not valid Unicode: {name}"),
     );
@@ -34,7 +34,7 @@ pub(crate) fn invalid_env(name: &str) -> Error {
 
 /// A setup error with `reason`. Its prose is its message, which names the
 /// variable or the rule to fix.
-fn setup_error(reason: &'static str, message: String) -> Error {
+fn make_setup_error(reason: &'static str, message: String) -> Error {
     let mut error = Error::new(ErrorCode::InvalidValue, message.clone(), message);
     error.facts.insert(ErrorFact::Reason, Value::from(reason));
     error
@@ -121,7 +121,7 @@ impl GatewayEndpoint {
     /// A query or fragment is rejected because an API root is a bare path.
     /// No error includes `url`, because a URL can contain a credential.
     pub fn new(url: &str) -> std::result::Result<GatewayEndpoint, Error> {
-        let reject = |message: String| setup_error("invalid_config", message);
+        let reject = |message: String| make_setup_error("invalid_config", message);
         let trimmed = url.trim();
         // The parse failure's own text names the rule, never the input.
         let parsed = url::Url::parse(trimmed)

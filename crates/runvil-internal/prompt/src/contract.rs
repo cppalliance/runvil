@@ -142,7 +142,7 @@ where
 pub(crate) fn check_distinct_packs(packs: &[PackRef]) -> crate::Result<()> {
     let mut seen = BTreeSet::new();
     match packs.iter().find(|pack| !seen.insert(pack.id())) {
-        Some(pack) => Err(error::pack_refusal(
+        Some(pack) => Err(error::make_pack_refusal_error(
             "pack_duplicate",
             pack.id(),
             format!(
@@ -161,7 +161,7 @@ pub(crate) fn check_distinct_packs(packs: &[PackRef]) -> crate::Result<()> {
 /// `Reason` fact `pack_reserved`.
 pub(crate) fn check_no_reserved_pack(packs: &[PackRef]) -> crate::Result<()> {
     match packs.iter().find(|pack| pack.id().is_reserved()) {
-        Some(pack) => Err(error::pack_refusal(
+        Some(pack) => Err(error::make_pack_refusal_error(
             "pack_reserved",
             pack.id(),
             format!(

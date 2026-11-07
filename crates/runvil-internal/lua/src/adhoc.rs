@@ -38,7 +38,7 @@ impl AdhocTools {
     fn entries(&self) -> Result<MutexGuard<'_, Vec<ToolBinding>>> {
         self.entries
             .lock()
-            .map_err(|_| error::internal("adhoc tools registry was poisoned"))
+            .map_err(|_| error::make_internal_error("adhoc tools registry was poisoned"))
     }
 
     /// Registers the adhoc tool `binding` binds.

@@ -191,7 +191,7 @@ impl SectionContext {
         var: &serde_json::Value,
         seed: TaskSeed,
     ) -> Result<Self> {
-        let section = pos.section(ctx.prompt()).ok_or(error::internal(
+        let section = pos.section(ctx.prompt()).ok_or(error::make_internal_error(
             "an entered section is absent from its slice",
         ))?;
         let mut sys = ctx.section_sys(section_id, task_id, section.name());

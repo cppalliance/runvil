@@ -355,8 +355,12 @@ fn call_with_a_non_string_target_errors() {
     // heading, and the error says so.
     let vm = TestVm::new().build();
     vm.install_test_control_globals(
-        |target, _, _| resolve_section_target(target).map_err(crate::error::lua),
-        |_| Err(crate::lua_runtime("prompt reads are not needed here")),
+        |target, _, _| resolve_section_target(target).map_err(crate::error::make_lua_error),
+        |_| {
+            Err(crate::make_lua_runtime_error(
+                "prompt reads are not needed here",
+            ))
+        },
     )
     .expect("control globals must install");
     let out = run_scalar(

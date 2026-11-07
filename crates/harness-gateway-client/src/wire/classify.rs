@@ -1,8 +1,8 @@
 //! The HTTP failure classifier: the one place that reads a status code and
 //! response text and turns them into a model [`ErrorCode`].
 //!
-//! [`classify_http_failure`] takes a non-success status and its bounded,
-//! control-escaped body. [`classify_stream_error`] applies the same body-text
+//! [`make_classify_http_failure_error`] takes a non-success status and its bounded,
+//! control-escaped body. [`make_classify_stream_error`] applies the same body-text
 //! rules to an error envelope that arrives inside a 200 stream, where there
 //! is no status. Both append the body to the error's message and never put
 //! it in the prose.
@@ -18,7 +18,7 @@
 //! 5. A 400 whose body names a content policy term is `Refused`.
 //! 6. Every other status is `Rejected`.
 
-use runvil::model::{completion_error, context_overflow, phrase};
+use runvil::model::{make_completion_error, make_context_overflow_error, phrase};
 use runvil::{Error, ErrorCode};
 
 use crate::failure::with_detail;
@@ -67,12 +67,12 @@ const CREDENTIALS_PHRASE: &str = "the model backend did not accept the credentia
 /// `Overloaded`, any other 5xx is `ServerError`, and any other status except
 /// 401 and 403 is `Rejected`.
 #[must_use]
-pub fn classify_http_failure(status: u16, body: &str) -> Error {
+pub fn make_classify_http_failure_error(status: u16, body: &str) -> Error {
     let lower = body.to_lowercase();
-    let http = |code: ErrorCode| with_detail(http_error(code, phrase(code), status), body);
+    let http = |code: ErrorCode| with_detail(make_http_error(code, phrase(code), status), body);
     if matches!(status, 400 | 413) && names_any(&lower, OVERFLOW_PHRASES) {
         let (prompt_tokens, window) = overflow_counts(&lower);
-        let overflow = context_overflow(
+        let overflow = make_context_overflow_error(
             prompt_tokens,
             window,
             format!("{} (status {status})", phrase(ErrorCode::ContextOverflow)),
@@ -86,7 +86,7 @@ pub fn classify_http_failure(status: u16, body: &str) -> Error {
         500..=599 if lower.contains("overloaded") => http(ErrorCode::Overloaded),
         500..=599 => http(ErrorCode::ServerError),
         401 | 403 => with_detail(
-            http_error(ErrorCode::Unavailable, CREDENTIALS_PHRASE, status),
+            make_http_error(ErrorCode::Unavailable, CREDENTIALS_PHRASE, status),
             body,
         ),
         400 if names_any(&lower, REFUSAL_WORDS) => http(ErrorCode::Refused),
@@ -107,11 +107,11 @@ pub fn classify_http_failure(status: u16, body: &str) -> Error {
 /// bounded and control-escaped. The error's message ends with it after
 /// `: `.
 #[must_use]
-pub fn classify_stream_error(body: &str) -> Error {
+pub fn make_classify_stream_error(body: &str) -> Error {
     let lower = body.to_lowercase();
     let error = if names_any(&lower, OVERFLOW_PHRASES) {
         let (prompt_tokens, window) = overflow_counts(&lower);
-        context_overflow(prompt_tokens, window, phrase(ErrorCode::ContextOverflow))
+        make_context_overflow_error(prompt_tokens, window, phrase(ErrorCode::ContextOverflow))
     } else {
         let code = if names_any(&lower, QUOTA_WORDS) {
             ErrorCode::QuotaExhausted
@@ -122,14 +122,14 @@ pub fn classify_stream_error(body: &str) -> Error {
         } else {
             ErrorCode::Transport
         };
-        completion_error(code, phrase(code))
+        make_completion_error(code, phrase(code))
     };
     with_detail(error, body)
 }
 
 /// Builds an HTTP failure: `phrase` with the status appended.
-fn http_error(code: ErrorCode, phrase: &str, status: u16) -> Error {
-    completion_error(code, format!("{phrase} (status {status})"))
+fn make_http_error(code: ErrorCode, phrase: &str, status: u16) -> Error {
+    make_completion_error(code, format!("{phrase} (status {status})"))
 }
 
 fn names_any(lower: &str, words: &[&str]) -> bool {

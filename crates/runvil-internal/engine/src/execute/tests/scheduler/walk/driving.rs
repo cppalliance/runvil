@@ -91,7 +91,10 @@ fn call_depth_cap_reads_the_chain_field() {
     let error = trace.error();
     assert_eq!(
         error,
-        &crate::test_support::with_author_prose(crate::error::call_depth_exceeded(8), 12),
+        &crate::test_support::with_author_prose(
+            crate::error::make_call_depth_exceeded_error(8),
+            12
+        ),
         "expected the typed call-depth error on Alpha's call line"
     );
     assert_eq!(error.code, ErrorCode::CallDepthExceeded, "{error}");

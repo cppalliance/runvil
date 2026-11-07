@@ -25,7 +25,7 @@ use runvil_types::error::ErrorCode;
 use runvil_types::event::Event;
 use runvil_types::seed::RunSeed;
 use runvil_types::timestamp::Timestamp;
-use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo, tool_error};
+use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo, make_tool_error};
 use runvil_vfs::{Origin, VfsError, VfsRef};
 
 use super::recording::{
@@ -39,7 +39,7 @@ use crate::execute::{
 };
 use crate::lua::{ToolBinding, run_store_op};
 use crate::model::{
-    ModelBinding, ModelId, ModelInfo, ModelRole, ModelSet, ThinkingMode, completion_error,
+    ModelBinding, ModelId, ModelInfo, ModelRole, ModelSet, ThinkingMode, make_completion_error,
 };
 use crate::prompt::Prompt;
 
@@ -167,7 +167,7 @@ impl Answers {
                     EffectAnswer::Chat(answer.map(Box::new))
                 }
                 Some(Chat::Closure(answer)) => answer(effect),
-                None => EffectAnswer::Chat(Err(completion_error(
+                None => EffectAnswer::Chat(Err(make_completion_error(
                     ErrorCode::Unavailable,
                     "model access is turned off or not configured",
                 ))),
@@ -175,7 +175,7 @@ impl Answers {
             Effect::Render { offered, .. } => EffectAnswer::Render(offered.clone()),
             Effect::ToolCall { tool, args, .. } => match self.tools.get(tool) {
                 Some(tool) => EffectAnswer::ToolCall(tool.call_now(args.clone())),
-                None => EffectAnswer::ToolCall(Err(tool_error(
+                None => EffectAnswer::ToolCall(Err(make_tool_error(
                     ErrorCode::ToolOther,
                     "the tool the call names has no implementation in the test driver's tool table",
                 ))),

@@ -52,5 +52,6 @@ pub use display_chain::display_chain;
 pub use harness::{Harness, RunControl, RunReport, RunRequest};
 pub use host::HostContext;
 pub use recorder::{
-    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder, recorder_error,
+    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
+    make_recorder_error,
 };

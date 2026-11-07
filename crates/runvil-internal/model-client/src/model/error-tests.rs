@@ -114,7 +114,7 @@ fn a_code_outside_the_model_family_phrases_as_its_default_prose() {
 
 #[test]
 fn completion_error_uses_the_message_as_both_texts_and_adds_nothing_else() {
-    let error = completion_error(ErrorCode::Rejected, "the message");
+    let error = make_completion_error(ErrorCode::Rejected, "the message");
     assert_eq!(error.code, ErrorCode::Rejected);
     assert_eq!(error.message, "the message");
     assert_eq!(error.prose, "the message");
@@ -125,7 +125,7 @@ fn completion_error_uses_the_message_as_both_texts_and_adds_nothing_else() {
 
 #[test]
 fn context_overflow_holds_the_counts_it_was_given_as_facts() {
-    let both = context_overflow(Some(10), Some(8), "too big");
+    let both = make_context_overflow_error(Some(10), Some(8), "too big");
     assert_eq!(both.code, ErrorCode::ContextOverflow);
     assert_eq!(
         (both.message.as_str(), both.prose.as_str()),
@@ -134,21 +134,21 @@ fn context_overflow_holds_the_counts_it_was_given_as_facts() {
     assert_eq!(both.facts.get(&ErrorFact::Count), Some(&Value::from(10)));
     assert_eq!(both.facts.get(&ErrorFact::Limit), Some(&Value::from(8)));
 
-    let prompt_only = context_overflow(Some(10), None, "too big");
+    let prompt_only = make_context_overflow_error(Some(10), None, "too big");
     assert_eq!(
         prompt_only.facts.get(&ErrorFact::Count),
         Some(&Value::from(10))
     );
     assert_eq!(prompt_only.facts.get(&ErrorFact::Limit), None);
 
-    let neither = context_overflow(None, None, "too big");
+    let neither = make_context_overflow_error(None, None, "too big");
     assert_eq!(neither.code, ErrorCode::ContextOverflow);
     assert!(neither.facts.is_empty());
 }
 
 #[test]
 fn a_timeout_and_a_transport_failure_keep_their_cause_out_of_the_prose() {
-    let timed_out = completion_error(
+    let timed_out = make_completion_error(
         ErrorCode::Timeout,
         "the model backend did not answer in time",
     )
@@ -163,7 +163,7 @@ fn a_timeout_and_a_transport_failure_keep_their_cause_out_of_the_prose() {
     );
     assert_eq!(timed_out.prose, "the model backend did not answer in time");
 
-    let refused = completion_error(
+    let refused = make_completion_error(
         ErrorCode::Transport,
         "the connection to the model backend failed",
     )
@@ -176,7 +176,7 @@ fn a_timeout_and_a_transport_failure_keep_their_cause_out_of_the_prose() {
 #[test]
 fn a_phrased_failure_shows_only_the_fixed_phrase() {
     for code in ALL_CODES {
-        let error = phrased(code);
+        let error = make_phrased_error(code);
         assert_eq!(error.code, code);
         assert_eq!(error.to_string(), phrase(code));
         assert_eq!(error.prose, phrase(code));
@@ -186,7 +186,7 @@ fn a_phrased_failure_shows_only_the_fixed_phrase() {
 
 #[test]
 fn a_specific_extends_the_phrase_after_a_colon_in_both_texts() {
-    let malformed = specific(ErrorCode::MalformedResponse, "no choices in response");
+    let malformed = make_specific_error(ErrorCode::MalformedResponse, "no choices in response");
     assert_eq!(malformed.code, ErrorCode::MalformedResponse);
     assert_eq!(
         malformed.to_string(),
@@ -194,7 +194,7 @@ fn a_specific_extends_the_phrase_after_a_colon_in_both_texts() {
     );
     assert_eq!(malformed.prose, malformed.message);
 
-    let refused = invalid_parts("tool call id was blank");
+    let refused = make_invalid_parts_error("tool call id was blank");
     assert_eq!(refused.code, ErrorCode::InvalidParts);
     assert_eq!(
         refused.prose,
@@ -207,13 +207,13 @@ fn the_shared_empty_reply_owner_builds_the_phrase_and_the_reasoning_specific() {
     // One owner for the empty-reply text: the bare phrase when the turn
     // carried no reasoning, and the phrase plus the reasoning-ignored
     // specific when one was dropped. The finish reason is the caller's fact.
-    let plain = empty_reply(false);
+    let plain = make_empty_reply_error(false);
     assert_eq!(plain.code, ErrorCode::EmptyReply);
     assert_eq!(plain.to_string(), phrase(ErrorCode::EmptyReply));
     assert_eq!(plain.prose, phrase(ErrorCode::EmptyReply));
     assert_eq!(plain.facts.get(&ErrorFact::FinishReason), None);
 
-    let reasoned = empty_reply(true);
+    let reasoned = make_empty_reply_error(true);
     let expected = format!(
         "{}: reasoning content was present but ignored",
         phrase(ErrorCode::EmptyReply)

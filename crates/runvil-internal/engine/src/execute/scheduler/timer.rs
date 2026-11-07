@@ -75,7 +75,7 @@ impl Scheduler {
     /// suspended block.
     pub(super) fn fire_timer(&mut self, task: &TaskId) -> Result<()> {
         let Some(entry) = self.tasks.complete(task, Ok(String::new())) else {
-            return Err(error::internal("a fired timer has a live entry"));
+            return Err(error::make_internal_error("a fired timer has a live entry"));
         };
         let owner = entry.owner;
         self.wake_waiter(owner, task)

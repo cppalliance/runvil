@@ -44,7 +44,7 @@ impl Chain {
         self.selection
             .lock()
             .map(|selection| selection.clone())
-            .map_err(|_| error::internal("model selection lock was poisoned"))
+            .map_err(|_| error::make_internal_error("model selection lock was poisoned"))
     }
 }
 
@@ -166,7 +166,7 @@ impl Scheduler {
 
     /// Finishes one chain: the frame's teardown boundary when the chain
     /// ends mid-section, the chain-end rules for the tasks it owns (a live
-    /// task makes the outcome `tasks_live` and is abandoned), then the
+    /// task makes the outcome `make_tasks_live_error` and is abandoned), then the
     /// chain-end joins - every owned task's final clock merges into this
     /// chain's own, so a waiting owner sees the whole subtree
     /// transitively - and finally the outcome's delivery: the run's result
@@ -231,7 +231,7 @@ impl Scheduler {
         // The frame drops here: the single teardown boundary.
         drop(entered);
         // The chain's tasks end with it: a live task turns a success into
-        // `tasks_live` and is abandoned.
+        // `make_tasks_live_error` and is abandoned.
         let outcome = self.settle_owned_tasks(id, outcome);
         // The chain-end joins run after the settle - the abandoned tasks'
         // identities ended there, so their final clocks are recorded -
@@ -245,7 +245,7 @@ impl Scheduler {
         // its end, before its owner is woken: the owner's re-acquire and
         // any queued sibling need the freed capacity.
         self.admission.release(id);
-        // A determinism violation is fatal to the run on the spot and
+        // A make_determinism_error violation is fatal to the run on the spot and
         // never resumes into Lua as a catchable member failure: a shim
         // that re-raises it after its own cleanup yields would flatten
         // the typed error, so the outcome ends the run here, exactly as

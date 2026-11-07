@@ -44,7 +44,9 @@ pub(crate) fn harden(lua: &Lua) -> Result<()> {
         "print",
         "warn",
     ] {
-        globals.set(name, Value::Nil).map_err(error::lua)?;
+        globals
+            .set(name, Value::Nil)
+            .map_err(error::make_lua_error)?;
     }
     lua.load(
         r#"
@@ -81,7 +83,7 @@ end
 "#,
     )
     .exec()
-    .map_err(error::lua)?;
+    .map_err(error::make_lua_error)?;
     Ok(())
 }
 
@@ -115,7 +117,7 @@ impl CancelHook {
                 HookTriggers::new().every_nth_instruction(HOOK_INTERVAL),
                 cancel_poll(Arc::clone(&self.cancel)),
             )
-            .map_err(error::lua)
+            .map_err(error::make_lua_error)
     }
 
     /// Installs the run's cancel flag. The first install wins: a VM serves
@@ -169,6 +171,6 @@ pub(crate) fn install_cancel_hook(lua: &Lua) -> Result<CancelHook> {
         HookTriggers::new().every_nth_instruction(HOOK_INTERVAL),
         cancel_poll(Arc::clone(&hook.cancel)),
     )
-    .map_err(error::lua)?;
+    .map_err(error::make_lua_error)?;
     Ok(hook)
 }

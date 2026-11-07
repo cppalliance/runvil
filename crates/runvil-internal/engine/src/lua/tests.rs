@@ -144,7 +144,7 @@ fn set_up_vm(binds: &VmBinds<'_>) -> SectionVm {
     };
     let read = |_: String| -> std::result::Result<Option<SectionText>, crate::Error> { Ok(None) };
     let resolve = |heading: String, _| -> std::result::Result<Library, crate::Error> {
-        Err(crate::error::lua_runtime(format!(
+        Err(crate::error::make_lua_runtime_error(format!(
             "no library `{heading}` in reach"
         )))
     };

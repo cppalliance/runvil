@@ -183,14 +183,14 @@ impl SectionVm<Uninjected> {
             StdLib::STRING | StdLib::TABLE | StdLib::MATH | StdLib::UTF8,
             LuaOptions::default(),
         )
-        .map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
         #[cfg(any(test, feature = "test-support"))]
         crate::test_support::count_live_vm(&lua);
         // Bound the VM heap by default; `apply_lua_limits` may tighten or relax
         // it to the caller's `RunLimits`. The default covers construction
         // and any VM that never applies limits.
         lua.set_memory_limit(DEFAULT_LUA_MEMORY_BYTES)
-            .map_err(error::lua)?;
+            .map_err(error::make_lua_error)?;
         lua.set_app_data(HeapCeiling(DEFAULT_LUA_MEMORY_BYTES));
         let mut vm = Self {
             lua,
@@ -282,7 +282,7 @@ impl SectionVm<Uninjected> {
     pub fn apply_lua_limits(&self, memory_bytes: usize, log_events: u32) -> Result<()> {
         self.lua
             .set_memory_limit(memory_bytes)
-            .map_err(error::lua)?;
+            .map_err(error::make_lua_error)?;
         self.lua.set_app_data(HeapCeiling(memory_bytes));
         self.log_budget.store(log_events, Ordering::Relaxed);
         self.log_byte_budget

@@ -121,7 +121,7 @@ pub(crate) fn install_pack_objects(
     set: &ToolSet,
     adhoc: &AdhocTools,
 ) -> Result<PackNames> {
-    let objects = lua.create_table().map_err(error::lua)?;
+    let objects = lua.create_table().map_err(error::make_lua_error)?;
     let mut names = PackNames {
         all: Vec::new(),
         extras: Vec::new(),
@@ -139,11 +139,13 @@ pub(crate) fn install_pack_objects(
                 required,
                 tools,
             })
-            .map_err(error::lua)?;
-        objects.raw_set(key, object).map_err(error::lua)?;
+            .map_err(error::make_lua_error)?;
+        objects
+            .raw_set(key, object)
+            .map_err(error::make_lua_error)?;
     }
     lua.set_named_registry_value(PACK_OBJECTS_REGISTRY, objects)
-        .map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
     Ok(names)
 }
 
@@ -163,10 +165,10 @@ pub(crate) fn install_pack_list(lua: &Lua, tools: &Table, names: PackNames) -> R
                 other.type_name()
             ))),
         })
-        .map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
     let extras = lua
         .create_function(move |lua, ()| pack_array(lua, &extras))
-        .map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
 
     let indexed = all.clone();
     let index = lua
@@ -178,11 +180,11 @@ pub(crate) fn install_pack_list(lua: &Lua, tools: &Table, names: PackNames) -> R
                 None => Ok(Value::Nil),
             },
         })
-        .map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
     let count = all.len();
     let len = lua
         .create_function(move |_, _: MultiValue| Ok(count))
-        .map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
     let step = lua
         .create_function(move |lua, (_, key): (Value, Value)| {
             let next = match key {
@@ -197,13 +199,13 @@ pub(crate) fn install_pack_list(lua: &Lua, tools: &Table, names: PackNames) -> R
                 None => Ok((Value::Nil, Value::Nil)),
             }
         })
-        .map_err(error::lua)?;
-    let proxy = read_only_walk(lua, index, step, "tools.packs").map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
+    let proxy = read_only_walk(lua, index, step, "tools.packs").map_err(error::make_lua_error)?;
     let meta = proxy
         .metatable()
-        .ok_or_else(|| error::internal("tools.packs was built without a metatable"))?;
-    meta.raw_set("__len", len).map_err(error::lua)?;
-    tools.raw_set("packs", proxy).map_err(error::lua)
+        .ok_or_else(|| error::make_internal_error("tools.packs was built without a metatable"))?;
+    meta.raw_set("__len", len).map_err(error::make_lua_error)?;
+    tools.raw_set("packs", proxy).map_err(error::make_lua_error)
 }
 
 /// The 0-based position an integer key of `tools.packs` names, or `None`

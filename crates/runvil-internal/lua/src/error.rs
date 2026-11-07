@@ -13,7 +13,7 @@ use std::borrow::Cow;
 use std::num::NonZeroU32;
 
 use mlua::Lua;
-use runvil_types::error::{ErrorCode, ErrorFact, SourceLoc, failure, place, with_fact};
+use runvil_types::error::{ErrorCode, ErrorFact, SourceLoc, make_failure_error, place, with_fact};
 use runvil_types::ids::TaskId;
 
 pub(crate) use runvil_types::error::Error;
@@ -56,21 +56,21 @@ struct PromptFile {
 /// phrase, with no `lua error:` label, since a failed run classifies it as
 /// a Lua failure.
 #[must_use]
-pub fn lua_runtime(message: impl Into<String>) -> Error {
-    failure(ErrorCode::LuaRuntime, message)
+pub fn make_lua_runtime_error(message: impl Into<String>) -> Error {
+    make_failure_error(ErrorCode::LuaRuntime, message)
 }
 
 /// `compactors.fail` exhausted the model's context window, with `reason`:
 /// `precheck` or `provider` after an overflow, else the caller's own. The
 /// `Reason` fact is `reason`.
 #[must_use]
-pub fn context_exhausted(reason: &str) -> Error {
+pub fn make_context_exhausted_error(reason: &str) -> Error {
     let text = format!(
         "context exhausted: {}",
         crate::compactors::exhaustion_detail(reason)
     );
     with_fact(
-        failure(ErrorCode::ContextExhausted, text),
+        make_failure_error(ErrorCode::ContextExhausted, text),
         ErrorFact::Reason,
         reason,
     )
@@ -79,13 +79,13 @@ pub fn context_exhausted(reason: &str) -> Error {
 /// An exhausted Lua quota on `resource`, whose tag (`log_event` or
 /// `log_byte`) is the `Reason` fact.
 #[must_use]
-pub fn lua_quota(resource: QuotaResource) -> Error {
+pub fn make_lua_quota_error(resource: QuotaResource) -> Error {
     let tag = match resource {
         QuotaResource::LogEvent => "log_event",
         QuotaResource::LogByte => "log_byte",
     };
     with_fact(
-        failure(
+        make_failure_error(
             ErrorCode::LuaQuota,
             format!("lua {resource} quota exceeded"),
         ),
@@ -98,8 +98,8 @@ pub fn lua_quota(resource: QuotaResource) -> Error {
 /// id that names no task at all is refused the same way, so a caller
 /// learns nothing about tasks it never started.
 #[must_use]
-pub fn task_not_owned(task: &TaskId) -> Error {
-    task_failure(
+pub fn make_task_not_owned_error(task: &TaskId) -> Error {
+    make_task_failure_error(
         ErrorCode::TaskNotOwned,
         format!("task `{task}` is not a task this chain owns"),
         task,
@@ -108,8 +108,8 @@ pub fn task_not_owned(task: &TaskId) -> Error {
 
 /// A wait that named `task`, whose result was already delivered once.
 #[must_use]
-pub fn task_consumed(task: &TaskId) -> Error {
-    task_failure(
+pub fn make_task_consumed_error(task: &TaskId) -> Error {
+    make_task_failure_error(
         ErrorCode::TaskConsumed,
         format!("task `{task}` was already delivered: a task's result is taken by one wait"),
         task,
@@ -119,8 +119,8 @@ pub fn task_consumed(task: &TaskId) -> Error {
 /// The failure a wait delivers for `task`, which its owner canceled
 /// instead of letting it end on its own.
 #[must_use]
-pub fn task_canceled(task: &TaskId) -> Error {
-    task_failure(
+pub fn make_task_canceled_error(task: &TaskId) -> Error {
+    make_task_failure_error(
         ErrorCode::TaskCanceled,
         format!("task `{task}` was canceled"),
         task,
@@ -128,14 +128,18 @@ pub fn task_canceled(task: &TaskId) -> Error {
 }
 
 /// A failure with `code` and `message` about `task`, its `Task` fact.
-fn task_failure(code: ErrorCode, message: String, task: &TaskId) -> Error {
-    with_fact(failure(code, message), ErrorFact::Task, task.to_string())
+fn make_task_failure_error(code: ErrorCode, message: String, task: &TaskId) -> Error {
+    with_fact(
+        make_failure_error(code, message),
+        ErrorFact::Task,
+        task.to_string(),
+    )
 }
 
 /// The tool-call loop ran its iteration cap without a final text reply.
 #[must_use]
-pub fn tool_loop_exhausted() -> Error {
-    failure(
+pub fn make_tool_loop_exhausted_error() -> Error {
+    make_failure_error(
         ErrorCode::ToolLoopExhausted,
         "tool-call loop did not converge",
     )
@@ -146,12 +150,12 @@ pub fn tool_loop_exhausted() -> Error {
 /// than skipped. Its location is that Rust source position, which a failed
 /// run's message ends with. The message is owned when it names a value.
 #[must_use]
-pub fn internal_at(
+pub fn make_internal_at_error(
     message: impl Into<Cow<'static, str>>,
     site: &'static std::panic::Location<'static>,
 ) -> Error {
     let text = format!("internal invariant violated: {}", message.into());
-    let mut error = failure(ErrorCode::Internal, text);
+    let mut error = make_failure_error(ErrorCode::Internal, text);
     error.at = NonZeroU32::new(site.line()).map(|line| SourceLoc::line(site.file(), line));
     error
 }
@@ -160,9 +164,9 @@ pub fn internal_at(
 /// `source_line`, that did not compile, with the compiler's `diagnostic`.
 /// The `Section` fact names the region; the compile path gives it its
 /// location and prose.
-pub(crate) fn lua_compile(region: &str, source_line: u32, diagnostic: &str) -> Error {
+pub(crate) fn make_lua_compile_error(region: &str, source_line: u32, diagnostic: &str) -> Error {
     with_fact(
-        failure(
+        make_failure_error(
             ErrorCode::LuaCompile,
             format!("lua compilation error at {region} (line {source_line}): {diagnostic}"),
         ),
@@ -195,22 +199,22 @@ pub(crate) fn tool(mut error: Error) -> Error {
     clippy::needless_pass_by_value,
     reason = "the adapter every VM call's `map_err` passes its error to"
 )]
-pub(crate) fn lua(source: mlua::Error) -> Error {
-    lua_runtime(source.to_string())
+pub(crate) fn make_lua_error(source: mlua::Error) -> Error {
+    make_lua_runtime_error(source.to_string())
 }
 
 /// An internal invariant failure, at the call site as its construction
 /// site. The message is owned when it names a value.
 #[must_use]
 #[track_caller]
-pub fn internal(message: impl Into<Cow<'static, str>>) -> Error {
-    internal_at(message, std::panic::Location::caller())
+pub fn make_internal_error(message: impl Into<Cow<'static, str>>) -> Error {
+    make_internal_at_error(message, std::panic::Location::caller())
 }
 
 /// An author error raised across the Lua boundary: a `LuaRuntime`
 /// failure with `message`, which `pcall` reports as kind `lua`.
 pub(crate) fn author_refusal(message: String) -> mlua::Error {
-    mlua::Error::external(lua_runtime(message))
+    mlua::Error::external(make_lua_runtime_error(message))
 }
 
 /// Strips `mlua`'s wrapping layers (the callback frame and any context)

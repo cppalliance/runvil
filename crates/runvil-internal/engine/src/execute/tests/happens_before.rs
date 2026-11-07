@@ -1,4 +1,4 @@
-//! The happens-before trace tests: the plan's determinism traces become
+//! The happens-before trace tests: the plan's make_determinism_error traces become
 //! tests, each driven under the serial driver (three answer batchings)
 //! and on the rig with a seeded effect-completion shuffle (one
 //! interleaving per seed), asserting that the store verdicts and contents
@@ -121,7 +121,7 @@ const TRACE_5_PASS: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
 
 /// Trace 5's negative: reading the file of the task the wait did NOT
 /// return. The undelivered sibling is unordered with the caller, so the
-/// read always fails with the fatal determinism violation - in every
+/// read always fails with the fatal make_determinism_error violation - in every
 /// interleaving, whichever arm won.
 const TRACE_5_FAIL: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     # Waits\n\n\
@@ -194,7 +194,7 @@ const TRACE_10_PASS: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     ```\n";
 
 /// Trace 10, the late-member half: reading the late member's file before
-/// a later join delivers it always fails with the fatal determinism
+/// a later join delivers it always fails with the fatal make_determinism_error
 /// violation. The slow arm parks on a model round past the timeout, so
 /// the timeout provably wins in every interleaving.
 const TRACE_10_FAIL: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
@@ -295,7 +295,7 @@ fn ok_text(result: &Result<String, Error>) -> Option<&str> {
     result.as_ref().ok().map(String::as_str)
 }
 
-/// Whether a result is the fatal determinism violation.
+/// Whether a result is the fatal make_determinism_error violation.
 fn is_determinism(result: &Result<String, Error>) -> bool {
     matches!(
         result,
@@ -349,7 +349,7 @@ fn assert_every_interleaving_leaves(
 }
 
 /// Asserts every serial batching and every seeded interleaving of
-/// `scenario` ends as the fatal determinism violation.
+/// `scenario` ends as the fatal make_determinism_error violation.
 #[track_caller]
 fn assert_every_interleaving_conflicts(scenario: impl Fn(&TestStore) -> Scenario) {
     for (batching, result, _) in serial_results(&scenario) {
@@ -423,7 +423,7 @@ fn join_any_joins_the_task_it_returns_and_only_that_task() {
     }
 
     // The fail half: reading the file of the task the wait did NOT
-    // return always ends the run as the fatal determinism violation.
+    // return always ends the run as the fatal make_determinism_error violation.
     assert_every_interleaving_conflicts(|store| trace_scenario(TRACE_5_FAIL, store).chat(&gateway));
 }
 

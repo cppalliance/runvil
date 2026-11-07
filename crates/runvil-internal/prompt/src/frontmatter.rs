@@ -226,7 +226,7 @@ pub(crate) fn split_frontmatter(input: &str) -> Result<SplitSource> {
         Some(l) if l.trim() == "---" => {}
         _ => {
             return Err(error::on_line(
-                error::failure(
+                error::make_failure_error(
                     ErrorCode::FrontmatterInvalid,
                     "file must begin with a --- frontmatter delimiter",
                 ),
@@ -255,7 +255,7 @@ pub(crate) fn split_frontmatter(input: &str) -> Result<SplitSource> {
     }
     if !closed {
         return Err(error::on_line(
-            error::failure(
+            error::make_failure_error(
                 ErrorCode::FrontmatterInvalid,
                 "frontmatter was not closed with ---",
             ),

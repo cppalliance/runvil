@@ -116,13 +116,14 @@ fn open_error(error: libloading::Error) -> io::Error {
 /// is valid only while the returned library stays open. When the symbol is
 /// missing, the library closes before this returns.
 pub(crate) fn open_entry(path: &Path) -> Result<(libloading::Library, PluginEntry), Error> {
-    let library = open_library(path)
-        .map_err(|error| load_error("open", format!("the library could not be opened: {error}")))?;
+    let library = open_library(path).map_err(|error| {
+        make_load_error("open", format!("the library could not be opened: {error}"))
+    })?;
     let entry = {
         // SAFETY: the C contract gives `runvil_plugin` the shape of
         // `PluginEntry`, and `ENTRY_POINT` ends in NUL.
         let symbol = unsafe { library.get::<PluginEntry>(ENTRY_POINT) }.map_err(|error| {
-            load_error(
+            make_load_error(
                 "missing_entry",
                 format!("runvil_plugin is missing: {error}"),
             )
@@ -195,7 +196,7 @@ impl Loaded {
 /// Why one Plugin did not load: a `PluginLoadFailed` error with `message`
 /// and the `Reason` fact `reason`, one of `open`, `missing_entry`,
 /// `refused`, `misuse`, `status`, `undescribed`, or `duplicate`.
-pub(crate) fn load_error(reason: &str, message: String) -> Error {
+pub(crate) fn make_load_error(reason: &str, message: String) -> Error {
     let code = ErrorCode::PluginLoadFailed;
     let mut error = Error::new(code, message, code.prose());
     error.facts.insert(ErrorFact::Reason, reason.into());

@@ -13,7 +13,9 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
 use runvil_model_client::client::{Completion, CompletionResult, Message, ToolCall, ToolSchema};
-use runvil_model_client::model::{CompletionOptions, completion_error, empty_reply, phrase};
+use runvil_model_client::model::{
+    CompletionOptions, make_completion_error, make_empty_reply_error, phrase,
+};
 use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use runvil_types::metrics::CallMetrics;
 use serde_json::Value;
@@ -136,7 +138,7 @@ impl ScriptedReply {
             } => {
                 let reasoning = reasoning.as_deref().filter(|text| !text.trim().is_empty());
                 if content.trim().is_empty() {
-                    let mut error = empty_reply(reasoning.is_some());
+                    let mut error = make_empty_reply_error(reasoning.is_some());
                     if let Some(reason) = finish_reason {
                         error
                             .facts
@@ -169,7 +171,7 @@ impl ScriptedReply {
                 message,
                 detail,
             } => {
-                let mut error = completion_error(*code, message);
+                let mut error = make_completion_error(*code, message);
                 if let Some(detail) = detail {
                     error.message.push_str(": ");
                     error.message.push_str(detail);

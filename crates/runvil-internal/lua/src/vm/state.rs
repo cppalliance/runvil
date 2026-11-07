@@ -14,7 +14,7 @@ use serde_json::Value as Json;
 use super::SectionVm;
 use crate::adhoc::AdhocTools;
 use crate::bindings::{ToolBinding, ToolSet};
-use crate::error::{self, Result, lua_runtime};
+use crate::error::{self, Result, make_lua_runtime_error};
 use crate::models::SELECTION_POISONED;
 use crate::packs::is_adhoc;
 use crate::scope::{OFFERS_POISONED, OfferMode, OfferTarget, OfferedTool, Offers, ToolCallCounts};
@@ -42,13 +42,22 @@ impl SectionVm {
     /// userdata, or thread, or when its value cannot be represented as
     /// JSON.
     pub fn argv_json(&self) -> Result<Option<Json>> {
-        let value: Value = self.lua.globals().get("argv").map_err(error::lua)?;
+        let value: Value = self
+            .lua
+            .globals()
+            .get("argv")
+            .map_err(error::make_lua_error)?;
         match value {
             Value::Nil => Ok(None),
-            Value::Function(_) | Value::UserData(_) | Value::Thread(_) => Err(lua_runtime(
-                format!("argv must be JSON data, got {}", value.type_name()),
+            Value::Function(_) | Value::UserData(_) | Value::Thread(_) => {
+                Err(make_lua_runtime_error(format!(
+                    "argv must be JSON data, got {}",
+                    value.type_name()
+                )))
+            }
+            other => Ok(Some(
+                self.lua.from_value(other).map_err(error::make_lua_error)?,
             )),
-            other => Ok(Some(self.lua.from_value(other).map_err(error::lua)?)),
         }
     }
 
@@ -62,8 +71,11 @@ impl SectionVm {
     /// Returns a `LuaRuntime` failure if the value cannot convert or the global
     /// cannot be set.
     pub fn set_global_json(&self, name: &str, value: &Json) -> Result<()> {
-        let value = self.lua.to_value(value).map_err(error::lua)?;
-        self.lua.globals().raw_set(name, value).map_err(error::lua)
+        let value = self.lua.to_value(value).map_err(error::make_lua_error)?;
+        self.lua
+            .globals()
+            .raw_set(name, value)
+            .map_err(error::make_lua_error)
     }
 
     /// Installs `tools.stats`, the read-only Lua view of a fresh
@@ -116,7 +128,7 @@ impl SectionVm {
             .selection
             .lock()
             .map(|selection| selection.clone())
-            .map_err(|_| error::internal(SELECTION_POISONED))
+            .map_err(|_| error::make_internal_error(SELECTION_POISONED))
     }
 }
 
@@ -211,7 +223,7 @@ fn expanded(
 ) -> Result<Vec<OfferedTool>> {
     let offers = offers
         .lock()
-        .map_err(|_| error::internal(OFFERS_POISONED))?;
+        .map_err(|_| error::make_internal_error(OFFERS_POISONED))?;
     let mut tools = Vec::new();
     let held = offers
         .offers
@@ -225,11 +237,9 @@ fn expanded(
                 } else {
                     set.catalog().get(id).cloned().map(OfferedTool::Catalog)
                 };
-                tools.push(
-                    tool.ok_or_else(|| {
-                        error::internal(format!("offered tool {id} names no tool"))
-                    })?,
-                );
+                tools.push(tool.ok_or_else(|| {
+                    error::make_internal_error(format!("offered tool {id} names no tool"))
+                })?);
             }
             OfferTarget::Pack(pack) if is_adhoc(pack) => {
                 tools.extend(adhoc.bindings()?.into_iter().map(OfferedTool::Adhoc));

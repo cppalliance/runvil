@@ -203,7 +203,7 @@ impl<'a> SectionWalker<'a> {
     fn check_child_level(&self, heading: &Heading<'_>, parent_level: u8) -> Result<()> {
         let level = heading.level;
         if level > parent_level + 1 {
-            return Err(self.structure_failure(
+            return Err(self.make_structure_failure_error(
                 heading,
                 format!(
                     "section `{}` is an orphan H{level} heading with no parent H{}",
@@ -222,7 +222,7 @@ impl<'a> SectionWalker<'a> {
     fn section_name(&self, heading: &Heading<'_>) -> Result<String> {
         let name = heading.title.clone();
         if name.is_empty() {
-            return Err(self.structure_failure(
+            return Err(self.make_structure_failure_error(
                 heading,
                 format!("an H{} section heading must not be empty", heading.level),
             ));
@@ -243,7 +243,7 @@ impl<'a> SectionWalker<'a> {
         heading_abs_line: u32,
     ) -> Result<()> {
         if let Some((_, first_line)) = siblings.iter().find(|(n, _)| n == name) {
-            return Err(self.structure_failure(
+            return Err(self.make_structure_failure_error(
                 heading,
                 format!(
                     "duplicate sibling section name `{name}`: first declared at line {first_line}, again at line {heading_abs_line}; sibling section names must be unique"
@@ -254,8 +254,8 @@ impl<'a> SectionWalker<'a> {
     }
 
     /// Builds a structure failure located at `heading`.
-    fn structure_failure(&self, heading: &Heading<'_>, message: String) -> Error {
-        error::failure_at(
+    fn make_structure_failure_error(&self, heading: &Heading<'_>, message: String) -> Error {
+        error::make_failure_at_error(
             ErrorCode::StructureInvalid,
             message,
             self.shared,
@@ -320,7 +320,7 @@ impl<'a> SectionWalker<'a> {
                         self.emitter,
                         name,
                     )
-                    .map_err(|cause| error::lua(&cause))?;
+                    .map_err(|cause| error::make_lua_error(&cause))?;
                     blocks.push(Block::Lua(program));
                 }
             }
@@ -345,7 +345,8 @@ impl<'a> SectionWalker<'a> {
         });
         if has_no_lua
             && let Some(prose) = prose_for_items
-            && let Some(items) = list::bullet_items(prose, |marker| self.empty_item(marker, name))?
+            && let Some(items) =
+                list::bullet_items(prose, |marker| self.make_empty_item_error(marker, name))?
         {
             items
                 .into_iter()
@@ -359,21 +360,21 @@ impl<'a> SectionWalker<'a> {
     /// Builds the failure for a list item with no content at `marker`, its
     /// marker sliced from `shared`, or with no location when `marker` is not
     /// a slice of it.
-    fn empty_item(&self, marker: &str, name: &str) -> Error {
+    fn make_empty_item_error(&self, marker: &str, name: &str) -> Error {
         let message = format!("empty bullet item in list section `{name}`");
         match marker
             .as_ptr()
             .addr()
             .checked_sub(self.shared.as_ptr().addr())
         {
-            Some(start) => error::failure_at(
+            Some(start) => error::make_failure_at_error(
                 ErrorCode::ListEmptyItem,
                 message,
                 self.shared,
                 start..start + marker.len(),
                 self.frontmatter_lines,
             ),
-            None => error::failure(ErrorCode::ListEmptyItem, message),
+            None => error::make_failure_error(ErrorCode::ListEmptyItem, message),
         }
     }
 

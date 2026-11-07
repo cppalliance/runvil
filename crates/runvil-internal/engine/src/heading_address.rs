@@ -288,7 +288,7 @@ fn parse_heading_address(heading: &str) -> Result<(usize, String)> {
     let stripped = heading.trim();
     let level = stripped.chars().take_while(|&c| c == '#').count();
     if level == 0 {
-        return Err(error::lua_runtime(format!(
+        return Err(error::make_lua_runtime_error(format!(
             "section heading must include ### markers, got bare name: {stripped}"
         )));
     }
@@ -298,12 +298,12 @@ fn parse_heading_address(heading: &str) -> Result<(usize, String)> {
     // no name to parse whether or not whitespace followed the markers.
     let name = rest.trim();
     if name.is_empty() {
-        return Err(error::lua_runtime(format!(
+        return Err(error::make_lua_runtime_error(format!(
             "section heading has no name: {stripped}"
         )));
     }
     if !rest.starts_with(|c: char| c.is_whitespace()) {
-        return Err(error::lua_runtime(format!(
+        return Err(error::make_lua_runtime_error(format!(
             "section heading must have whitespace after the {} markers: {stripped}",
             "#".repeat(level)
         )));
@@ -359,7 +359,7 @@ fn find_one<'a, T>(
     });
     let found = matches.next();
     if found.is_some() && matches.next().is_some() {
-        return Err(error::lua_runtime(format!(
+        return Err(error::make_lua_runtime_error(format!(
             "section heading `{}` is ambiguous; more than one {set} section matches {} {name}",
             heading.trim(),
             "#".repeat(level)
@@ -371,9 +371,9 @@ fn find_one<'a, T>(
 /// The miss error for `heading`, listing `available` in order and nothing
 /// else, so the error channel cannot leak the rest of the document's
 /// structure.
-fn not_found<'a>(heading: &str, available: impl Iterator<Item = &'a Section>) -> Error {
+fn make_not_found_error<'a>(heading: &str, available: impl Iterator<Item = &'a Section>) -> Error {
     let available: Vec<String> = available.map(section_heading).collect();
-    error::lua_runtime(format!(
+    error::make_lua_runtime_error(format!(
         "section heading `{}` not found; available sections: {}",
         heading.trim(),
         available.join(", ")
@@ -385,9 +385,9 @@ fn not_found<'a>(heading: &str, available: impl Iterator<Item = &'a Section>) ->
 ///
 /// # Errors
 /// Returns a `LuaRuntime` failure for every [`find_visible`] error, and, through
-/// [`not_found`], when no visible section matches the exact address.
+/// [`make_not_found_error`], when no visible section matches the exact address.
 pub(crate) fn resolve_visible<'a>(heading: &str, visible: Visible<'a>) -> Result<&'a Section> {
-    find_visible(heading, visible)?.ok_or_else(|| not_found(heading, visible.iter()))
+    find_visible(heading, visible)?.ok_or_else(|| make_not_found_error(heading, visible.iter()))
 }
 
 /// [`find_reachable`] where a heading with no reachable match is an error,
@@ -395,10 +395,10 @@ pub(crate) fn resolve_visible<'a>(heading: &str, visible: Visible<'a>) -> Result
 ///
 /// # Errors
 /// Returns a `LuaRuntime` failure for every [`find_reachable`] error, and, through
-/// [`not_found`], when no reachable section matches the exact address.
+/// [`make_not_found_error`], when no reachable section matches the exact address.
 pub(crate) fn resolve_reachable<'a>(heading: &str, reach: Reachable<'a>) -> Result<Reached<'a>> {
     find_reachable(heading, reach)?
-        .ok_or_else(|| not_found(heading, reach.iter().map(|reached| reached.section)))
+        .ok_or_else(|| make_not_found_error(heading, reach.iter().map(|reached| reached.section)))
 }
 
 #[cfg(test)]

@@ -11,7 +11,7 @@ use runvil_plugin::{Error, ErrorFact, PackRegistry};
 use runvil_plugin_sys::PluginEntry;
 
 use crate::host::send_load;
-use crate::load::{Instance, Loaded, load_error, open_entry, plugin_files};
+use crate::load::{Instance, Loaded, make_load_error, open_entry, plugin_files};
 
 #[cfg(test)]
 #[path = "plugin-tests.rs"]
@@ -54,7 +54,7 @@ pub fn insert_plugin_dir(packs: &mut PackRegistry, directory: &Path) -> io::Resu
                     .iter()
                     .any(|loaded| loaded.name == plugin.name) =>
             {
-                let mut repeat = load_error(
+                let mut repeat = make_load_error(
                     "duplicate",
                     format!(
                         "a Plugin named {} was already loaded from this directory",

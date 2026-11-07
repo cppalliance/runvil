@@ -23,7 +23,7 @@ use runvil::ToolId;
 use runvil::effect::Round;
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
-    completion_error, phrase,
+    make_completion_error, phrase,
 };
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{ServiceKey, TOKIO_RUNTIME};
@@ -65,7 +65,7 @@ impl InferenceBroker for OfflineBroker {
         _round: Round,
     ) -> BoxFuture<Result<Box<Completion>, Error>> {
         let code = ErrorCode::Unavailable;
-        Box::pin(async move { Err(completion_error(code, phrase(code))) })
+        Box::pin(async move { Err(make_completion_error(code, phrase(code))) })
     }
 }
 

@@ -4,7 +4,7 @@
 //! tasks it owns and is resumed with the first member that ends - at once
 //! when one already has, otherwise when a member's chain end delivers it.
 //! Delivery moves a `Done` entry to `Delivered` (its outcome is taken by
-//! exactly one wait; a second wait raises `task_consumed`), and it joins
+//! exactly one wait; a second wait raises `make_task_consumed_error`), and it joins
 //! the task: everything the task did happens before the owner's next
 //! step, so its store writes are visible from the very next operation. A
 //! `Canceled` entry delivers `ok = false` with the `canceled` error

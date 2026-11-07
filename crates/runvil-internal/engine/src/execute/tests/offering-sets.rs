@@ -170,7 +170,7 @@ fn the_scope_gate_says_a_name_exists_only_for_a_catalog_tools_own_wire_name() {
         let error = trace.error();
         if error
             == &placed(
-                crate::error::out_of_scope_tool(name, true, &offered, false),
+                crate::error::make_out_of_scope_tool_error(name, true, &offered, false),
                 14,
             )
         {
@@ -179,7 +179,7 @@ fn the_scope_gate_says_a_name_exists_only_for_a_catalog_tools_own_wire_name() {
             assert_eq!(
                 error,
                 &placed(
-                    crate::error::out_of_scope_tool(name, false, &offered, false),
+                    crate::error::make_out_of_scope_tool_error(name, false, &offered, false),
                     14
                 )
             );

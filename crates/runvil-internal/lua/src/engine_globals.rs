@@ -11,7 +11,7 @@ use mlua::{Lua, LuaSerdeExt, MultiValue, Value};
 use runvil_types::emitter::Emitter;
 use runvil_types::untrusted::GuardNonce;
 
-use crate::error::{self, QuotaResource, Result, lua_quota};
+use crate::error::{self, QuotaResource, Result, make_lua_quota_error};
 
 /// Maximum number of Unicode scalar values accepted by `log`.
 pub(crate) const LUA_LOG_CHARACTER_LIMIT: usize = 256;
@@ -33,7 +33,9 @@ fn log_checkpoint(
         .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
         .is_err()
     {
-        return Err(mlua::Error::external(lua_quota(QuotaResource::LogEvent)));
+        return Err(mlua::Error::external(make_lua_quota_error(
+            QuotaResource::LogEvent,
+        )));
     }
     let Some(Value::String(message)) = arguments.into_iter().next() else {
         return Err(mlua::Error::external("log message must be a UTF-8 string"));
@@ -59,7 +61,9 @@ fn log_checkpoint(
         })
         .is_err()
     {
-        return Err(mlua::Error::external(lua_quota(QuotaResource::LogByte)));
+        return Err(mlua::Error::external(make_lua_quota_error(
+            QuotaResource::LogByte,
+        )));
     }
     emitter.lua(section, &message);
     Ok(())
@@ -82,8 +86,10 @@ pub(crate) fn install_log(
         .create_function(move |_, arguments: MultiValue| {
             log_checkpoint(&emitter, &section, &log_budget, &log_byte_budget, arguments)
         })
-        .map_err(error::lua)?;
-    lua.globals().raw_set("log", log).map_err(error::lua)
+        .map_err(error::make_lua_error)?;
+    lua.globals()
+        .raw_set("log", log)
+        .map_err(error::make_lua_error)
 }
 
 fn is_log_line_break_or_control(character: char) -> bool {
@@ -97,10 +103,10 @@ pub(crate) fn install_untrusted(lua: &Lua, nonce: &GuardNonce) -> Result<()> {
     let nonce = nonce.clone();
     let untrusted = lua
         .create_function(move |_, s: String| Ok(nonce.wrap(&s)))
-        .map_err(error::lua)?;
+        .map_err(error::make_lua_error)?;
     lua.globals()
         .raw_set("untrusted", untrusted)
-        .map_err(error::lua)
+        .map_err(error::make_lua_error)
 }
 
 /// `ui()` snapshot conversion: a JSON null field reads as nil in author
@@ -128,6 +134,8 @@ const UI_SNAPSHOT_OPTIONS: mlua::serde::SerializeOptions = mlua::serde::Serializ
 pub fn install_ui(lua: &Lua, snapshot: Arc<serde_json::Value>) -> Result<()> {
     let snapshot = lua
         .create_function(move |lua, ()| lua.to_value_with(snapshot.as_ref(), UI_SNAPSHOT_OPTIONS))
-        .map_err(error::lua)?;
-    lua.globals().raw_set("ui", snapshot).map_err(error::lua)
+        .map_err(error::make_lua_error)?;
+    lua.globals()
+        .raw_set("ui", snapshot)
+        .map_err(error::make_lua_error)
 }

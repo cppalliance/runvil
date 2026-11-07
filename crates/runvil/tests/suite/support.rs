@@ -9,9 +9,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use runvil::ErrorCode;
 use runvil::model::{
-    CompletionResult, ModelId, ModelInfo, ThinkingMode, ToolCall, completion_error, phrase,
+    CompletionResult, ModelId, ModelInfo, ThinkingMode, ToolCall, make_completion_error, phrase,
 };
-use runvil::{ToolId, ToolInfo, ToolOutput, tool_error};
+use runvil::{ToolId, ToolInfo, ToolOutput, make_tool_error};
 use serde_json::Value;
 
 mod scenario;
@@ -92,7 +92,7 @@ pub(super) fn calls(name: &str, args: Value) -> TestResult<Reply> {
 }
 
 pub(super) fn fail(code: ErrorCode) -> Reply {
-    Reply::Failure(completion_error(code, phrase(code)))
+    Reply::Failure(make_completion_error(code, phrase(code)))
 }
 
 pub(super) fn shout() -> Tool {
@@ -100,7 +100,7 @@ pub(super) fn shout() -> Tool {
         id: "example/text/shout",
         handler: Box::new(|args| match args.get("text").and_then(Value::as_str) {
             Some(text) => Ok(ToolOutput::trusted(text.to_uppercase())),
-            None => Err(tool_error(
+            None => Err(make_tool_error(
                 ErrorCode::ToolOther,
                 format!("shout needs a string `text` argument; got {args}"),
             )),

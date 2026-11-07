@@ -15,7 +15,7 @@ use runvil_plugin_sys::{
     RV_PLUGIN_UNLOAD, RvCall, RvHost, RvLoadArgs, RvPluginInfo, RvStatus, RvStr,
 };
 
-use crate::load::load_error;
+use crate::load::make_load_error;
 
 #[cfg(test)]
 #[path = "host-tests.rs"]
@@ -324,26 +324,26 @@ pub(crate) unsafe fn send_load(
     OPEN.with(|cell| cell.set(outer));
     let session = ctx.take_session();
     if let Some(reason) = session.refusal {
-        return Err(load_error(
+        return Err(make_load_error(
             "refused",
             format!("the Plugin refused: {reason}"),
         ));
     }
     if let Some(reason) = session.misuse {
-        return Err(load_error(
+        return Err(make_load_error(
             "misuse",
             format!("the Plugin misused the load functions: {reason}"),
         ));
     }
     if status != RV_OK {
-        return Err(load_error(
+        return Err(make_load_error(
             "status",
             format!("RV_PLUGIN_LOAD returned status {status}"),
         ));
     }
     match session.described {
         Some(described) => Ok((described, call.plugin, ctx)),
-        None => Err(load_error(
+        None => Err(make_load_error(
             "undescribed",
             "RV_PLUGIN_LOAD returned without describing the Plugin".to_owned(),
         )),

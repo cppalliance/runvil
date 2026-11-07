@@ -225,7 +225,7 @@ impl Scheduler {
     fn run_scope(&self) -> Result<&ScopeHandle> {
         self.scope
             .as_ref()
-            .ok_or(error::internal("the run holds no scope handle"))
+            .ok_or(error::make_internal_error("the run holds no scope handle"))
     }
 
     /// The prompt's shared handle: a chain resolves its walk position

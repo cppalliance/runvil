@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use runvil_plugin::{
     Error, ErrorCode, HostServices, Pack, PackFuture, PackId, ToolContext, ToolId, ToolInfo,
-    ToolOutput, tool_error,
+    ToolOutput, make_tool_error,
 };
 use serde_json::{Value, json};
 
@@ -28,13 +28,13 @@ pub(crate) fn construct(
     _services: &HostServices,
 ) -> Result<Arc<dyn Pack>, Error> {
     if !(config.is_null() || config == json!({})) {
-        return Err(tool_error(
+        return Err(make_tool_error(
             ErrorCode::ToolOther,
             "user-input takes no configuration",
         ));
     }
     let id = ToolId::parse(&format!("{name}/{ASK}")).map_err(|e| {
-        tool_error(
+        make_tool_error(
             ErrorCode::ToolBackend,
             "user-input could not name its ask tool",
         )
@@ -63,7 +63,7 @@ impl Pack for UserInput {
             // The Pack's needs keep a run without a broker from seeing
             // the ask tool, so this branch is defensive.
             let broker = cx.service(&INPUT_BROKER).ok_or_else(|| {
-                tool_error(ErrorCode::ToolOther, "no operator is connected to this run")
+                make_tool_error(ErrorCode::ToolOther, "no operator is connected to this run")
             })?;
             broker.wait().await.map(ToolOutput::trusted)
         })

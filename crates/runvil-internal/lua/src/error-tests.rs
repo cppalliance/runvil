@@ -16,15 +16,16 @@ use std::sync::Arc;
 use mlua::{Function, Lua};
 use runvil_types::error::{Error, ErrorCode, ErrorFact, SourceLoc, place};
 use runvil_types::ids::TaskId;
-use runvil_types::tools::tool_error;
+use runvil_types::tools::make_tool_error;
 use runvil_vfs::VfsError;
 use serde_json::Value;
 
 use super::{
-    QuotaResource, author_line, author_refusal, authored, authored_at, call_line,
-    context_exhausted, failure_text, internal, internal_at, lua, lua_compile, lua_quota,
-    lua_runtime, prompt_file, set_call_line, set_prompt_file, task_canceled, task_consumed,
-    task_not_owned, tool, tool_loop_exhausted,
+    QuotaResource, author_line, author_refusal, authored, authored_at, call_line, failure_text,
+    make_context_exhausted_error, make_internal_at_error, make_internal_error,
+    make_lua_compile_error, make_lua_error, make_lua_quota_error, make_lua_runtime_error,
+    make_task_canceled_error, make_task_consumed_error, make_task_not_owned_error,
+    make_tool_loop_exhausted_error, prompt_file, set_call_line, set_prompt_file, tool,
 };
 use crate::error_value::{ErrorField, ErrorKind, error_fields, error_kind};
 
@@ -45,15 +46,15 @@ fn task(path: &str) -> TaskId {
 
 #[test]
 fn an_mlua_failure_is_a_lua_runtime_failure_with_its_text() {
-    let error = lua(mlua::Error::RuntimeError("boom".to_owned()));
-    assert_eq!(error, lua_runtime("runtime error: boom"));
+    let error = make_lua_error(mlua::Error::RuntimeError("boom".to_owned()));
+    assert_eq!(error, make_lua_runtime_error("runtime error: boom"));
     assert_eq!(error.prose, ErrorCode::LuaRuntime.prose());
 }
 
 #[test]
 fn a_refusal_crosses_the_mlua_boundary_as_its_typed_failure() {
     let raised = author_refusal("a refused edit".to_owned());
-    let expected = lua_runtime("a refused edit");
+    let expected = make_lua_runtime_error("a refused edit");
     assert_eq!(raised.downcast_ref::<Error>(), Some(&expected));
     let framed = mlua::Error::CallbackError {
         traceback: "stack traceback:".to_owned(),
@@ -68,7 +69,7 @@ fn a_refusal_crosses_the_mlua_boundary_as_its_typed_failure() {
 
 #[test]
 fn a_tool_failure_keeps_the_tools_error_under_a_message_that_names_the_call() {
-    let mut failure = tool_error(ErrorCode::ToolBackend, "the backend refused");
+    let mut failure = make_tool_error(ErrorCode::ToolBackend, "the backend refused");
     failure.facts.insert(ErrorFact::Path, Value::from("a.md"));
     let error = tool(failure.clone());
     assert_eq!(error.code, ErrorCode::ToolBackend);
@@ -84,7 +85,7 @@ fn a_tool_failure_keeps_the_tools_error_under_a_message_that_names_the_call() {
 
 #[test]
 fn a_tool_failure_outside_the_tool_codes_is_tool_other() {
-    let foreign = crate::store_error(&VfsError::NotFound {
+    let foreign = crate::make_store_error(&VfsError::NotFound {
         path: "a.md".to_owned(),
     });
     assert_eq!(tool(foreign).code, ErrorCode::ToolOther);
@@ -93,7 +94,7 @@ fn a_tool_failure_outside_the_tool_codes_is_tool_other() {
 #[test]
 fn author_prose_names_what_failed_and_the_line_becomes_the_location() {
     let located = authored_at(
-        lua_runtime("the message"),
+        make_lua_runtime_error("the message"),
         "agents/a.md",
         Some(line(12)),
         "boom",
@@ -104,7 +105,12 @@ fn author_prose_names_what_failed_and_the_line_becomes_the_location() {
     );
     assert_eq!(located.at, Some(SourceLoc::line("agents/a.md", line(12))));
     assert_eq!(located.message, "the message");
-    let unlocated = authored_at(lua_runtime("the message"), "agents/a.md", None, "boom");
+    let unlocated = authored_at(
+        make_lua_runtime_error("the message"),
+        "agents/a.md",
+        None,
+        "boom",
+    );
     assert_eq!(
         unlocated.prose, located.prose,
         "the prose never names a place"
@@ -195,7 +201,7 @@ fn a_failure_crossing_into_lua_is_placed_and_gets_author_prose_when_the_prompts_
     set_prompt_file(&lua, "agents/a.md");
     set_call_line(&lua, Some(line(9)));
     let call = Some(SourceLoc::line("agents/a.md", line(9)));
-    let refusal = authored(&lua, lua_runtime("messages must not be empty"));
+    let refusal = authored(&lua, make_lua_runtime_error("messages must not be empty"));
     assert_eq!(
         refusal.prose,
         format!(
@@ -210,20 +216,20 @@ fn a_failure_crossing_into_lua_is_placed_and_gets_author_prose_when_the_prompts_
     assert_eq!(refusal.message, "messages must not be empty");
     let task: TaskId = "0.1".parse().expect("the test task id parses");
     assert_eq!(
-        authored(&lua, task_not_owned(&task)).prose,
+        authored(&lua, make_task_not_owned_error(&task)).prose,
         format!(
             "task `0.1` is not a task this chain owns. {}",
             ErrorCode::TaskNotOwned.prose()
         )
     );
-    let exhausted = authored(&lua, tool_loop_exhausted());
+    let exhausted = authored(&lua, make_tool_loop_exhausted_error());
     assert_eq!(
         exhausted.prose,
-        tool_loop_exhausted().prose,
+        make_tool_loop_exhausted_error().prose,
         "a tool failure keeps its remedy prose"
     );
     assert_eq!(exhausted.at, call, "and is placed all the same");
-    let fault = internal("a test invariant broke");
+    let fault = make_internal_error("a test invariant broke");
     assert_eq!(
         authored(&lua, fault.clone()),
         fault,
@@ -237,7 +243,7 @@ fn an_authored_failure_placed_before_it_crosses_keeps_its_place_and_gets_author_
     let lua = Lua::new();
     set_prompt_file(&lua, "agents/a.md");
     set_call_line(&lua, Some(line(9)));
-    let placed = place(lua_runtime("boom"), "agents/a.md", Some(line(4)));
+    let placed = place(make_lua_runtime_error("boom"), "agents/a.md", Some(line(4)));
     assert_eq!(placed.prose, ErrorCode::LuaRuntime.prose());
     let crossed = authored(&lua, placed);
     assert_eq!(
@@ -262,7 +268,7 @@ fn a_failure_crossing_inside_a_callback_is_placed_on_the_author_frames_line() {
     set_call_line(&lua, Some(line(9)));
     let cross = lua
         .create_function(|lua, ()| {
-            Ok(authored(lua, lua_runtime("boom"))
+            Ok(authored(lua, make_lua_runtime_error("boom"))
                 .at
                 .map(|at| at.start_line.get()))
         })
@@ -284,7 +290,7 @@ fn a_failure_crossing_inside_a_callback_is_placed_on_the_author_frames_line() {
 
 #[test]
 fn a_lua_message_is_a_lua_runtime_failure_with_the_default_prose() {
-    let error = lua_runtime("a refused edit");
+    let error = make_lua_runtime_error("a refused edit");
     assert_eq!(error.code, ErrorCode::LuaRuntime);
     assert_eq!(error.message, "a refused edit");
     assert_eq!(error.prose, ErrorCode::LuaRuntime.prose());
@@ -294,7 +300,7 @@ fn a_lua_message_is_a_lua_runtime_failure_with_the_default_prose() {
 #[test]
 fn a_compile_failure_names_its_region_as_its_section() {
     let region = "section `S` prologue";
-    let error = lua_compile(region, 7, "syntax error near '='");
+    let error = make_lua_compile_error(region, 7, "syntax error near '='");
     assert_eq!(error.code, ErrorCode::LuaCompile);
     assert_eq!(
         error.message,
@@ -324,16 +330,16 @@ fn the_typed_failures_keep_their_text_and_name_their_facts() {
             "log_byte",
         ),
     ] {
-        let quota = lua_quota(resource);
+        let quota = make_lua_quota_error(resource);
         assert_eq!(quota.message, text);
         assert_eq!(quota.facts.get(&ErrorFact::Reason), Some(&Value::from(tag)));
         assert_eq!(error_kind(&quota), ErrorKind::Lua);
     }
-    let exhausted = context_exhausted("manual");
+    let exhausted = make_context_exhausted_error("manual");
     assert_eq!(exhausted.message, "context exhausted: manual");
     assert_eq!(error_fields(&exhausted), vec![string("reason", "manual")]);
     assert_eq!(
-        tool_loop_exhausted().message,
+        make_tool_loop_exhausted_error().message,
         "tool-call loop did not converge"
     );
 }
@@ -341,9 +347,15 @@ fn the_typed_failures_keep_their_text_and_name_their_facts() {
 #[test]
 fn a_task_failure_names_its_task() {
     for (error, kind) in [
-        (task_not_owned(&task("0.1")), ErrorKind::TaskNotOwned),
-        (task_consumed(&task("0.1")), ErrorKind::TaskConsumed),
-        (task_canceled(&task("0.1")), ErrorKind::Canceled),
+        (
+            make_task_not_owned_error(&task("0.1")),
+            ErrorKind::TaskNotOwned,
+        ),
+        (
+            make_task_consumed_error(&task("0.1")),
+            ErrorKind::TaskConsumed,
+        ),
+        (make_task_canceled_error(&task("0.1")), ErrorKind::Canceled),
     ] {
         assert_eq!(error.facts.get(&ErrorFact::Task), Some(&Value::from("0.1")));
         assert_eq!(
@@ -353,7 +365,7 @@ fn a_task_failure_names_its_task() {
         );
     }
     assert_eq!(
-        task_canceled(&task("0.1")).message,
+        make_task_canceled_error(&task("0.1")).message,
         "task `0.1` was canceled"
     );
 }
@@ -362,7 +374,7 @@ fn a_task_failure_names_its_task() {
 fn an_internal_fault_keeps_its_message_whole_and_its_site() {
     let message = format!("tool call counts: id {:?} could not be read", "web/fetch");
     let site = std::panic::Location::caller();
-    let error = internal_at(Cow::Owned(message.clone()), site);
+    let error = make_internal_at_error(Cow::Owned(message.clone()), site);
     assert_eq!(error.code, ErrorCode::Internal);
     assert_eq!(
         error.message,

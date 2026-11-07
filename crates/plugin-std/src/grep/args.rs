@@ -6,7 +6,9 @@ use runvil_plugin::Error;
 use serde_json::Value;
 
 use super::types;
-use crate::check::{invalid_arguments, invalid_pattern, refuse_blank, refuse_unknown};
+use crate::check::{
+    make_invalid_arguments_error, make_invalid_pattern_error, refuse_blank, refuse_unknown,
+};
 use crate::matcher::Matcher;
 use crate::spec::Definition;
 
@@ -76,7 +78,7 @@ pub(super) fn parse<'a>(definition: &Definition, args: &'a Value) -> Result<Requ
         .and_then(Value::as_str)
         .unwrap_or_default();
     if pattern.is_empty() {
-        return Err(invalid_arguments(
+        return Err(make_invalid_arguments_error(
             tool,
             "`pattern` is empty. Pass \".\" to match every line.",
         ));
@@ -119,7 +121,7 @@ pub(super) fn parse<'a>(definition: &Definition, args: &'a Value) -> Result<Requ
 fn refuse_line_numbers_off(tool: &str, args: &Value) -> Result<(), Error> {
     match args.get(ACCEPTED_UNDECLARED) {
         None | Some(Value::Null | Value::Bool(true)) => Ok(()),
-        Some(_) => Err(invalid_arguments(
+        Some(_) => Err(make_invalid_arguments_error(
             tool,
             "`-n` must be true or left out, because line numbers are always shown.",
         )),
@@ -144,7 +146,7 @@ fn number(tool: &str, args: &Value, name: &str, unit: &str) -> Result<Option<f64
         } else {
             format!("Pass 0 or more {unit}.")
         };
-        return Err(invalid_arguments(
+        return Err(make_invalid_arguments_error(
             tool,
             format!("`{name}` is {value}. {ask}"),
         ));
@@ -171,7 +173,7 @@ fn kind(tool: &str, args: &Value) -> Result<Option<&'static [&'static str]>, Err
         return Ok(None);
     };
     types::extensions(name).map(Some).ok_or_else(|| {
-        invalid_arguments(
+        make_invalid_arguments_error(
             tool,
             format!(
                 "Unrecognized file type \"{name}\". Use a type such as js, ts, py, rust, go or \
@@ -188,7 +190,7 @@ fn glob<'a>(tool: &str, args: &'a Value) -> Result<Option<(&'a str, Matcher)>, E
     };
     Matcher::new(pattern)
         .map(|matcher| Some((pattern, matcher)))
-        .map_err(|error| invalid_pattern(tool, "glob", pattern, error))
+        .map_err(|error| make_invalid_pattern_error(tool, "glob", pattern, error))
 }
 
 /// The `path` the call names, or `None` when it names none, refused when
@@ -247,7 +249,7 @@ fn compile(tool: &str, pattern: &str, args: &Value, multiline: bool) -> Result<R
             let reason = message
                 .rsplit_once("error: ")
                 .map_or(message.trim(), |(_, reason)| reason.trim());
-            invalid_arguments(
+            make_invalid_arguments_error(
                 tool,
                 format!(
                     "Invalid regular expression \"{pattern}\": {reason}. Grep matches with Rust \

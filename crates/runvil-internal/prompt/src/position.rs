@@ -16,7 +16,7 @@ use crate::{BodyText, Result, error};
 /// Returns an `Internal` failure when `line` is zero.
 pub(crate) fn nz_source_line(line: u32) -> Result<NonZeroU32> {
     NonZeroU32::new(line)
-        .ok_or_else(|| error::internal("parser: computed 1-based source line was zero"))
+        .ok_or_else(|| error::make_internal_error("parser: computed 1-based source line was zero"))
 }
 
 /// Adds two line components, at most one of them 1-based, with overflow
@@ -27,7 +27,7 @@ pub(crate) fn nz_source_line(line: u32) -> Result<NonZeroU32> {
 /// saturating and hiding a broken position.
 pub(crate) fn line_add(a: u32, b: u32) -> Result<u32> {
     a.checked_add(b)
-        .ok_or_else(|| error::internal("parser: source line arithmetic overflowed"))
+        .ok_or_else(|| error::make_internal_error("parser: source line arithmetic overflowed"))
 }
 
 /// Locates `part` inside `shared`, the text it was sliced from.
@@ -35,8 +35,9 @@ pub(crate) fn line_add(a: u32, b: u32) -> Result<u32> {
 /// # Errors
 /// Returns an `Internal` failure when `part` is not a slice of `shared`.
 pub(crate) fn body_text(shared: &Arc<str>, part: &str) -> Result<BodyText> {
-    BodyText::within(shared, part)
-        .ok_or_else(|| error::internal("parser: section text is not a slice of the prompt body"))
+    BodyText::within(shared, part).ok_or_else(|| {
+        error::make_internal_error("parser: section text is not a slice of the prompt body")
+    })
 }
 
 /// The 1-based file line that `part`, a slice of `body`, starts on, for a
@@ -50,7 +51,9 @@ pub(crate) fn file_line_of(body: &str, part: &str, frontmatter_lines: u32) -> Re
         .as_ptr()
         .addr()
         .checked_sub(body.as_ptr().addr())
-        .ok_or_else(|| error::internal("parser: section text is not a slice of the prompt body"))?;
+        .ok_or_else(|| {
+            error::make_internal_error("parser: section text is not a slice of the prompt body")
+        })?;
     nz_source_line(line_add(
         line_add(frontmatter_lines, newlines_before(body, start)?)?,
         1,
@@ -65,9 +68,9 @@ pub(crate) fn file_line_of(body: &str, part: &str, frontmatter_lines: u32) -> Re
 pub(crate) fn newlines_before(text: &str, byte_offset: usize) -> Result<u32> {
     let prefix = text
         .get(..byte_offset)
-        .ok_or_else(|| error::internal("parser: source byte offset invariant broken"))?;
+        .ok_or_else(|| error::make_internal_error("parser: source byte offset invariant broken"))?;
     u32::try_from(prefix.matches('\n').count())
-        .map_err(|_| error::internal("parser: newline count exceeded u32 range"))
+        .map_err(|_| error::make_internal_error("parser: newline count exceeded u32 range"))
 }
 
 #[cfg(test)]

@@ -75,7 +75,7 @@ fn settle_block(
                     .at
                     .as_ref()
                     .map_or((file, block_line), |at| (at.file.as_str(), at.start_line));
-                let refusal = error::requirements_unmet(&notice, Some(&error));
+                let refusal = error::make_requirements_unmet_error(&notice, Some(&error));
                 return Err(place(refusal, file, Some(line)));
             }
             return Err(error);
@@ -153,14 +153,16 @@ impl Scheduler {
                 answer: Some(answer),
             } = running
             else {
-                return Err(error::internal(
+                return Err(error::make_internal_error(
                     "a ready chain's suspended coroutine waits on its answer",
                 ));
             };
             // The answer ends whatever the chain was parked on.
             chain.parked = None;
             let Some(Block::Lua(program)) = entered.block_in(blocks) else {
-                return Err(error::internal("a suspended coroutine's block is Lua"));
+                return Err(error::make_internal_error(
+                    "a suspended coroutine's block is Lua",
+                ));
             };
             let result = entered
                 .frame
@@ -201,7 +203,9 @@ impl Scheduler {
                 // `Block` is `#[non_exhaustive]` across the crate seam; an
                 // unlisted variant has no advance rule.
                 Some(_) => {
-                    return Err(error::internal("an unrecognized block kind cannot advance"));
+                    return Err(error::make_internal_error(
+                        "an unrecognized block kind cannot advance",
+                    ));
                 }
                 // The section's blocks are exhausted: fall through.
                 None if is_h1 => {

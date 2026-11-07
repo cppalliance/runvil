@@ -99,7 +99,7 @@ impl ChainOps<'_> {
     ) -> Result<Dispatched> {
         let messages = list.to_records();
         if messages.is_empty() {
-            return Err(error::lua_runtime("messages must not be empty"));
+            return Err(error::make_lua_runtime_error("messages must not be empty"));
         }
         let chain = &*self.chain;
         let section = chain.section_name().to_owned();
@@ -109,7 +109,7 @@ impl ChainOps<'_> {
             binding
         } else {
             let current = vm.current_model()?;
-            current.ok_or_else(|| error::model_required(&section))?
+            current.ok_or_else(|| error::make_model_required_error(&section))?
         };
         let handles = frame.reporting_handles().clone();
         let emitter = handles.emitter;
@@ -277,7 +277,9 @@ impl ChainOps<'_> {
                 // out-of-scope refusal.
                 let vm = chain.frame()?.vm();
                 let frozen = vm.messages().rendered_tools().ok_or_else(|| {
-                    error::internal("a parked chat round's section holds its frozen sets")
+                    error::make_internal_error(
+                        "a parked chat round's section holds its frozen sets",
+                    )
                 })?;
                 let scope = Scope {
                     frozen: &frozen,
@@ -288,7 +290,9 @@ impl ChainOps<'_> {
             // `CompletionResult` is `#[non_exhaustive]` across the crate
             // boundary: an outcome this build does not recognize can be
             // neither resumed nor promoted to an answer.
-            _ => Err(error::internal("unrecognized completion outcome")),
+            _ => Err(error::make_internal_error(
+                "unrecognized completion outcome",
+            )),
         };
         let usage = served
             .metrics
@@ -444,7 +448,7 @@ impl ArrivedRound {
                 .iter()
                 .map(|binding| binding.alias().to_owned())
                 .collect();
-            return Err(error::out_of_scope_tool(
+            return Err(error::make_out_of_scope_tool_error(
                 rogue.name(),
                 scope.global_exists(rogue.name()),
                 &static_aliases,

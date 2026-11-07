@@ -23,7 +23,7 @@ use tasks::{
 };
 use tools::{parse_adhoc_tool_done, parse_tool_call, parse_tool_calls};
 
-use crate::error::{self, Error, lua_runtime};
+use crate::error::{self, Error, make_lua_runtime_error};
 use crate::models::LuaModelHandle;
 use crate::section::resolve_section_target;
 
@@ -38,8 +38,8 @@ use super::request::Request;
 const DIRECT_YIELD: &str = "scripts may not yield directly";
 
 /// The fixed direct-yield failure.
-fn direct_yield_error() -> Error {
-    lua_runtime(DIRECT_YIELD)
+fn make_direct_yield_error() -> Error {
+    make_lua_runtime_error(DIRECT_YIELD)
 }
 
 /// How reading one request field failed.
@@ -55,7 +55,7 @@ enum FieldFailure {
 
 /// Frames one author-argument failure as the call's error.
 fn call_error(message: String) -> FieldFailure {
-    FieldFailure::Argument(lua_runtime(message))
+    FieldFailure::Argument(make_lua_runtime_error(message))
 }
 
 /// Reads one author-supplied string value as UTF-8 text; invalid UTF-8 is
@@ -147,9 +147,8 @@ fn shim_var(
 /// target fails as `resolve_section_target` fails.
 fn call_target(table: &mlua::Table) -> std::result::Result<String, FieldFailure> {
     match table.raw_get::<Value>("target") {
-        Ok(value) => {
-            resolve_section_target(value).map_err(|error| FieldFailure::Argument(error::lua(error)))
-        }
+        Ok(value) => resolve_section_target(value)
+            .map_err(|error| FieldFailure::Argument(error::make_lua_error(error))),
         Err(_) => Err(FieldFailure::Malformed),
     }
 }
@@ -183,14 +182,14 @@ impl Request {
     /// fails as `resolve_section_target` fails.
     pub fn from_yield(lua: &Lua, yielded: &Value) -> YieldParse {
         let Value::Table(table) = yielded else {
-            return YieldParse::Malformed(direct_yield_error());
+            return YieldParse::Malformed(make_direct_yield_error());
         };
         let op = match table.raw_get::<Value>("op") {
             Ok(Value::String(op)) => match op.to_str() {
                 Ok(op) => op.to_owned(),
-                Err(_) => return YieldParse::Malformed(direct_yield_error()),
+                Err(_) => return YieldParse::Malformed(make_direct_yield_error()),
             },
-            _ => return YieldParse::Malformed(direct_yield_error()),
+            _ => return YieldParse::Malformed(make_direct_yield_error()),
         };
         match op.as_str() {
             "infer" => classify(parse_infer(table)),
@@ -208,11 +207,11 @@ impl Request {
             "tool_calls" => classify(parse_tool_calls(lua, table)),
             "adhoc_tool_done" => match parse_adhoc_tool_done(table) {
                 Some(request) => YieldParse::Request(request),
-                None => YieldParse::Malformed(direct_yield_error()),
+                None => YieldParse::Malformed(make_direct_yield_error()),
             },
             "chat" => classify(parse_chat(table)),
             "store" => classify(parse_store(table)),
-            _ => YieldParse::Malformed(direct_yield_error()),
+            _ => YieldParse::Malformed(make_direct_yield_error()),
         }
     }
 }
@@ -223,7 +222,7 @@ fn classify(parsed: std::result::Result<Request, FieldFailure>) -> YieldParse {
     match parsed {
         Ok(request) => YieldParse::Request(request),
         Err(FieldFailure::Argument(error)) => YieldParse::Refused(error),
-        Err(FieldFailure::Malformed) => YieldParse::Malformed(direct_yield_error()),
+        Err(FieldFailure::Malformed) => YieldParse::Malformed(make_direct_yield_error()),
     }
 }
 

@@ -223,7 +223,7 @@ fn arms_requiring_a_seeder(seeder: &str) -> String {
 
 /// A library's top-level write runs under each requiring arm's own
 /// identity: the second arm's load meets the first's standing write
-/// claim and the run ends with a determinism violation.
+/// claim and the run ends with a make_determinism_error violation.
 #[test]
 fn a_library_write_across_two_arms_ends_the_run_with_determinism() {
     let source = arms_requiring_a_seeder("store.write('seeded.txt', 'seed')");
@@ -236,7 +236,7 @@ fn a_library_write_across_two_arms_ends_the_run_with_determinism() {
 }
 
 /// A conflict a library caught with its own `pcall` while loading still
-/// ends the run with a determinism violation.
+/// ends the run with a make_determinism_error violation.
 #[test]
 fn a_library_conflict_caught_with_pcall_still_ends_the_run_with_determinism() {
     let source = arms_requiring_a_seeder(
@@ -260,7 +260,7 @@ const CAPTURED_STORE_WRITE: &str = "
 
 /// A store function a library captured at load time yields like
 /// `store.*` when called after the load, so two arms racing on one path
-/// through it end the run with a determinism violation even though each
+/// through it end the run with a make_determinism_error violation even though each
 /// arm caught its own failure.
 #[test]
 fn a_captured_store_function_conflict_caught_with_pcall_still_ends_the_run_with_determinism() {

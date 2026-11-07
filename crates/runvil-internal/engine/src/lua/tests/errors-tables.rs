@@ -54,13 +54,16 @@ fn at_call(text: &str) -> String {
 #[test]
 fn an_engine_failure_answered_through_the_envelope_is_the_table_its_code_names() {
     assert_eq!(
-        caught_engine_failure(crate::error::task_canceled(&task("0.1")), &["code", "task"]),
+        caught_engine_failure(
+            crate::error::make_task_canceled_error(&task("0.1")),
+            &["code", "task"]
+        ),
         format!(
             "canceled|task_canceled|0.1|{}",
             at_call(ErrorCode::TaskCanceled.prose())
         )
     );
-    let leaked = crate::error::tasks_live(&[task("0.1"), task("0.2")]);
+    let leaked = crate::error::make_tasks_live_error(&[task("0.1"), task("0.2")]);
     let leaked_prose = format!("{}. {}", leaked.message, ErrorCode::TasksLive.prose());
     assert_eq!(
         caught_engine_failure(leaked, &["code", "tasks"]),
@@ -69,7 +72,7 @@ fn an_engine_failure_answered_through_the_envelope_is_the_table_its_code_names()
     );
     assert_eq!(
         caught_engine_failure(
-            crate::error::context_exhausted("precheck"),
+            crate::error::make_context_exhausted_error("precheck"),
             &["code", "reason"]
         ),
         format!(
@@ -89,7 +92,7 @@ fn an_engine_failure_answered_through_the_envelope_is_the_table_its_code_names()
     };
     assert_eq!(
         caught_engine_failure(
-            crate::error::store_op(&op, &anchor),
+            crate::error::make_store_op_error(&op, &anchor),
             &["code", "reason", "path", "anchor", "count", "rule"]
         ),
         format!(
@@ -98,7 +101,7 @@ fn an_engine_failure_answered_through_the_envelope_is_the_table_its_code_names()
         ),
         "a store answer keeps its remedy prose"
     );
-    let mut empty = crate::model::completion_error(
+    let mut empty = crate::model::make_completion_error(
         ErrorCode::EmptyReply,
         "the model replied with no text and no tool calls",
     )

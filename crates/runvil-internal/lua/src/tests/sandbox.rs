@@ -72,7 +72,7 @@ fn an_installed_require_is_runvils_and_loads_no_module() {
     let vm = TestVm::new().shims().build();
     vm.install_require(
         |heading, _| {
-            Err::<Library, _>(crate::lua_runtime(format!(
+            Err::<Library, _>(crate::make_lua_runtime_error(format!(
                 "no section `{heading}` within reach of require"
             )))
         },

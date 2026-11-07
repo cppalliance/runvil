@@ -6,7 +6,7 @@ use std::num::NonZeroU32;
 
 use mlua::{MultiValue, Value};
 
-use crate::error::{Result, lua_runtime};
+use crate::error::{Result, make_lua_runtime_error};
 
 /// Outcome of a Lua block that may invoke `jump`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,7 +27,7 @@ fn value_to_string(value: &Value) -> Result<String> {
         Value::Integer(i) => Ok(i.to_string()),
         Value::Number(n) => Ok(n.to_string()),
         Value::Boolean(b) => Ok(b.to_string()),
-        other => Err(lua_runtime(format!(
+        other => Err(make_lua_runtime_error(format!(
             "cannot return a {} as a result",
             other.type_name()
         ))),

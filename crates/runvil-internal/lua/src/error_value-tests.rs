@@ -9,8 +9,8 @@ use runvil_types::error::{Error, ErrorCode, ErrorFact, place};
 use runvil_vfs::{PathReason, VfsError};
 use serde_json::Value;
 
-use super::{ErrorKind, error_table, store_error, store_error_value_fields};
-use crate::error::{internal, lua_runtime};
+use super::{ErrorKind, error_table, make_store_error, store_error_value_fields};
+use crate::error::{make_internal_error, make_lua_runtime_error};
 
 #[path = "error_value-tests-raised.rs"]
 mod raised;
@@ -27,14 +27,14 @@ fn a_tables_message_puts_a_prompt_location_and_never_a_rust_one_before_the_prose
             .raw_get("message")
             .expect("the message reads")
     };
-    let unlocated = lua_runtime("boom");
+    let unlocated = make_lua_runtime_error("boom");
     assert_eq!(message(&unlocated), unlocated.prose);
     let located = place(unlocated.clone(), "agents/a.md", NonZeroU32::new(7));
     assert_eq!(
         message(&located),
         format!("agents/a.md:7: {}", located.prose)
     );
-    let fault = internal("a test invariant broke");
+    let fault = make_internal_error("a test invariant broke");
     assert!(fault.at.is_some(), "an internal failure is located in Rust");
     assert_eq!(
         message(&fault),
@@ -192,7 +192,7 @@ fn every_store_failure() -> Vec<(VfsError, ErrorCode)> {
 #[test]
 fn a_store_failure_takes_the_code_named_after_its_variant() {
     for (error, code) in every_store_failure() {
-        let converted = store_error(&error);
+        let converted = make_store_error(&error);
         assert_eq!(converted.code, code, "{error:?}");
         assert_eq!(converted.message, error.to_string(), "{error:?}");
         assert_eq!(converted.prose, code.prose(), "{error:?}");
@@ -202,7 +202,7 @@ fn a_store_failure_takes_the_code_named_after_its_variant() {
 
 #[test]
 fn a_store_failure_keeps_the_lua_table_fields_as_facts() {
-    let anchor = store_error(&VfsError::Anchor {
+    let anchor = make_store_error(&VfsError::Anchor {
         path: "a.md".to_owned(),
         anchor: "x".to_owned(),
         count: 2,
@@ -216,7 +216,7 @@ fn a_store_failure_keeps_the_lua_table_fields_as_facts() {
         Some(&Value::from("x"))
     );
     assert_eq!(anchor.facts.get(&ErrorFact::Count), Some(&Value::from(2)));
-    let invalid = store_error(&VfsError::InvalidPath {
+    let invalid = make_store_error(&VfsError::InvalidPath {
         path: "../a".to_owned(),
         reason: PathReason::Traversal,
     });
@@ -224,7 +224,7 @@ fn a_store_failure_keeps_the_lua_table_fields_as_facts() {
         invalid.facts.get(&ErrorFact::Rule),
         Some(&Value::from("traversal"))
     );
-    let not_utf8 = store_error(&VfsError::NotUtf8 {
+    let not_utf8 = make_store_error(&VfsError::NotUtf8 {
         path: "a.bin".to_owned(),
         valid_up_to: 3,
     });
@@ -245,6 +245,6 @@ fn a_store_failure_keeps_the_lua_table_fields_as_facts() {
     ] {
         // Every Lua table field but `reason`, which the code names.
         let fields = store_error_value_fields(&error).len() - 1;
-        assert_eq!(store_error(&error).facts.len(), fields, "{error:?}");
+        assert_eq!(make_store_error(&error).facts.len(), fields, "{error:?}");
     }
 }

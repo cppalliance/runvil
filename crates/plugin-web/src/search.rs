@@ -5,7 +5,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use runvil_plugin::{Error, ErrorCode, ToolOutput, tool_error};
+use runvil_plugin::{Error, ErrorCode, ToolOutput, make_tool_error};
 
 use crate::provider::{SearchErrorKind, SearchProvider};
 
@@ -132,16 +132,16 @@ impl WebSearch {
                 SearchErrorKind::Transport => ErrorCode::ToolTransport,
                 SearchErrorKind::Backend => ErrorCode::ToolBackend,
             };
-            tool_error(code, format!("web_search: {error}")).with_cause(&error)
+            make_tool_error(code, format!("web_search: {error}")).with_cause(&error)
         })?;
         if let Some(index) = results.results.iter().position(|r| r.url.trim().is_empty()) {
-            return Err(tool_error(
+            return Err(make_tool_error(
                 ErrorCode::ToolBackend,
                 format!("web_search: malformed search response: result {index} has an empty url"),
             ));
         }
         let body = serde_json::to_string(&results).map_err(|source| {
-            tool_error(
+            make_tool_error(
                 ErrorCode::ToolOther,
                 "web_search: the results could not be rendered",
             )

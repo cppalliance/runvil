@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use runvil_types::packs::PackId;
-use runvil_types::tools::{ToolInfo, ToolOutput, tool_error};
+use runvil_types::tools::{ToolInfo, ToolOutput, make_tool_error};
 use serde_json::Value;
 
 use crate::{HostServices, Pack, PackFuture, PackInfo, ToolContext};
@@ -104,28 +104,28 @@ impl PackRegistry {
     pub fn insert(&mut self, info: PackInfo, config: Value) -> Result<(), Error> {
         let fqn = info.fqn;
         let id = pack_id(fqn).ok_or_else(|| {
-            refusal(
+            make_refusal_error(
                 "invalid_fqn",
                 format!("Pack fully qualified name `{fqn}` is not a vendor/name pair"),
                 fqn,
             )
         })?;
         if self.entries.contains_key(fqn) {
-            return Err(refusal(
+            return Err(make_refusal_error(
                 "duplicate_pack",
                 format!("Pack `{fqn}` is already in the registry"),
                 fqn,
             ));
         }
         if id.is_reserved() {
-            return Err(refusal(
+            return Err(make_refusal_error(
                 "reserved_pack_id",
                 format!("Pack `{fqn}` cannot take the Pack id {id}, which the Engine reserves"),
                 fqn,
             ));
         }
         if self.reserves(&id) {
-            return Err(refusal(
+            return Err(make_refusal_error(
                 "reserved_name",
                 format!(
                     "Pack `{fqn}` cannot take the Pack id {id}, which the built-in runvil/{id} \
@@ -189,7 +189,7 @@ impl fmt::Debug for PackRegistry {
 /// The refusal of an insert: an `InvalidValue` that names the FQN, with the
 /// broken rule as its reason. Its prose is its message, which names the Pack
 /// and the rule.
-fn refusal(reason: &'static str, message: String, fqn: &str) -> Error {
+fn make_refusal_error(reason: &'static str, message: String, fqn: &str) -> Error {
     let mut error = Error::new(ErrorCode::InvalidValue, message.clone(), message);
     error.facts.insert(ErrorFact::Name, Value::from(fqn));
     error.facts.insert(ErrorFact::Reason, Value::from(reason));
@@ -241,7 +241,7 @@ impl Pack for Builtin {
             "{} belongs to a built-in Pack, whose calls the Engine answers",
             cx.tool()
         );
-        Box::pin(async move { Err(tool_error(ErrorCode::ToolOther, message)) })
+        Box::pin(async move { Err(make_tool_error(ErrorCode::ToolOther, message)) })
     }
 }
 

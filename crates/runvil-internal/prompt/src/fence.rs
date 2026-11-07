@@ -72,7 +72,7 @@ fn extract_exact_fence<'a>(
         let text = text.strip_suffix('\r').unwrap_or(text);
         if closes_three_backtick_fence(text) {
             if text != "```" {
-                return Err(error::internal(
+                return Err(error::make_internal_error(
                     "parser: fence split met a closing line the validator refuses",
                 ));
             }
@@ -82,7 +82,7 @@ fn extract_exact_fence<'a>(
         offset += line.len();
     }
     Err(error::on_line(
-        error::failure(
+        error::make_failure_error(
             ErrorCode::FenceInvalid,
             format!("{location} fence is not closed"),
         ),
@@ -165,7 +165,7 @@ pub(crate) fn first_fence_violation(body: &str, frontmatter_lines: u32) -> Optio
         .into_iter()
         .flatten()
         .min_by_key(|(line, ..)| line.start)?;
-    let mut violation = error::failure_at(
+    let mut violation = error::make_failure_at_error(
         ErrorCode::FenceInvalid,
         message,
         body,
@@ -327,7 +327,7 @@ pub(crate) fn split_section_blocks<'a>(
             strip_exact_lua_opening(&content[opening..])
         };
         let Some(after_open) = after_open else {
-            return Err(error::internal(
+            return Err(error::make_internal_error(
                 "parser: section fence split disagrees with the Markdown parser",
             ));
         };

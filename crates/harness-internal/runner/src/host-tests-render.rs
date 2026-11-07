@@ -40,7 +40,7 @@ fn rendering(
 ) -> Result<Arc<dyn Pack>, Error> {
     let renders = services
         .get(&RENDERS)
-        .ok_or_else(|| tool_error(ErrorCode::ToolOther, "rendering needs tests/renders"))?;
+        .ok_or_else(|| make_tool_error(ErrorCode::ToolOther, "rendering needs tests/renders"))?;
     Ok(Arc::new(Rendering {
         name: name.clone(),
         listed: listed(name, config, services)?,

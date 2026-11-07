@@ -24,7 +24,7 @@ use runvil::effect::Round;
 use runvil::event::ReplyOrigin;
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
-    completion_error, phrase,
+    make_completion_error, phrase,
 };
 use runvil::{Error, ErrorCode};
 use workshop_agents::{Conversation, DeltaKind};
@@ -60,7 +60,7 @@ impl WorkshopBroker {
     fn current(&self) -> Result<GatewayBroker, Error> {
         let unavailable = ErrorCode::Unavailable;
         let gateway = usable_gateway(&self.registry)
-            .ok_or_else(|| completion_error(unavailable, phrase(unavailable)))?;
+            .ok_or_else(|| make_completion_error(unavailable, phrase(unavailable)))?;
         // A poisoned lock holds a pair written whole by one store.
         let mut cached = self.cached.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some((generation, broker)) = cached.as_ref()

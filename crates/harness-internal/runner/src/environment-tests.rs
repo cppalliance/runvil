@@ -5,7 +5,7 @@
 use runvil::effect::Round;
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
-    completion_error, phrase,
+    make_completion_error, phrase,
 };
 use serde_json::json;
 
@@ -29,7 +29,7 @@ impl InferenceBroker for EmptyBroker {
         _round: Round,
     ) -> BoxFuture<Result<Box<Completion>, Error>> {
         let code = ErrorCode::Unavailable;
-        Box::pin(async move { Err(completion_error(code, phrase(code))) })
+        Box::pin(async move { Err(make_completion_error(code, phrase(code))) })
     }
 }
 
@@ -66,7 +66,7 @@ struct UnlistedBroker;
 impl InferenceBroker for UnlistedBroker {
     fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
         let code = ErrorCode::Transport;
-        Box::pin(async move { Err(completion_error(code, phrase(code))) })
+        Box::pin(async move { Err(make_completion_error(code, phrase(code))) })
     }
 
     fn chat(
