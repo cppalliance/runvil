@@ -4,7 +4,7 @@
 //! and [`cancel`] is the polled `AtomicBool` cancellation tree the Engine
 //! observes. [`event`] is the value form of a run's reports, the
 //! [`Event`](event::Event) enum a run returns from `step`, with the
-//! payload-free boundaries' constructors in [`event::lifecycle`];
+//! payload-free boundaries' constructors in [`event_lifecycle`];
 //! [`emitter`] is the provenance-stamping [`Emitter`](emitter::Emitter)
 //! every Engine crate reports through and the [`EventSink`](emitter::EventSink)
 //! a run drains; and [`metrics`] is the model-call metrics vocabulary those
@@ -49,6 +49,7 @@ pub mod cancel;
 pub mod emitter;
 pub mod error;
 pub mod event;
+pub mod event_lifecycle;
 pub mod ids;
 pub mod metrics;
 pub mod models;
@@ -60,3 +61,4 @@ mod test_support;
 pub mod timestamp;
 pub mod tools;
 pub mod untrusted;
+mod untrusted_inventory;

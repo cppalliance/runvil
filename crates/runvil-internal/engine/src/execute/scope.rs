@@ -9,7 +9,7 @@
 use std::collections::BTreeMap;
 
 use runvil_types::emitter::Emitter;
-use runvil_types::event::lifecycle;
+use runvil_types::event_lifecycle;
 use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::{Value, json};
@@ -139,14 +139,14 @@ pub(super) fn freeze_tool_sets(
     emitter: &Emitter,
     section: &str,
 ) -> Result<RenderedTools> {
-    emitter.report(section, lifecycle::TOOL_SCOPE_VALIDATION_STARTED);
+    emitter.report(section, event_lifecycle::TOOL_SCOPE_VALIDATION_STARTED);
     let result = merge_tool_sets(offers, rendered, catalog);
     emitter.report(
         section,
         if result.is_ok() {
-            lifecycle::TOOL_SCOPE_VALIDATION_SUCCEEDED
+            event_lifecycle::TOOL_SCOPE_VALIDATION_SUCCEEDED
         } else {
-            lifecycle::TOOL_SCOPE_VALIDATION_FAILED
+            event_lifecycle::TOOL_SCOPE_VALIDATION_FAILED
         },
     );
     result

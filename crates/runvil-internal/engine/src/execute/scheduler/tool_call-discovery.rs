@@ -24,7 +24,7 @@
 use std::borrow::Cow;
 
 use regex::Regex;
-use runvil_types::event::lifecycle;
+use runvil_types::event_lifecycle;
 use runvil_types::tools::OutputTrust;
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -107,11 +107,13 @@ impl ChainOps<'_> {
             Discovered::Listing(listing) => (
                 listing,
                 OutputTrust::Untrusted,
-                lifecycle::TOOL_CALL_SUCCEEDED,
+                event_lifecycle::TOOL_CALL_SUCCEEDED,
             ),
-            Discovered::Refused(refusal) => {
-                (refusal, OutputTrust::Trusted, lifecycle::TOOL_CALL_FAILED)
-            }
+            Discovered::Refused(refusal) => (
+                refusal,
+                OutputTrust::Trusted,
+                event_lifecycle::TOOL_CALL_FAILED,
+            ),
         };
         let counted = tool.unwrap_or(DiscoveryTool::Call).id();
         let counts = self.section_call_counts()?;

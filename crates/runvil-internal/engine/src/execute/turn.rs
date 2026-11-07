@@ -5,8 +5,8 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use runvil_types::emitter::Emitter;
-use runvil_types::event::lifecycle;
 use runvil_types::event::{Event, ReplyOrigin};
+use runvil_types::event_lifecycle;
 use runvil_types::ids::RoundId;
 use runvil_types::metrics::CallMetrics;
 
@@ -79,7 +79,7 @@ pub(super) fn report_model_turn(
             completion.reasoning_content().map(str::to_owned),
         );
     }
-    emitter.report(section, lifecycle::MODEL_TURN_COMPLETED);
+    emitter.report(section, event_lifecycle::MODEL_TURN_COMPLETED);
     for message in completion.metadata_diagnostics() {
         emitter.emit(section, |execution, section, provenance| {
             Event::ModelMetadataDegraded {
@@ -105,7 +105,7 @@ pub(super) fn report_model_turn(
     let outcome = detail::completion_into_result(completion);
     if let CompletionResult::Text(text) = &outcome {
         if served.finish_reason.as_deref() == Some("length") {
-            emitter.report(section, lifecycle::MODEL_TURN_TRUNCATED);
+            emitter.report(section, event_lifecycle::MODEL_TURN_TRUNCATED);
         }
         let finish_reason = served.finish_reason.as_deref();
         let metrics = served.metrics.as_ref();

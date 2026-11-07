@@ -4,7 +4,7 @@ use serde_json::json;
 
 use super::Event;
 use super::ReplyOrigin;
-use super::lifecycle::{self, Lifecycle};
+use crate::event_lifecycle::{self as lifecycle, Lifecycle};
 use crate::ids::{AbandonReason, Provenance, RoundId, TaskId};
 use crate::metrics::{CallMetrics, ToolCallEvent, Usage};
 use crate::test_support::{assert_send_sync, assert_wire, round_trip};

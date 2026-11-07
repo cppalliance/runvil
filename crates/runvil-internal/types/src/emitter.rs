@@ -28,7 +28,7 @@ use serde_json::Value;
 
 use crate::event::Event;
 use crate::event::ReplyOrigin;
-use crate::event::lifecycle::Lifecycle;
+use crate::event_lifecycle::Lifecycle;
 use crate::ids::{ChainId, Provenance, RoundId, TaskId};
 use crate::metrics::{CallMetrics, ToolCallEvent};
 use crate::tools::{OutputTrust, ToolId};
@@ -410,7 +410,8 @@ mod tests {
     use std::sync::Arc;
 
     use super::{Emitter, EventSink, LibraryLoad};
-    use crate::event::{Event, lifecycle};
+    use crate::event::Event;
+    use crate::event_lifecycle as lifecycle;
     use crate::ids::{AbandonReason, ChainId, Provenance, RoundId, TaskId};
     use crate::tools::{OutputTrust, ToolId};
 

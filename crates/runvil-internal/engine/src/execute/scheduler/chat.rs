@@ -26,7 +26,8 @@
 use std::sync::atomic::Ordering;
 
 use runvil_types::error::{ErrorCode, FactKey};
-use runvil_types::event::{ReplyOrigin, lifecycle};
+use runvil_types::event::ReplyOrigin;
+use runvil_types::event_lifecycle;
 use runvil_types::ids::RoundId;
 use runvil_types::metrics::ToolCallEvent;
 use runvil_types::tools::ToolInfo;
@@ -148,7 +149,7 @@ impl ChainOps<'_> {
         let conversation = match project_messages(&messages) {
             Ok(conversation) => conversation,
             Err(failure) => {
-                emitter.report(&section, lifecycle::MODEL_TURN_FAILED);
+                emitter.report(&section, event_lifecycle::MODEL_TURN_FAILED);
                 return Err(failure);
             }
         };
@@ -163,7 +164,7 @@ impl ChainOps<'_> {
         // and goes to the same model.
         let anchor = chain.anchor.measured(binding.id());
         if let Err(reason) = precheck(&conversation, context, reserve, anchor) {
-            emitter.report(&section, lifecycle::MODEL_TURN_FAILED);
+            emitter.report(&section, event_lifecycle::MODEL_TURN_FAILED);
             return Ok(Dispatched::Answered(Answer::Chat(Box::new(
                 overflow_result(reason, handles.turns.load(Ordering::Relaxed)),
             ))));
@@ -341,7 +342,7 @@ impl ArrivedRound {
             error if error.code == ErrorCode::ContextOverflow => {
                 self.reporting
                     .emitter
-                    .report(&self.section, lifecycle::MODEL_TURN_FAILED);
+                    .report(&self.section, event_lifecycle::MODEL_TURN_FAILED);
                 Ok(Box::new(overflow_result(
                     OverflowReason::Provider,
                     self.reporting.turns.load(Ordering::Relaxed),
@@ -351,7 +352,7 @@ impl ArrivedRound {
                 let turn = advance_turn(&self.reporting.turns);
                 self.reporting
                     .emitter
-                    .report(&self.section, lifecycle::MODEL_TURN_COMPLETED);
+                    .report(&self.section, event_lifecycle::MODEL_TURN_COMPLETED);
                 Ok(Box::new(ChatResult {
                     outcome: ChatOutcome::Empty(Some(error.prose.clone())),
                     finish_reason: error
@@ -365,7 +366,7 @@ impl ArrivedRound {
             error => {
                 self.reporting
                     .emitter
-                    .report(&self.section, lifecycle::MODEL_TURN_FAILED);
+                    .report(&self.section, event_lifecycle::MODEL_TURN_FAILED);
                 Err(error)
             }
         }
@@ -436,7 +437,7 @@ impl ArrivedRound {
         {
             self.reporting
                 .emitter
-                .report(&self.section, lifecycle::TOOL_CALL_FAILED);
+                .report(&self.section, event_lifecycle::TOOL_CALL_FAILED);
             let static_aliases: Vec<String> = scope
                 .frozen
                 .static_set

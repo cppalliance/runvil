@@ -9,7 +9,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use runvil_types::event::lifecycle;
+use runvil_types::event_lifecycle;
 use runvil_types::ids::TaskId;
 use runvil_vfs::{Access, ScopeHandle};
 
@@ -108,7 +108,7 @@ impl SectionContext {
         // the sealed-sys unknown-field error.
         sys.index = seed.index;
         ctx.emitter()
-            .report(section.name(), lifecycle::SECTION_STARTED);
+            .report(section.name(), event_lifecycle::SECTION_STARTED);
         let vm = limited_vm(ctx, section.name())?;
         let resolve = library_resolver(
             Arc::clone(ctx.prompt()),

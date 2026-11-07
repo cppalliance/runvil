@@ -14,7 +14,7 @@
 
 use runvil_types::error::ErrorCode;
 use runvil_types::event::ReplyOrigin;
-use runvil_types::event::lifecycle;
+use runvil_types::event_lifecycle;
 use runvil_types::ids::RoundId;
 
 use crate::Error;
@@ -88,7 +88,7 @@ pub(super) fn accept_infer(
         Err(error) => {
             reporting
                 .emitter
-                .report(section, lifecycle::MODEL_TURN_FAILED);
+                .report(section, event_lifecycle::MODEL_TURN_FAILED);
             return Err(error);
         }
     };

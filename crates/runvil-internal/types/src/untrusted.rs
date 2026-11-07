@@ -46,8 +46,7 @@
 use std::fmt;
 
 use crate::seed::{RunSeed, derive};
-
-mod inventory;
+use crate::untrusted_inventory;
 
 /// The domain tag hashed ahead of the seed, so the nonce never equals a
 /// SHA-256 of the same seed bytes taken for any other purpose.
@@ -154,7 +153,7 @@ fn encode(content: &str, nonce: &GuardNonce) -> String {
 ///
 /// One left-to-right pass over the already-escaped content: at each position
 /// the run nonce is checked first (delimiter mimicry against the envelope),
-/// then the delimiter inventory via [`inventory::delimiter_len`]. A match
+/// then the delimiter inventory via [`untrusted_inventory::delimiter_len`]. A match
 /// emits the opener, one space, and the rest of the delimiter, so `[INST]`
 /// becomes `[ INST]` and a bare nonce loses its first hex digit to a space.
 /// The output length is bounded by the input length plus one byte per
@@ -181,7 +180,7 @@ fn neutralize(text: &str, nonce: &str) -> String {
             continue;
         }
         if matches!(ch, '<' | '[')
-            && let Some(len) = inventory::delimiter_len(rest, prev_lt)
+            && let Some(len) = untrusted_inventory::delimiter_len(rest, prev_lt)
         {
             out.push(ch);
             out.push(' ');

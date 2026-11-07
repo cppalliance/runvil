@@ -18,7 +18,7 @@
 //! the call's access refuses every later operation.
 
 use runvil_types::error::{ErrorCode, place};
-use runvil_types::event::lifecycle::{self, Lifecycle};
+use runvil_types::event_lifecycle::{self as lifecycle, Lifecycle};
 use runvil_types::ids::{RoundId, TaskId};
 use runvil_types::tools::ToolOutput;
 use runvil_vfs::{ExecId, VfsError};

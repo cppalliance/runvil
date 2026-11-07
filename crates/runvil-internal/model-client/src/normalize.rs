@@ -3,7 +3,7 @@
 //! A tool call must have a nonblank id and name and object arguments, the
 //! calls in one turn must have distinct ids, and a turn with no product is
 //! an `EmptyReply`-kind failure. The validating constructors in
-//! `client/wire-canned.rs` run these checks and refuse the parts with an
+//! `client/wire.rs` run these checks and refuse the parts with an
 //! `InvalidParts`-kind failure, so a completion is built only from parts a
 //! wire decoder would accept.
 

@@ -4,6 +4,7 @@
 use super::*;
 use crate::seed::RunSeed;
 use crate::test_support::{SEED, Seeded};
+use crate::untrusted_inventory;
 
 /// A nonce over a seed drawn from `SEED`, standing in for a caller's
 /// CSPRNG-drawn run seed.
@@ -254,21 +255,21 @@ fn property_no_content_supplied_delimiter_survives() {
 /// of the bounded fullwidth class.
 fn inventory_spellings() -> Vec<String> {
     let mut out = Vec::new();
-    for group in inventory::CONTROL_MARKUP {
+    for group in untrusted_inventory::CONTROL_MARKUP {
         for name in group.names {
             match group.shape {
-                inventory::Shape::Pipe => {
+                untrusted_inventory::Shape::Pipe => {
                     out.push(format!("<|{name}|>"));
                     out.push(format!("<|{name}>"));
                     out.push(format!("<|/{name}|>"));
                     out.push(format!("<|/{name}>"));
                 }
-                inventory::Shape::BareTag => {
+                untrusted_inventory::Shape::BareTag => {
                     out.push(format!("<{name}>"));
                     out.push(format!("</{name}>"));
                 }
-                inventory::Shape::Literal => out.push((*name).to_owned()),
-                inventory::Shape::DoubledAngle => {
+                untrusted_inventory::Shape::Literal => out.push((*name).to_owned()),
+                untrusted_inventory::Shape::DoubledAngle => {
                     out.push(format!("<<{name}>>"));
                     out.push(format!("<</{name}>>"));
                 }
@@ -376,9 +377,9 @@ fn property_no_bracket_delimiter_survives() {
     // Randomized content over the bytes bracket delimiters are built
     // from. Whatever the content, no bracket-family delimiter may survive
     // in the body and the two-delimiter invariant must hold.
-    let brackets: Vec<&str> = inventory::CONTROL_MARKUP
+    let brackets: Vec<&str> = untrusted_inventory::CONTROL_MARKUP
         .iter()
-        .filter(|g| matches!(g.shape, inventory::Shape::Literal))
+        .filter(|g| matches!(g.shape, untrusted_inventory::Shape::Literal))
         .flat_map(|g| g.names)
         .filter(|n| n.starts_with('['))
         .copied()

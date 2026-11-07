@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use mlua::{Function, Lua, MultiValue, Table};
 use runvil_types::emitter::Emitter;
-use runvil_types::event::lifecycle;
+use runvil_types::event_lifecycle;
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolInfo;
 use runvil_vfs::Access;
@@ -192,14 +192,14 @@ impl SectionVm {
         emitter: &Emitter,
         section: &str,
     ) -> Result<LuaBlockResult> {
-        emitter.report(section, lifecycle::LUA_CHUNK_STARTED);
+        emitter.report(section, event_lifecycle::LUA_CHUNK_STARTED);
         let result = self.run_loaded(program);
         emitter.report(
             section,
             if result.is_ok() {
-                lifecycle::LUA_CHUNK_SUCCEEDED
+                event_lifecycle::LUA_CHUNK_SUCCEEDED
             } else {
-                lifecycle::LUA_CHUNK_FAILED
+                event_lifecycle::LUA_CHUNK_FAILED
             },
         );
         result

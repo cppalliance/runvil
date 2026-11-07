@@ -9,7 +9,8 @@
 //! and nothing is ever read back into the Engine by this path: recording every
 //! event or dropping them all leaves a run's outputs, errors, and ordering
 //! unchanged. The payload-free lifecycle variants have named constructors
-//! in [`lifecycle`] for the Engine's emit sites.
+//! in [`event_lifecycle`](crate::event_lifecycle) for the Engine's emit
+//! sites.
 //!
 //! Every variant includes three coordinates before its payload: `execution`
 //! (the caller-chosen run identifier), `section` (the reporting H2 heading
@@ -38,9 +39,6 @@ use serde::{Deserialize, Serialize};
 use crate::ids::{AbandonReason, Provenance, RoundId, TaskId};
 use crate::metrics::{CallMetrics, ToolCallEvent};
 use crate::tools::ToolId;
-
-#[path = "event-lifecycle.rs"]
-pub mod lifecycle;
 
 #[cfg(test)]
 #[path = "event-tests.rs"]

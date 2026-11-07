@@ -8,7 +8,7 @@ use std::num::NonZeroU32;
 
 use runvil_types::emitter::Emitter;
 use runvil_types::error::{ErrorCode, place};
-use runvil_types::event::lifecycle;
+use runvil_types::event_lifecycle;
 
 use crate::execute::requirements::NOTICE_HEADER;
 use crate::heading_address::{SectionIndex, SectionPos};
@@ -56,7 +56,7 @@ fn settle_block(
     let step = match result {
         Ok(step) => step,
         Err(error) => {
-            emitter.report(name, lifecycle::LUA_CHUNK_FAILED);
+            emitter.report(name, event_lifecycle::LUA_CHUNK_FAILED);
             // A failed H1 assertion ends the run before the walk:
             // H1's remaining job is the prompt's hard gates, so the
             // prompt chunk's own Lua failure IS the failed assertion,
@@ -87,7 +87,7 @@ fn settle_block(
                 YieldParse::Request(request) => Settled::Dispatch(request),
                 YieldParse::Refused(refusal) => Settled::Answer(Err(refusal)),
                 YieldParse::Malformed(malformed) => {
-                    emitter.report(name, lifecycle::LUA_CHUNK_FAILED);
+                    emitter.report(name, event_lifecycle::LUA_CHUNK_FAILED);
                     return Err(place(malformed, file, entered.frame.vm().call_line()));
                 }
             };
@@ -101,7 +101,7 @@ fn settle_block(
             // A jump is a control transfer, not a failure: the chunk
             // boundary reports success and the walk moves to the
             // resolved target.
-            emitter.report(name, lifecycle::LUA_CHUNK_SUCCEEDED);
+            emitter.report(name, event_lifecycle::LUA_CHUNK_SUCCEEDED);
             match done {
                 LuaBlockResult::Jump(heading, line) => Ok(Settled::Jump(heading, line)),
                 LuaBlockResult::Returned(Some(value)) => {
@@ -172,14 +172,14 @@ impl Scheduler {
                 Some(Block::Lua(program)) => {
                     // The pending Markdown buffer installs as the block's
                     // fresh read-only lazy `prose` template first.
-                    emitter.report(&name, lifecycle::LUA_CHUNK_STARTED);
+                    emitter.report(&name, event_lifecycle::LUA_CHUNK_STARTED);
                     let pending = entered.pending_prose.take();
                     let (template, line) = pending
                         .as_ref()
                         .map_or(("", None), |(text, line)| (text.as_str(), Some(*line)));
                     if let Err(error) = entered.frame.install_lazy_prose(&chain.ctx, template, line)
                     {
-                        emitter.report(&name, lifecycle::LUA_CHUNK_FAILED);
+                        emitter.report(&name, event_lifecycle::LUA_CHUNK_FAILED);
                         return Err(place(error, prompt.file(), Some(program.source_line())));
                     }
                     (

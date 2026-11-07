@@ -5,7 +5,8 @@ use std::sync::Arc;
 
 use runvil_types::emitter::{Emitter, EventSink};
 use runvil_types::error::{Error, ErrorCode};
-use runvil_types::event::{Event, lifecycle};
+use runvil_types::event::Event;
+use runvil_types::event_lifecycle;
 
 use crate::frontmatter::SplitSource;
 use crate::sections::{self, Heading, SectionWalker};
@@ -77,7 +78,7 @@ impl Prompt {
     ) -> (std::result::Result<Prompt, Error>, Vec<Event>) {
         let sink = EventSink::default();
         let emitter = Emitter::root(sink.clone(), execution, false);
-        emitter.report("Prompt", lifecycle::PARSE_STARTED);
+        emitter.report("Prompt", event_lifecycle::PARSE_STARTED);
         // Everything past the frontmatter postdates the prompt's name, so a
         // failure from there on names it.
         let (name, result) = match Self::parse_frontmatter(input) {
@@ -90,9 +91,9 @@ impl Prompt {
         emitter.report(
             "Prompt",
             if result.is_ok() {
-                lifecycle::PARSE_SUCCEEDED
+                event_lifecycle::PARSE_SUCCEEDED
             } else {
-                lifecycle::PARSE_FAILED
+                event_lifecycle::PARSE_FAILED
             },
         );
         let result =

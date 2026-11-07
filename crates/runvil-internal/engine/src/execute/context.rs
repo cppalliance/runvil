@@ -642,7 +642,7 @@ mod tests {
             .with_provenance_start(5),
         );
         ctx.emitter()
-            .report("Only", runvil_types::event::lifecycle::SECTION_STARTED);
+            .report("Only", runvil_types::event_lifecycle::SECTION_STARTED);
         let events = ctx.take_events();
         assert_eq!(events[0].provenance().task, TaskId::from(ChainId::root()));
         assert_eq!(
@@ -658,9 +658,9 @@ mod tests {
         let task: TaskId = "0.1".parse().expect("a task id parses");
         let arm = ctx.with_task(task.clone(), Arc::new(AtomicU32::new(0)));
         ctx.emitter()
-            .report("Only", runvil_types::event::lifecycle::SECTION_STARTED);
+            .report("Only", runvil_types::event_lifecycle::SECTION_STARTED);
         arm.emitter()
-            .report("Only", runvil_types::event::lifecycle::SECTION_STARTED);
+            .report("Only", runvil_types::event_lifecycle::SECTION_STARTED);
         // Both emitters share one buffer, drained through either context.
         let events = arm.take_events();
         assert_eq!(events.len(), 2);

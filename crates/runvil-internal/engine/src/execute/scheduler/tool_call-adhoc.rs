@@ -15,7 +15,7 @@
 
 use std::sync::Arc;
 
-use runvil_types::event::lifecycle;
+use runvil_types::event_lifecycle;
 use runvil_types::tools::OutputTrust;
 
 use crate::execute::section_context::AdhocCall;
@@ -86,7 +86,7 @@ impl ChainOps<'_> {
         ))?;
         let answer = match outcome {
             AdhocToolOutcome::Returned(text) => {
-                emitter.report(&section, lifecycle::TOOL_CALL_SUCCEEDED);
+                emitter.report(&section, event_lifecycle::TOOL_CALL_SUCCEEDED);
                 let (text, trust) = if call.listing {
                     (chain.ctx.nonce().wrap(&text), OutputTrust::Untrusted)
                 } else {
@@ -105,11 +105,11 @@ impl ChainOps<'_> {
                 Ok(ToolCallOutcome::Plain(text))
             }
             AdhocToolOutcome::BadReturn(failure) => {
-                emitter.report(&section, lifecycle::TOOL_CALL_FAILED);
+                emitter.report(&section, event_lifecycle::TOOL_CALL_FAILED);
                 Err(failure)
             }
             AdhocToolOutcome::Raised => {
-                emitter.report(&section, lifecycle::TOOL_CALL_FAILED);
+                emitter.report(&section, event_lifecycle::TOOL_CALL_FAILED);
                 Ok(ToolCallOutcome::Plain(String::new()))
             }
         };

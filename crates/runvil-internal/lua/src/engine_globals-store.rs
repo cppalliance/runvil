@@ -9,7 +9,7 @@ use std::sync::{Arc, LazyLock, Mutex, PoisonError};
 
 use mlua::{FromLuaMulti, Function, IntoLuaMulti, Lua, Table};
 use runvil_types::emitter::Emitter;
-use runvil_types::event::lifecycle::{self, Lifecycle};
+use runvil_types::event_lifecycle::{self as lifecycle, Lifecycle};
 use runvil_vfs::{Access, ScopeHandle, VfsError};
 
 use crate::error::{self, Error, Result, author_prose};

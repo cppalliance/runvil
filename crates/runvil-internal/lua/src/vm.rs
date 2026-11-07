@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use mlua::{Lua, LuaOptions, StdLib};
 use runvil_model_client::model::{ModelBinding, ModelSet};
 use runvil_types::emitter::Emitter;
-use runvil_types::event::lifecycle;
+use runvil_types::event_lifecycle;
 use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::Access;
 use serde_json::Value as Json;
@@ -336,9 +336,9 @@ impl<S> SectionVm<S> {
     ///
     /// The emitter is borrowed only for this synchronous call.
     pub fn teardown(self, emitter: &Emitter, section: &str) {
-        emitter.report(section, lifecycle::LUA_TEARDOWN_STARTED);
+        emitter.report(section, event_lifecycle::LUA_TEARDOWN_STARTED);
         drop(self);
-        emitter.report(section, lifecycle::LUA_TEARDOWN_SUCCEEDED);
+        emitter.report(section, event_lifecycle::LUA_TEARDOWN_SUCCEEDED);
     }
 }
 

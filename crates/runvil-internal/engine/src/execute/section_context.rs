@@ -22,7 +22,7 @@ mod construct;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use runvil_types::event::lifecycle;
+use runvil_types::event_lifecycle;
 use runvil_types::ids::TaskId;
 use runvil_types::tools::ToolId;
 
@@ -354,7 +354,7 @@ impl Drop for SectionContext {
         if self.completed {
             self.reporting
                 .emitter
-                .report(&self.sys.section_name, lifecycle::SECTION_FINISHED);
+                .report(&self.sys.section_name, event_lifecycle::SECTION_FINISHED);
         }
     }
 }

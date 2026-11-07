@@ -10,7 +10,7 @@
 //! handed has exactly one answer.
 
 use runvil_types::error::{ErrorCode, failure, place};
-use runvil_types::event::lifecycle;
+use runvil_types::event_lifecycle;
 use runvil_types::ids::AbandonReason;
 use runvil_vfs::Origin;
 
@@ -46,7 +46,7 @@ impl Scheduler {
                 // sees them in order with the sections between them.
                 self.ctx
                     .emitter()
-                    .report(self.ctx.prompt().title(), lifecycle::RUN_STARTED);
+                    .report(self.ctx.prompt().title(), event_lifecycle::RUN_STARTED);
                 if let Err(error) = self.start() {
                     self.end(Err(error));
                 }
@@ -266,9 +266,9 @@ impl Scheduler {
         self.ctx.emitter().report(
             self.ctx.prompt().title(),
             if result.is_ok() {
-                lifecycle::RUN_SUCCEEDED
+                event_lifecycle::RUN_SUCCEEDED
             } else {
-                lifecycle::RUN_FAILED
+                event_lifecycle::RUN_FAILED
             },
         );
         self.phase = Phase::Ending(result);

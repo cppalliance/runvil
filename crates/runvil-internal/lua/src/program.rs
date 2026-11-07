@@ -5,7 +5,7 @@ use std::num::NonZeroU32;
 use mlua::{Function, Lua, LuaOptions, StdLib};
 use runvil_types::emitter::Emitter;
 use runvil_types::error::ErrorCode;
-use runvil_types::event::lifecycle;
+use runvil_types::event_lifecycle;
 
 use crate::chunk_line::{PROMPT_CHUNK_PREFIX, compile_line, map_chunk_line_to_absolute};
 use crate::error::{
@@ -106,7 +106,7 @@ impl LuaProgram {
         emitter: &Emitter,
         section: &str,
     ) -> Result<Self> {
-        emitter.report(section, lifecycle::LUA_COMPILATION_STARTED);
+        emitter.report(section, event_lifecycle::LUA_COMPILATION_STARTED);
 
         let chunk_name = format!("{PROMPT_CHUNK_PREFIX}{source_line}");
         let guarded = format!("{FRAME_GUARD}{source}");
@@ -130,12 +130,12 @@ impl LuaProgram {
         let bytecode = match compiled {
             Ok(bytecode) => bytecode,
             Err(error) => {
-                emitter.report(section, lifecycle::LUA_COMPILATION_FAILED);
+                emitter.report(section, event_lifecycle::LUA_COMPILATION_FAILED);
                 return Err(error);
             }
         };
 
-        emitter.report(section, lifecycle::LUA_COMPILATION_SUCCEEDED);
+        emitter.report(section, event_lifecycle::LUA_COMPILATION_SUCCEEDED);
         Ok(Self {
             source: source.to_owned(),
             bytecode,

@@ -11,7 +11,7 @@
 //! rules when the answer lands.
 
 use runvil_types::emitter::Emitter;
-use runvil_types::event::lifecycle;
+use runvil_types::event_lifecycle;
 use runvil_types::tools::{OutputTrust, ToolOutput};
 use runvil_types::untrusted::GuardNonce;
 
@@ -134,9 +134,9 @@ pub(crate) fn dispatch_body(
     emitter.report(
         section,
         if call_result.is_ok() {
-            lifecycle::TOOL_CALL_SUCCEEDED
+            event_lifecycle::TOOL_CALL_SUCCEEDED
         } else {
-            lifecycle::TOOL_CALL_FAILED
+            event_lifecycle::TOOL_CALL_FAILED
         },
     );
     let output = call_result.map_err(tool)?;

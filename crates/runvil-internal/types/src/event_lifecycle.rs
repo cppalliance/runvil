@@ -1,6 +1,6 @@
 //! The payload-free lifecycle boundaries as named constructors.
 //!
-//! An emit site names a boundary (`lifecycle::RUN_STARTED`) and hands it
+//! An emit site names a boundary (`event_lifecycle::RUN_STARTED`) and hands it
 //! to [`Emitter::report`](crate::emitter::Emitter::report), which stamps
 //! the run's coordinates on it. Each constant is the constructor
 //! of the matching [`Event`] variant, declared once from one list so a
@@ -9,7 +9,7 @@
 //! An emit-site vocabulary for the Engine crates; the facade does not
 //! re-export it. The caller reads the events themselves.
 
-use super::Event;
+use crate::event::Event;
 use crate::ids::Provenance;
 
 /// A payload-free lifecycle boundary: the constructor of one [`Event`]
