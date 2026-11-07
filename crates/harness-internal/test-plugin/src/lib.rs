@@ -6,12 +6,16 @@
 //!
 //! - No `[dependencies]` at all, so a library Plugin needs nothing from
 //!   Runvil. Only the end-to-end tests in `tests/it` name other crates,
-//!   `harness-plugin-loader` and `runvil-plugin`, as `[dev-dependencies]`.
-//!   The C types below are a private copy of the contract's, not an
-//!   import.
-//! - Only `runvil_plugin` is public. The mirrored C types stay private, and
-//!   unit tests pin them to the same layout numbers as
+//!   `harness-plugin-loader`, `runvil-plugin`, `libloading`, and `libc`, as
+//!   `[dev-dependencies]`. The C types below are a private copy of the
+//!   contract's, not an import.
+//! - Only `runvil_plugin` and the three counters
+//!   `harness_test_plugin_loads`, `harness_test_plugin_unloads`, and
+//!   `harness_test_plugin_live` are public. The mirrored C types stay
+//!   private, and unit tests pin them to the same layout numbers as
 //!   `runvil-plugin-sys`.
+//! - The counters are process-global, so each copy of the library that is
+//!   opened counts on its own, from zero.
 //! - The entry point never unwinds: it has no `unwrap`, `expect`, or
 //!   indexing that can panic.
 //! - `RV_PLUGIN_LOAD` loads only when the `RvHost` table reports exactly
@@ -22,6 +26,7 @@
 #![expect(unsafe_code, reason = "exports a C entry point")]
 
 use std::ffi::{c_char, c_void};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 #[cfg(test)]
 #[path = "lib-tests.rs"]
@@ -151,20 +156,52 @@ thread_local! {
     static LIVE_INSTANCES: std::cell::Cell<isize> = const { std::cell::Cell::new(0) };
 }
 
+/// Successful `RV_PLUGIN_LOAD` calls since this copy of the library was
+/// opened.
+static LOADS: AtomicU32 = AtomicU32::new(0);
+/// `RV_PLUGIN_UNLOAD` calls that freed an instance since this copy of the
+/// library was opened.
+static UNLOADS: AtomicU32 = AtomicU32::new(0);
+/// `Instance` values made and not yet dropped, across every thread.
+static LIVE: AtomicU32 = AtomicU32::new(0);
+
 impl Instance {
-    /// Makes one instance; under test, counts it as live.
+    /// Makes one instance and counts it as live.
     fn new() -> Instance {
+        LIVE.fetch_add(1, Ordering::Relaxed);
         #[cfg(test)]
         LIVE_INSTANCES.set(LIVE_INSTANCES.get() + 1);
         Instance { _ballast: [0; 16] }
     }
 }
 
-#[cfg(test)]
 impl Drop for Instance {
     fn drop(&mut self) {
+        LIVE.fetch_sub(1, Ordering::Relaxed);
+        #[cfg(test)]
         LIVE_INSTANCES.set(LIVE_INSTANCES.get() - 1);
     }
+}
+
+/// Successful `RV_PLUGIN_LOAD` calls since this copy of the library was
+/// opened.
+#[unsafe(no_mangle)]
+pub extern "C" fn harness_test_plugin_loads() -> u32 {
+    LOADS.load(Ordering::Relaxed)
+}
+
+/// `RV_PLUGIN_UNLOAD` calls that freed an instance since this copy of the
+/// library was opened.
+#[unsafe(no_mangle)]
+pub extern "C" fn harness_test_plugin_unloads() -> u32 {
+    UNLOADS.load(Ordering::Relaxed)
+}
+
+/// Instances made and not yet dropped: incremented when an instance is
+/// made, decremented in its `Drop`.
+#[unsafe(no_mangle)]
+pub extern "C" fn harness_test_plugin_live() -> u32 {
+    LIVE.load(Ordering::Relaxed)
 }
 
 /// A type's size as the contract's `u32`. The contract's structs are a few
@@ -259,6 +296,7 @@ unsafe fn load(call: *mut RvCall) -> RvStatus {
     // SAFETY: the caller guarantees `call` is valid, and nothing else
     // reads it meanwhile.
     unsafe { (*call).plugin = Box::into_raw(instance).cast() };
+    LOADS.fetch_add(1, Ordering::Relaxed);
     RV_OK
 }
 
@@ -277,5 +315,6 @@ unsafe fn unload(call: *mut RvCall) -> RvStatus {
     // `RV_PLUGIN_LOAD` leaked, and the loader sends `RV_PLUGIN_UNLOAD`
     // once per load, so this is its only free.
     drop(unsafe { Box::from_raw(plugin.cast::<Instance>()) });
+    UNLOADS.fetch_add(1, Ordering::Relaxed);
     RV_OK
 }

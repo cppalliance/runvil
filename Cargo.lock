@@ -2295,6 +2295,8 @@ name = "harness-test-plugin"
 version = "0.3.0"
 dependencies = [
  "harness-plugin-loader",
+ "libc",
+ "libloading 0.8.9",
  "runvil-plugin",
 ]
 

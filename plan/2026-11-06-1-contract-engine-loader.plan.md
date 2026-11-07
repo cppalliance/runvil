@@ -5,6 +5,8 @@ todos: []
 isProject: false
 ---
 
+<plan-context>
+
 # Contract 0.2 in the Engine Loader
 
 The engine's plugin loader speaks contract 0.2: it takes the C types from `runvil-plugin-sys` in the `runvil-plugin-api` repository instead of its own `runvil_plugin::abi` copy, reports version 0.2 in `RvHost`, and hands each load an `RvLoadArgs` whose `refuse` and `describe_plugin` take a loader-owned `ctx` that stays valid until the Plugin unloads. The do-nothing test fixture DLL moves to 0.2 and gains three exported counters, so one end-to-end test proves it was loaded, invoked, unloaded exactly once, and closed, on Windows, Linux, and macOS.
@@ -171,9 +173,20 @@ sequenceDiagram
 
 None
 
+</plan-context>
+
 ## Steps
+
+<step-1>
 
 1. [done] **Speak contract 0.2 in the loader and the fixture** (points: 10) - Add the `runvil-plugin-sys` workspace dependency and the `deny.toml` `allow-git` entry, and make `harness-plugin-loader` depend on it. Remove `runvil_plugin::abi`, and point the loader's imports and `insert_plugin`'s `PluginEntry` at `runvil-plugin-sys`. Rebuild `host.rs` for 0.2: the 16-byte `HOST`, an `RvLoadArgs` per load, and a `ctx`-keyed session whose `ctx` allocation lives until `RV_PLUGIN_UNLOAD` returns, or until a rejected load returns. Update `fakes.rs` and the loader tests. Move the fixture's private mirror and its `runvil_plugin` entry point to 0.2, and update the docs that name `abi`. Tests: a late call through a `ctx` stashed during a successful load answers `RV_ERR_MISUSE` after the load returns; a load function called from another thread during the load answers `RV_ERR_MISUSE`; a load function handed another `ctx` during the load fails the load as a misuse with the message `a load function was handed a ctx other than the open RV_PLUGIN_LOAD call's`; the existing loader checks pass at 0.2; the fixture answers `RV_ERR_UNSUPPORTED` to a Host reporting 0.1, `RV_ERR_MISUSE` to NULL `args`, and `RV_ERR_UNSUPPORTED` to a short `RvLoadArgs`; the fixture's layout pins match 16 and 32 bytes; the existing end-to-end tests load `test-plugin` at 0.2.
    - Score: dependency and `allow-git` 1, removing `abi` and repointing imports 0, `insert_plugin` type path 0, `HOST` and `RvLoadArgs` wiring 1, `ctx`-keyed session with ownership until unload 6 (allocation lifetime across load, rejection, and unload 3, per-thread open-load matching 3), fixture mirror and 0.2 checks 1, `fakes.rs` and test updates 1.
-2. **Prove the fixture's whole lifecycle end to end** (points: 5) - Add `harness_test_plugin_loads`, `harness_test_plugin_unloads`, and `harness_test_plugin_live` over process-global atomics in the fixture, make the fixture `Instance`'s `Drop` unconditional so it decrements the live count in every build, and add the `libloading` and `libc` dev-dependencies. Add one end-to-end test that loads the copied fixture through `insert_plugin_dir`, reads the counters through its own already-loaded handle before and after dropping the report, then drops its handle and confirms the already-loaded query returns `Err`, on Windows and Unix. Tests: the report names `test-plugin` `0.1.0` with no failures; the counters read loads 1, unloads 0, live 1 while loaded; unloads 1 and live 0 after the report drops; the already-loaded query fails after the test's handle drops.
+
+</step-1>
+
+<step-2>
+
+2. [done] **Prove the fixture's whole lifecycle end to end** (points: 5) - Add `harness_test_plugin_loads`, `harness_test_plugin_unloads`, and `harness_test_plugin_live` over process-global atomics in the fixture, make the fixture `Instance`'s `Drop` unconditional so it decrements the live count in every build, and add the `libloading` and `libc` dev-dependencies. Add one end-to-end test that loads the copied fixture through `insert_plugin_dir`, reads the counters through its own already-loaded handle before and after dropping the report, then drops its handle and confirms the already-loaded query returns `Err`, on Windows and Unix. Tests: the report names `test-plugin` `0.1.0` with no failures; the counters read loads 1, unloads 0, live 1 while loaded; unloads 1 and live 0 after the report drops; the already-loaded query fails after the test's handle drops.
    - Score: the three counter exports over atomics 1, the lifecycle test with the per-platform already-loaded query 3 (OS reference counting and platform-specific failure handling), dev-dependencies and the `tests/it` unsafe expectation 1.
+
+</step-2>

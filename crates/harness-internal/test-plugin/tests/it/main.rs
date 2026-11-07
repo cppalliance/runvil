@@ -5,6 +5,11 @@
     clippy::expect_used,
     reason = "test helpers panic on setup failure, which is the desired behavior"
 )]
+#![expect(
+    unsafe_code,
+    reason = "reads the fixture's counters through symbols of a library the loader opened"
+)]
 
 mod insert;
+mod lifecycle;
 mod support;
