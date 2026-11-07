@@ -8,28 +8,33 @@
 //! (the task-scoped event emitter and the turn counter) seeded out of the
 //! run context; a task chain's context is the spawn's fork, so the handles
 //! reach the frame and the task's nested chains through the one value.
-//! Each section entry is one construct-run-teardown cycle: a constructor in
-//! the `construct` child builds the frame, the scheduler's chain steps run
-//! the blocks, and the frame's [`Drop`] impl is the single teardown
-//! boundary.
+//! Each section entry is one construct-run-teardown cycle: a constructor
+//! (one for a walked section, one for the H1 pass) builds the frame, the
+//! scheduler's chain steps run the blocks, and the frame's [`Drop`] impl is
+//! the single teardown boundary.
 //!
 //! The run-scoped inputs (bindings, models, limits, the shared tools)
 //! arrive through the [`ChainState`].
 
-#[path = "section_context-construct.rs"]
-mod construct;
-
 use std::num::NonZeroU32;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use runvil_types::event_lifecycle;
 use runvil_types::ids::TaskId;
 use runvil_types::tools::ToolId;
+use runvil_vfs::{Access, ScopeHandle};
 
-use crate::lua::{ProseState, ScriptReport, SectionVm, ToolCallCounts};
-use crate::{Result, subst};
+use crate::heading_address::{SectionPos, Visible};
+use crate::lua::{
+    Library, LibraryKey, ProseState, ScriptReport, SectionVm, ToolCallCounts, Uninjected,
+};
+use crate::model::ModelBinding;
+use crate::prompt::Prompt;
+use crate::{Result, error, subst};
 
 use super::context::{ChainState, ReportingHandles};
+use super::section_vm::{self, VmSeed};
+use super::walk_target::{self, RequireOrigin};
 
 /// The seeds a spawned task chain's first section entry receives beyond the
 /// shared Engine values: `tasks.spawn`'s `opts.item` (installed as the
@@ -148,6 +153,168 @@ pub(super) struct SectionContext {
 }
 
 impl SectionContext {
+    /// Constructs the frame for one walked section and runs its setup
+    /// preamble: the section's `sys`, the section-started observation, VM
+    /// construction and limits, and the shared setup half
+    /// ([`section_vm::setup_section_vm`]), with the `prompt` reads resolved
+    /// over the section's visible set.
+    ///
+    /// `pos` is the section's place in the caller's walk. Each `prompt`
+    /// read resolves its sibling slice from the shared prompt and reads
+    /// the section's visible set (its siblings minus itself, plus its
+    /// direct children) in place, and `require` resolves from the same
+    /// position over its wider reach. `section_id`
+    /// is the section's `sys.id`: the entering chain's hierarchical id extended
+    /// by its local entry counter, allocated by the scheduler; `task_id`
+    /// is the entering chain's `sys.taskid`. `var` is the walk's current
+    /// `var` table, seeded into the section's VM. `seed` holds a spawned
+    /// chain's `item` and `sys.index` on its first entry and is empty on
+    /// every other entry. `scope` is the handle on the run's scope, which
+    /// derives the `store` table's view of `access`.
+    ///
+    /// # Errors
+    /// Returns an `Internal` failure when `pos` is past its slice, and
+    /// otherwise the failure of whichever step failed (see [`section_vm`]
+    /// for which failures tear the VM down).
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the frame takes the two chain-owned handles (access and selection) and the run's scope handle beside the section entry's own deltas, and each stays a separate borrow"
+    )]
+    pub(crate) fn new(
+        ctx: &ChainState,
+        access: &Arc<Access>,
+        scope: &ScopeHandle,
+        selection: &Arc<Mutex<Option<ModelBinding>>>,
+        pos: &SectionPos,
+        section_id: &str,
+        task_id: &TaskId,
+        var: &serde_json::Value,
+        seed: TaskSeed,
+    ) -> Result<Self> {
+        let section = pos.section(ctx.prompt()).ok_or(error::internal(
+            "an entered section is absent from its slice",
+        ))?;
+        let mut sys = ctx.section_sys(section_id, task_id, section.name());
+        // A spawned chain's `sys.index` is the spawn's own value, verbatim;
+        // absent otherwise, so a walked section reading `sys.index` raises
+        // the sealed-sys unknown-field error.
+        sys.index = seed.index;
+        ctx.emitter()
+            .report(section.name(), event_lifecycle::SECTION_STARTED);
+        let vm = limited_vm(ctx, section.name())?;
+        let resolve = library_resolver(
+            Arc::clone(ctx.prompt()),
+            RequireOrigin::Section(pos.clone()),
+        );
+        let render = prose_renderer(ctx, seed.item.clone());
+        // The `prompt` reads resolve over the section's visible set; the
+        // suspending calls (`call`, `tasks.fanout`, `models.infer`) are the
+        // yield shims the setup half installs.
+        let prompt = Arc::clone(ctx.prompt());
+        let pos = pos.clone();
+        let read = move |heading: String| {
+            walk_target::read_visible(&heading, Visible::of(pos.siblings(&prompt), pos.index))
+        };
+        // The shared setup half ([`section_vm::setup_section_vm`]) follows;
+        // only the seed, the `sys` extras, and the callbacks' position are
+        // the walk's own.
+        let sys_json = sys.to_json();
+        let setup = ctx.vm_setup(
+            &sys_json,
+            VmSeed {
+                var: Some(var),
+                item: seed.item.as_ref(),
+            },
+            access,
+            scope,
+            selection,
+            section.name(),
+            false,
+        );
+        // Setup runs on the bare VM and tears it down itself on failure:
+        // the frame does not exist yet, so its `Drop` cannot own this path.
+        let vm = section_vm::setup_section_vm(vm, &setup, read, resolve, render)?;
+        Ok(Self::assemble(vm, sys, seed.item, ctx))
+    }
+
+    /// Constructs the frame for the H1 pass - section 0 - through the same
+    /// install path as any walked section: the section's `sys`
+    /// (`section_id`, the root chain's entry 0, and `task_id`, the root
+    /// chain's task, under the prompt's title, with the run's `when` like
+    /// every section after it), VM construction over the run's shared
+    /// sets, limits, and the shared setup half
+    /// ([`section_vm::setup_section_vm`]).
+    ///
+    /// H1's only deltas from a walked section: no `SECTION_STARTED`
+    /// observation, and no `SECTION_FINISHED` since the scheduler never arms
+    /// the pass's completion (the pass is not a walked section), an empty
+    /// `var` seed (it runs first and is never re-entered), `argv` installed
+    /// writable so the repair pattern can assign it,
+    /// [`walk_target::h1_visible_sections`] as the visible set behind the
+    /// `prompt` reads, and [`RequireOrigin::H1`], which reaches every
+    /// top-level section, behind `require`.
+    ///
+    /// # Errors
+    /// Returns the failure of whichever step failed (see [`section_vm`]
+    /// for which failures tear the VM down).
+    pub(crate) fn new_h1(
+        ctx: &ChainState,
+        access: &Arc<Access>,
+        scope: &ScopeHandle,
+        selection: &Arc<Mutex<Option<ModelBinding>>>,
+        section_id: &str,
+        task_id: &TaskId,
+    ) -> Result<Self> {
+        let title = ctx.prompt().title();
+        let sys = ctx.section_sys(section_id, task_id, title);
+        let vm = limited_vm(ctx, title)?;
+        let resolve = library_resolver(Arc::clone(ctx.prompt()), RequireOrigin::H1);
+        let render = prose_renderer(ctx, None);
+        let prompt = Arc::clone(ctx.prompt());
+        let read = move |heading: String| {
+            walk_target::read_visible(
+                &heading,
+                Visible::all(walk_target::h1_visible_sections(&prompt)),
+            )
+        };
+        // `argv` installs writable, the H1 delta `SectionVmSetup::argv`
+        // describes; the executor reads the value back at the freeze (see
+        // the scheduler's H1-to-walk handoff).
+        let sys_json = sys.to_json();
+        let setup = ctx.vm_setup(
+            &sys_json,
+            VmSeed::default(),
+            access,
+            scope,
+            selection,
+            title,
+            true,
+        );
+        // Setup runs on the bare VM and tears it down itself on failure:
+        // the frame does not exist yet, so its `Drop` cannot own this path.
+        let vm = section_vm::setup_section_vm(vm, &setup, read, resolve, render)?;
+        Ok(Self::assemble(vm, sys, None, ctx))
+    }
+
+    /// The live frame over a set-up `vm`: not yet completed, with no
+    /// tool-call counts and no open adhoc call.
+    fn assemble(
+        vm: SectionVm,
+        sys: SectionSys,
+        item: Option<serde_json::Value>,
+        ctx: &ChainState,
+    ) -> Self {
+        Self {
+            vm: Some(vm),
+            completed: false,
+            sys,
+            item,
+            counts: None,
+            adhoc_calls: Vec::new(),
+            reporting: ctx.reporting().clone(),
+        }
+    }
+
     /// Reads the section's final `var` out of the VM, so the walk rolls it
     /// forward. Must run while the frame is live, before its drop: the read
     /// goes through the live VM.
@@ -279,6 +446,42 @@ impl SectionContext {
 )]
 fn live_vm(vm: Option<&SectionVm>) -> &SectionVm {
     vm.expect("a live frame holds its VM until drop")
+}
+
+/// The resolver behind a frame's `require`: each heading resolves in
+/// `prompt` from the position a loading library's key names, or from
+/// `origin` when no library is loading.
+fn library_resolver(
+    prompt: Arc<Prompt>,
+    origin: RequireOrigin,
+) -> impl Fn(String, Option<LibraryKey>) -> Result<Library> + Send + Sync + 'static {
+    move |heading: String, key: Option<LibraryKey>| {
+        walk_target::resolve_library(&prompt, &origin, &heading, key.as_ref())
+    }
+}
+
+/// Builds the section VM for `name` over the run's shared sets, with the
+/// run's cancel flag and Lua limits applied.
+///
+/// # Errors
+/// Returns the failure of the VM construction or the limits install.
+fn limited_vm(ctx: &ChainState, name: &str) -> Result<SectionVm<Uninjected>> {
+    let vm = SectionVm::new_for_section(
+        ctx.nonce(),
+        ctx.tool_set(),
+        &ctx.model_set(),
+        ctx.emitter(),
+        name,
+    )?;
+    // The run's cancel flag reaches every block coroutine's hook.
+    vm.set_cancel(ctx.cancel().clone());
+    // A limits failure propagates bare: no teardown runs here, so no
+    // LUA_TEARDOWN_* observation fires on this path.
+    vm.apply_lua_limits(
+        ctx.limits().lua_memory_bytes.get(),
+        ctx.limits().lua_log_events.get(),
+    )?;
+    Ok(vm)
 }
 
 /// The `{{ }}` renderer for one frame's prose templates, its own blocks'

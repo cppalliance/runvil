@@ -39,6 +39,8 @@ pub(crate) mod recording;
 pub(crate) mod rig;
 #[cfg(test)]
 pub(crate) mod scenario;
+#[cfg(test)]
+pub(crate) mod scenario_serial;
 #[cfg_attr(
     not(test),
     expect(

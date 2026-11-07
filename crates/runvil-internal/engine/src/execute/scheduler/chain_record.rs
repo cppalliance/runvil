@@ -5,28 +5,22 @@
 
 use std::fmt;
 use std::num::{NonZeroU32, NonZeroUsize};
+use std::ops::{Index, IndexMut};
 use std::sync::{Arc, Mutex};
 
+use mlua::Thread;
 use runvil_types::ids::{ChainId, TaskId};
+use runvil_types::metrics::Usage;
 use runvil_vfs::Access;
 
 use crate::execute::context::ChainState;
 use crate::execute::section_context::{SectionContext, TaskSeed};
 use crate::execute::walk_target::JumpTarget;
 use crate::heading_address::SectionPos;
-use crate::lua::{Answer, Blocked};
-use crate::prompt::{Block, Prompt, Section};
+use crate::lua::{Answer, Blocked, UsageAnchor};
+use crate::model::{Message, ModelId};
+use crate::prompt::{Block, BodyText, Prompt, Section};
 use crate::{Result, error};
-
-mod anchor;
-mod arena;
-mod entered;
-mod kind;
-
-pub(super) use anchor::ChatAnchor;
-pub(super) use arena::{ChainArena, ChainIndex};
-pub(super) use entered::{Entered, Running};
-pub(super) use kind::ChainKind;
 
 /// A chain's local id counters: the indices its next child chain and its
 /// next section entry take under its lineage. Set at chain start and
@@ -41,6 +35,44 @@ pub(super) struct Counters {
     /// The next index a section entry takes under the chain's lineage as
     /// its `sys.id`.
     pub(super) next_entry: u32,
+}
+
+/// What kind of chain a record is: the main walk, the H1 pass, a `call`
+/// child, or a task's backing chain, each with the links only that kind
+/// has.
+#[derive(Debug)]
+pub(in crate::execute::scheduler) enum ChainKind {
+    /// The main walk.
+    Root,
+    /// The H1 pass: the prompt's H1 blocks under its title. It runs the
+    /// walk's rules with the deltas the `h1` module lists. Its `walk`
+    /// stays at the first top-level section, unused: the walk after the
+    /// pass is a separate root chain, started at the first section or at
+    /// the target a jump out of H1 resolves to.
+    H1,
+    /// A `call` child, whose parent is blocked on it.
+    Call {
+        /// The call parent blocked on this chain.
+        parent: ChainIndex,
+    },
+    /// A spawned task's backing chain, a fanout arm included. Its owner is
+    /// recorded on its task entry.
+    Task,
+}
+
+impl ChainKind {
+    /// Whether the chain is the H1 pass.
+    pub(in crate::execute::scheduler) fn is_h1(&self) -> bool {
+        matches!(self, ChainKind::H1)
+    }
+
+    /// The call parent blocked on the chain, when it is a `call` child.
+    pub(in crate::execute::scheduler) fn parent(&self) -> Option<ChainIndex> {
+        match self {
+            ChainKind::Call { parent } => Some(*parent),
+            ChainKind::Root | ChainKind::H1 | ChainKind::Task => None,
+        }
+    }
 }
 
 /// A block's position in the section, or the H1 pass, a chain runs.
@@ -66,6 +98,64 @@ impl BlockIndex {
             Block::Lua(program) => Some(program.source_line()),
             _ => None,
         })
+    }
+}
+
+/// A Lua block that is running or suspended: its coroutine and the answer
+/// delivered for it.
+#[derive(Debug)]
+pub(in crate::execute::scheduler) struct Running {
+    /// The block's coroutine handle; a block that returns disposes of it.
+    pub(in crate::execute::scheduler) coroutine: Thread,
+    /// The answer delivered for the suspended coroutine, taken at resume.
+    pub(in crate::execute::scheduler) answer: Option<Result<Answer>>,
+}
+
+/// The section a chain has entered: built at each section entry, the H1
+/// pass's included, and taken at the section's end, at chain end, and at
+/// an abort. The frame's drop is the teardown boundary on every path that
+/// takes the `Entered`, and it reports `SECTION_FINISHED` only where the
+/// section completed: `end_section`, `apply_jump`, and `finish` arm the
+/// frame first, while the H1 pass's fall-through and scalar return, an
+/// abort, and the run's teardown take it unarmed and are deliberately
+/// silent.
+pub(in crate::execute::scheduler) struct Entered {
+    /// The section's running or suspended Lua block, `None` between
+    /// blocks. Declared first: a suspended coroutine drops before the
+    /// frame it runs in.
+    pub(in crate::execute::scheduler) running: Option<Running>,
+    /// The per-section frame (VM, `sys`, conversation, counts).
+    pub(in crate::execute::scheduler) frame: SectionContext,
+    /// The section's in-flight or next Lua/prose block: the running
+    /// block's index while `running` is `Some`, otherwise the next block
+    /// to start.
+    pub(in crate::execute::scheduler) block: BlockIndex,
+    /// The pending Markdown buffer: the prose block the next Lua fence
+    /// consumes, beside the prompt line it starts on, installed as that
+    /// block's lazy `prose` template when the coroutine starts. An
+    /// unconsumed buffer drops with the section, never evaluated.
+    pub(in crate::execute::scheduler) pending_prose: Option<(BodyText, NonZeroU32)>,
+}
+
+impl Entered {
+    /// A fresh entry into `frame`'s section: no block running, the first
+    /// block next, and no pending prose.
+    pub(in crate::execute::scheduler) fn new(frame: SectionContext) -> Entered {
+        Entered {
+            running: None,
+            frame,
+            block: BlockIndex::FIRST,
+            pending_prose: None,
+        }
+    }
+
+    /// The block at the section's block position in `blocks`, or `None`
+    /// once they are exhausted.
+    pub(in crate::execute::scheduler) fn block_in<'p>(
+        &self,
+        blocks: &'p [Block],
+    ) -> Option<&'p Block> {
+        blocks.get(self.block.0)
     }
 }
 
@@ -193,6 +283,60 @@ impl Walk {
         };
         self.top = jumper.next();
         true
+    }
+}
+
+/// What the chain's `chat` rounds taught the context precheck about token
+/// counts: the provider's numbers for the newest round that reported usage.
+///
+/// A chain has one parked `chat` round at a time. Dispatch holds that
+/// round's projected messages in `in_flight`, beside the id of the model
+/// they went to; the arrival of its answer settles them into `measured`
+/// when the round reported usage, and drops them otherwise. A round with no
+/// usage leaves the older measurement in place: it still describes a prefix
+/// of the conversation, and the precheck uses it only while the request
+/// extends that prefix on the same model.
+///
+/// The model is compared by [`ModelId`], the gateway server and model name
+/// the binding resolved to, because that is what picks the tokenizer. The
+/// alias is only a prompt-local label: two aliases of one model, with
+/// other temperature or thinking settings, count tokens alike and share a
+/// measurement.
+#[derive(Debug, Default)]
+pub(in crate::execute::scheduler) struct ChatAnchor {
+    in_flight: Option<(ModelId, Vec<Message>)>,
+    measured: Option<(ModelId, UsageAnchor)>,
+}
+
+impl ChatAnchor {
+    /// The newest measurement, for the precheck of the next dispatch to
+    /// `model`. A measurement from another model is not offered: its token
+    /// counts come from another tokenizer.
+    pub(in crate::execute::scheduler) fn measured(&self, model: &ModelId) -> Option<&UsageAnchor> {
+        self.measured
+            .as_ref()
+            .filter(|(measured_by, _)| measured_by == model)
+            .map(|(_, anchor)| anchor)
+    }
+
+    /// Records the projected messages of a round about to be sent to
+    /// `model`.
+    pub(in crate::execute::scheduler) fn sending(
+        &mut self,
+        model: ModelId,
+        messages: Vec<Message>,
+    ) {
+        self.in_flight = Some((model, messages));
+    }
+
+    /// Settles the parked round: its model, sent messages, and `usage`
+    /// replace the measurement when it reported usage; a failed round, or
+    /// one with no usage, only releases the sent messages.
+    pub(in crate::execute::scheduler) fn settle(&mut self, usage: Option<&Usage>) {
+        let sent = self.in_flight.take();
+        if let (Some((model, messages)), Some(usage)) = (sent, usage) {
+            self.measured = Some((model, UsageAnchor::new(messages, usage)));
+        }
     }
 }
 
@@ -446,6 +590,173 @@ impl Chain {
         } else {
             &self.entered_name
         }
+    }
+}
+
+#[cfg(test)]
+impl Chain {
+    /// A chain of `kind` under `lineage` that admits at most `concurrency`
+    /// tasks at once, holds no access, and has entered no section, for a
+    /// test that fills an arena without a run.
+    pub(in crate::execute::scheduler) fn for_test(
+        lineage: runvil_types::ids::ChainId,
+        kind: ChainKind,
+        concurrency: std::num::NonZeroUsize,
+    ) -> Chain {
+        use crate::execute::RunParams;
+        use crate::heading_address::SectionIndex;
+        use crate::test_support::scenario::{TEST_SEED, TEST_STARTED_AT};
+
+        let source = concat!(
+            "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n",
+            "# Title\n\n## Only\n\ndone\n",
+        );
+        let prompt = Prompt::parse(source, "prompt", "chain-test")
+            .0
+            .expect("the test prompt parses");
+        let ctx = ChainState::root(
+            Arc::new(prompt),
+            "",
+            RunParams::new("chain-test", TEST_SEED, TEST_STARTED_AT),
+        );
+        Chain {
+            task: TaskId::from(lineage.clone()),
+            lineage,
+            counters: Counters::default(),
+            kind,
+            seed: TaskSeed::default(),
+            parked: None,
+            ctx,
+            selection: Arc::new(Mutex::new(None)),
+            access: None,
+            entered: None,
+            walk: Walk::new(SectionPos::top(SectionIndex::FIRST)),
+            entered_name: "Only".to_owned(),
+            var: serde_json::json!({}),
+            call_depth: CallDepth::ROOT,
+            concurrency,
+            anchor: ChatAnchor::default(),
+        }
+    }
+}
+
+/// The most chains one run may start: the arena indexes chains by `u32`,
+/// so the count is bounded by the index space.
+const MAX_CHAINS: usize = u32::MAX as usize;
+
+/// Arena index of a chain: indices, not references, so no chain ever holds
+/// a pointer to another. Only [`ChainArena::push`] creates one outside test
+/// builds, so every index names a chain; a `#[cfg(test)]` constructor mints
+/// one for tables that only compare indices. The index is the scheduler's
+/// private handle; the chain's identity for authors and callers is its
+/// hierarchical [`ChainId`](runvil_types::ids::ChainId), which never depends
+/// on arena order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(in crate::execute::scheduler) struct ChainIndex(u32);
+
+impl ChainIndex {
+    /// The arena index as a `usize`.
+    pub(in crate::execute::scheduler) fn index(self) -> usize {
+        self.0 as usize
+    }
+
+    /// An index no arena handed out, for a test of a table that only
+    /// compares indices.
+    #[cfg(test)]
+    pub(in crate::execute::scheduler) fn for_test(raw: u32) -> ChainIndex {
+        ChainIndex(raw)
+    }
+}
+
+/// The chain arena: every chain the run has started, indexed by
+/// [`ChainIndex`]. Every index the arena hands out names a chain: it holds
+/// at most [`MAX_CHAINS`] and never shrinks. A test build lowers that bound
+/// through a `#[cfg(test)]` setter, so the overflow path runs without
+/// allocating the real bound.
+pub(in crate::execute::scheduler) struct ChainArena {
+    chains: Vec<Chain>,
+    /// The chain-count bound in test builds: [`MAX_CHAINS`] until a test
+    /// shrinks it to drive the overflow path without allocating the real
+    /// one.
+    #[cfg(test)]
+    max_chains: usize,
+}
+
+impl ChainArena {
+    /// An empty arena.
+    pub(in crate::execute::scheduler) fn new() -> ChainArena {
+        ChainArena {
+            chains: Vec::new(),
+            #[cfg(test)]
+            max_chains: MAX_CHAINS,
+        }
+    }
+
+    /// Adds `chain` and returns the index that names it.
+    ///
+    /// # Errors
+    /// Returns an `Internal` failure when the arena already holds its
+    /// bound, leaving the arena unchanged.
+    pub(in crate::execute::scheduler) fn push(&mut self, chain: Chain) -> Result<ChainIndex> {
+        #[cfg(test)]
+        let max_chains = self.max_chains;
+        #[cfg(not(test))]
+        let max_chains = MAX_CHAINS;
+        if self.chains.len() >= max_chains {
+            return Err(error::internal("a run's chain count cannot exceed u32"));
+        }
+        let id = ChainIndex(u32::try_from(self.chains.len()).map_err(|cause| {
+            error::internal_with_cause("a run's chain count cannot exceed u32", &cause)
+        })?);
+        self.chains.push(chain);
+        Ok(id)
+    }
+
+    /// Every chain with its index, in the order the chains were pushed.
+    pub(in crate::execute::scheduler) fn iter(&self) -> impl Iterator<Item = (ChainIndex, &Chain)> {
+        // The bound holds the count to `u32`, so the index range covers
+        // every chain.
+        (0..).map(ChainIndex).zip(&self.chains)
+    }
+
+    /// Every chain, mutably, in the order the chains were pushed.
+    pub(in crate::execute::scheduler) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Chain> {
+        self.chains.iter_mut()
+    }
+
+    /// How many chains the run has started.
+    pub(in crate::execute::scheduler) fn len(&self) -> usize {
+        self.chains.len()
+    }
+
+    /// The `call` children of `parent`, in the order they started.
+    pub(in crate::execute::scheduler) fn call_children(
+        &self,
+        parent: ChainIndex,
+    ) -> impl Iterator<Item = ChainIndex> {
+        self.iter()
+            .filter(move |(_, chain)| chain.kind.parent() == Some(parent))
+            .map(|(child, _)| child)
+    }
+
+    /// Shrinks the chain-count bound so a test can drive the overflow path.
+    #[cfg(test)]
+    pub(in crate::execute::scheduler) fn set_max_for_test(&mut self, limit: usize) {
+        self.max_chains = limit;
+    }
+}
+
+impl Index<ChainIndex> for ChainArena {
+    type Output = Chain;
+
+    fn index(&self, id: ChainIndex) -> &Chain {
+        &self.chains[id.index()]
+    }
+}
+
+impl IndexMut<ChainIndex> for ChainArena {
+    fn index_mut(&mut self, id: ChainIndex) -> &mut Chain {
+        &mut self.chains[id.index()]
     }
 }
 

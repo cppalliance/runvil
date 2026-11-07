@@ -5,11 +5,10 @@
 //! reach another chain, the task arena, admission, or the ready queue, and
 //! the compiler enforces that.
 //! [`Scheduler::with_chain`] is the only way into the view. The view's
-//! requests sit beside the arms they belong to, in the eight
+//! requests sit beside the arms they belong to, in the six
 //! `impl ChainOps` blocks this crate holds: the shared `prompt`, `scope`,
 //! `answer`, `issue`, and `number_round` live here in `chain_ops`, and the
-//! arms live in `apply`, `chat`, `dispatch`, `tool_call`, its `adhoc` and
-//! `discovery` children, and `walk`.
+//! arms live in `apply`, `chat`, `dispatch`, `tool_call`, and `walk`.
 
 use std::sync::Arc;
 

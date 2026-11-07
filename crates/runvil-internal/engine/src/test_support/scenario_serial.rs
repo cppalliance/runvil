@@ -7,15 +7,15 @@ use std::collections::BTreeMap;
 use runvil_types::event::Event;
 use runvil_types::ids::{Provenance, TaskId};
 
-use super::super::perform_locally;
-use super::super::scripted_chat::{ScriptedReply, text};
+use super::perform_locally;
+use super::scripted_chat::{ScriptedReply, text};
 use crate::Error;
 use crate::execute::{Effect, EffectAnswer, EffectId, EffectRecord, IssuedEffect, Run, Step};
 
 /// The answer a `Chat` effect gets from the scripted model's `reply`,
 /// built as [`ScriptedChat::complete_now`] builds it.
 ///
-/// [`ScriptedChat::complete_now`]: super::super::scripted_chat::ScriptedChat::complete_now
+/// [`ScriptedChat::complete_now`]: super::scripted_chat::ScriptedChat::complete_now
 pub(crate) fn chat_answer(reply: &ScriptedReply) -> EffectAnswer {
     EffectAnswer::Chat(reply.answer().map(Box::new))
 }

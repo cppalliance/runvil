@@ -9,6 +9,7 @@
 //! [`ChainState`] when a fork replaces it. Per-call data (a section, a
 //! `var` snapshot) stays in parameters or on the per-section frame.
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Mutex};
@@ -17,12 +18,13 @@ use runvil_types::cancel::CancelHandle;
 use runvil_types::emitter::{Emitter, EventSink};
 use runvil_types::event::Event;
 use runvil_types::ids::{ChainId, TaskId};
-use runvil_types::packs::Prelude;
+use runvil_types::packs::{PackId, Prelude};
+use runvil_types::tools::ToolCatalog;
 use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::{Access, ScopeHandle, VfsRef};
 
 use crate::Error;
-use crate::lua::{Argv, ToolSet};
+use crate::lua::{Argv, RosterEntry, ToolSet};
 use crate::model::{ModelBinding, ModelRole, ModelSet};
 use crate::prompt::Prompt;
 
@@ -31,9 +33,6 @@ use super::params::{RunLimits, RunParams};
 use super::requirements::Requirements;
 use super::section_context::SectionSys;
 use super::section_vm::{SectionVmSetup, VmSeed};
-
-#[path = "context-bound.rs"]
-mod bound;
 
 /// A task's reporting handles: its task-scoped event emitter and its
 /// model-turn counter.
@@ -125,7 +124,7 @@ pub(crate) struct ChainState {
     reporting: ReportingHandles,
     /// The run's argument string for `{{ args }}` substitution.
     args: Arc<str>,
-    /// The run's `argv`, as `bound::derive_argv` derives it from `args`. At
+    /// The run's `argv`, as `derive_argv` derives it from `args`. At
     /// construction this is the value the H1 pass starts from; the walk's
     /// fork holds the value H1 left behind at the freeze, so an H1 repair
     /// reaches every downstream section.
@@ -163,11 +162,7 @@ impl ChainState {
         let model_set = Arc::new(fill::fill_model_set(&prompt, models, &mut requirements));
         requirements.check_packs(&prompt, &tools, packs.as_ref());
         let refusal = requirements.refusal(&prompt);
-        let tool_set = Arc::new(bound::run_tool_set(
-            &prompt,
-            tools,
-            packs.unwrap_or_default(),
-        ));
+        let tool_set = Arc::new(run_tool_set(&prompt, tools, packs.unwrap_or_default()));
         let execution: Arc<str> = Arc::from(name);
         // The root task's event sequence starts at the params'
         // `provenance_start`: past any parse events the caller put in the
@@ -180,7 +175,7 @@ impl ChainState {
             Arc::clone(&execution),
             report_debug,
         ));
-        let derived_argv = bound::derive_argv(&prompt, args).map(Arc::from);
+        let derived_argv = derive_argv(&prompt, args).map(Arc::from);
         Self {
             shared: Arc::new(SharedState {
                 prompt,
@@ -268,7 +263,7 @@ impl ChainState {
         &self.args
     }
 
-    /// The run's `argv`, as `bound::derive_argv` derives it; on the walk,
+    /// The run's `argv`, as `derive_argv` derives it; on the walk,
     /// the value H1 left behind at the freeze.
     pub(super) fn argv(&self) -> Option<&Arc<serde_json::Value>> {
         self.argv.as_ref()
@@ -368,7 +363,7 @@ impl ChainState {
     #[must_use]
     pub(super) fn with_args(&self, args: &str) -> Self {
         let mut ctx = self.clone();
-        ctx.argv = bound::derive_argv(&self.shared.prompt, args).map(Arc::from);
+        ctx.argv = derive_argv(&self.shared.prompt, args).map(Arc::from);
         ctx.args = Arc::from(args);
         ctx
     }
@@ -489,6 +484,43 @@ impl fmt::Debug for SharedState {
                 &self.preludes.iter().map(Prelude::pack).collect::<Vec<_>>(),
             )
             .finish()
+    }
+}
+
+/// Builds the run's shared tool set: the frontmatter's declared Packs,
+/// and the run catalog and roster, all moved out of the params. Nothing
+/// is bound here: each section entry binds the tools it offers when it
+/// freezes its sets.
+fn run_tool_set(
+    prompt: &Prompt,
+    tools: ToolCatalog,
+    packs: BTreeMap<PackId, RosterEntry>,
+) -> ToolSet {
+    ToolSet::new(
+        prompt
+            .frontmatter()
+            .uses()
+            .iter()
+            .map(|entry| entry.id().clone())
+            .collect(),
+        packs,
+        tools,
+    )
+}
+
+/// Derives a section's `argv` from the args string under the prompt's
+/// declaration: a default-declared prompt wraps the interface prose into
+/// the default shape (`argv.prose`, with the empty string present, not
+/// absent); a structured declaration parses the string as JSON, and a parse
+/// failure or a JSON `null` reads as nil (`if argv then` is the malformed
+/// check). The executor never hard-errors on shape.
+fn derive_argv(prompt: &Prompt, args: &str) -> Option<serde_json::Value> {
+    if prompt.frontmatter().args().is_default() {
+        return Some(serde_json::json!({ "prose": args }));
+    }
+    match serde_json::from_str(args) {
+        Ok(serde_json::Value::Null) | Err(_) => None,
+        Ok(value) => Some(value),
     }
 }
 
