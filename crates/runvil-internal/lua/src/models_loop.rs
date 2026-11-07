@@ -444,4 +444,5 @@ fn engine_type_name(value: &Value) -> &'static str {
 }
 
 #[cfg(test)]
+#[path = "models_loop-tests.rs"]
 mod tests;
