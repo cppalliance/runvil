@@ -154,4 +154,5 @@ impl ScopeHandle {
 }
 
 #[cfg(test)]
+#[path = "scope_handle-tests.rs"]
 mod tests;

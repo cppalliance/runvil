@@ -27,4 +27,5 @@ pub use output::{OutputTrust, ToolOutput, tool_error};
 pub use registry::ToolCatalog;
 
 #[cfg(test)]
+#[path = "tools-tests.rs"]
 mod tests;

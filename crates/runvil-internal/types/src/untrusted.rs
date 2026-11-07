@@ -198,4 +198,5 @@ fn neutralize(text: &str, nonce: &str) -> String {
 }
 
 #[cfg(test)]
+#[path = "untrusted-tests.rs"]
 mod tests;

@@ -19,4 +19,5 @@ pub use options::{CompletionOptions, ModelBinding, ModelInvocation, ModelSet, Te
 pub use runvil_types::models::ModelId;
 
 #[cfg(test)]
+#[path = "model-tests.rs"]
 mod tests;

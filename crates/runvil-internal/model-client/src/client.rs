@@ -21,4 +21,5 @@ pub use wire::{
 };
 
 #[cfg(test)]
+#[path = "client-tests.rs"]
 mod tests;

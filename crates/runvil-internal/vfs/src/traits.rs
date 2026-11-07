@@ -9,6 +9,7 @@ mod backend;
 mod identity;
 mod policy;
 #[cfg(test)]
+#[path = "traits-tests.rs"]
 mod tests;
 
 pub use backend::{Vfs, VfsAccess};
