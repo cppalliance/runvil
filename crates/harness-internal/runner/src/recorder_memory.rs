@@ -5,7 +5,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use runvil::error::{Error, FactKey};
 use serde_json::Value;
 
-use super::{Record, RecorderFuture, RunId, RunMeta, RunRecorder, recorder_error};
+use crate::recorder::{Record, RecorderFuture, RunId, RunMeta, RunRecorder, recorder_error};
 
 /// A recorder that keeps every run in memory, for tests and doc examples.
 ///

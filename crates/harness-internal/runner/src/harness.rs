@@ -8,13 +8,18 @@
 //! request's source, drives the run through the effect loop, and reads the
 //! declared output file of a completed run. Every performer future is
 //! polled inside that one future, and every VFS operation runs inline in
-//! it, so the Harness starts no task and names no runtime.
+//! it, so the Harness starts no task and names no runtime. The stop and
+//! the cancel a [`RunControl`] raises are plain flags any thread can set,
+//! and the run's effect loop is their one waiter.
 
 use std::fmt;
 use std::pin::pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::task::{Context, Poll};
 
 use futures_util::future::{Either, select};
+use futures_util::task::AtomicWaker;
 use runvil::cancel::CancelHandle;
 use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::model::ModelInfo;
@@ -28,12 +33,6 @@ use crate::host::HostContext;
 use crate::performers::{InferenceBroker, Timer};
 use crate::prepare::{Services, begin, prepare};
 use crate::recorder::{RunId, RunRecorder, is_refusal};
-
-#[path = "harness-control.rs"]
-mod control;
-
-pub use control::RunControl;
-pub(crate) use control::StopSignal;
 
 /// Drives one run of a prompt for a Host.
 ///
@@ -283,6 +282,128 @@ impl Harness {
             result,
             output,
         })
+    }
+}
+
+/// A handle that drops a run's in-flight round or cancels the run, from
+/// outside the future that drives it.
+///
+/// [`stop_round`](Self::stop_round) drops the work in flight, and the run
+/// goes on. [`cancel`](Self::cancel) ends the run.
+///
+/// Cloning is cheap, and every clone controls the same run. Take one from
+/// [`Harness::control`](crate::Harness::control) before you call
+/// [`Harness::run`](crate::Harness::run), because `run` consumes the
+/// Harness.
+#[derive(Clone)]
+pub struct RunControl {
+    cancel: CancelHandle,
+    stop: Arc<StopSignal>,
+}
+
+impl RunControl {
+    /// The control over a run whose Engine cancel flag is `cancel`.
+    fn new(cancel: CancelHandle) -> Self {
+        Self {
+            cancel,
+            stop: Arc::default(),
+        }
+    }
+
+    /// Drops the effects in flight, except tool calls that survive stops,
+    /// and lets the run go on.
+    ///
+    /// A call survives a stop when its tool's info sets
+    /// `survives_stop`, as the question to the operator does; for a tool
+    /// only the model sees, that is the info its section's render gave it.
+    /// Every other effect in flight is aborted and answered `Dropped`. The
+    /// run's cancel flag stays clear.
+    /// A `pcall` around a dropped call catches its canceled error.
+    /// Otherwise, the error ends the run canceled.
+    ///
+    /// A stop also drops the tool calls waiting for a slot, unstarted,
+    /// except those that survive stops, which start once a slot frees.
+    ///
+    /// A stop reaches only the effects in flight or waiting when the loop
+    /// that drives the run sees it. The loop looks for a stop while it
+    /// waits for an answer and before it starts a step's effects. It drops
+    /// the effects the stop reaches, if any, then lowers the stop.
+    pub fn stop_round(&self) {
+        self.stop.raise();
+    }
+
+    /// Cancels the run.
+    ///
+    /// Every effect in flight, tool calls that survive stops included, is
+    /// answered `Dropped`, and the run ends canceled. Every tool call
+    /// waiting for a slot is answered `Dropped` too, unstarted. A cancel
+    /// raised before the run begins still gives the run a record, which
+    /// ends canceled before the prompt is parsed. Calling `cancel` more
+    /// than once is the same as calling it once.
+    pub fn cancel(&self) {
+        self.cancel.cancel();
+    }
+
+    /// The run's Engine cancel flag.
+    fn cancel_handle(&self) -> &CancelHandle {
+        &self.cancel
+    }
+
+    /// The run's stop signal.
+    fn stop_signal(&self) -> &Arc<StopSignal> {
+        &self.stop
+    }
+}
+
+impl fmt::Debug for RunControl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RunControl")
+            .field("canceled", &self.cancel.is_canceled())
+            .field("stop_raised", &self.stop.raised.load(Ordering::SeqCst))
+            .finish()
+    }
+}
+
+/// A stop raised from any thread and lowered by the run's effect loop once
+/// it has dropped what the stop reached.
+#[derive(Default)]
+pub(crate) struct StopSignal {
+    raised: AtomicBool,
+    waker: AtomicWaker,
+}
+
+impl StopSignal {
+    /// Raises the stop and wakes the loop waiting on it.
+    fn raise(&self) {
+        self.raised.store(true, Ordering::SeqCst);
+        self.waker.wake();
+    }
+
+    /// Whether a stop is raised.
+    pub(crate) fn is_raised(&self) -> bool {
+        self.raised.load(Ordering::SeqCst)
+    }
+
+    /// Ready while a stop is raised, or registers `cx` to be woken by the
+    /// next one. The flag is checked again after the registration, so a
+    /// stop raised between the two is never lost.
+    pub(crate) fn poll_raised(&self, cx: &mut Context<'_>) -> Poll<()> {
+        if self.is_raised() {
+            return Poll::Ready(());
+        }
+        self.waker.register(cx.waker());
+        if self.is_raised() {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
+
+    /// Lowers the stop. A stop raised while the loop was dropping what an
+    /// earlier one reached is lowered with it, since nothing it could
+    /// reach is left in flight.
+    pub(crate) fn lower(&self) {
+        self.raised.store(false, Ordering::SeqCst);
     }
 }
 

@@ -38,8 +38,10 @@
 //! effect is never in flight at a cancel or a stop: it is answered before
 //! the loop waits again. A drop is an answer, recorded like any other, so
 //! every effect record has exactly one answer record. Tool calls beyond the
-//! performer's cap wait, oldest first, and a cancel, a stop, or a
-//! withdrawal reaches them.
+//! performer's cap wait unstarted, oldest first, so none starves, and a
+//! cancel, a stop, or a withdrawal reaches them by the same reach as the
+//! effects in flight. Chat, render, and timer effects never wait and never
+//! count toward the cap.
 //!
 //! A performer that panics is caught where its future is polled: its
 //! effect is answered `Dropped` and the panic is logged, so a lost
@@ -51,12 +53,17 @@
 //! with an `Internal` error: the run reports a stall itself, so reaching
 //! this means the loop lost an effect.
 
+use std::any::Any;
+use std::collections::{BTreeMap, HashMap};
 use std::future::{Future, poll_fn};
+use std::num::NonZeroUsize;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::Poll;
+use std::task::{Context, Poll, Waker};
 
+use futures_util::future::{AbortHandle, Abortable, Aborted, FutureExt as _};
+use futures_util::stream::{FuturesUnordered, StreamExt as _};
 use runvil::cancel::CancelHandle;
 use runvil::effect::{Effect, EffectAnswer, EffectId, IssuedEffect};
 use runvil::error::{Error, ErrorCode};
@@ -64,15 +71,11 @@ use runvil::event::Event;
 use runvil::ids::Provenance;
 use runvil::vfs::{Access, VfsOp, perform_vfs_op};
 use runvil::{Run, Step};
+use tracing::Instrument as _;
 
 use crate::harness::StopSignal;
 use crate::performers::{BoxFuture, Performers};
 use crate::recorder::{Record, RecordKind, RunId, RunRecorder, recorder_error, refused};
-
-#[path = "effect_loop-flight.rs"]
-mod flight;
-
-use flight::{Flights, Reach};
 
 /// The message of the failure a stalled run ends with.
 const STALLED: &str = "the effect loop has nothing to await for a pending run";
@@ -451,6 +454,256 @@ impl Driver {
     }
 }
 
+/// How one future in flight ended: its answer or its panic's payload, or
+/// the abort the loop applied.
+type Landing = (EffectId, Result<std::thread::Result<EffectAnswer>, Aborted>);
+
+/// Which held effects an abort reaches.
+#[derive(Clone, Copy, Debug)]
+enum Reach<'a> {
+    /// Every effect, waiting or in flight: a cancel.
+    All,
+    /// Every effect but the tool calls that survive stops: a stop.
+    AllButSurvivors,
+    /// The listed effects, waiting or in flight: the tool calls a step
+    /// withdrew, in effect order.
+    Withdrawn(&'a [EffectId]),
+}
+
+impl Reach<'_> {
+    /// Whether this reach takes effect `id`, which survives stops when
+    /// `survives_stop` is set.
+    fn takes(self, id: EffectId, survives_stop: bool) -> bool {
+        match self {
+            Reach::All => true,
+            Reach::AllButSurvivors => !survives_stop,
+            Reach::Withdrawn(ids) => ids.binary_search(&id).is_ok(),
+        }
+    }
+}
+
+/// One effect in flight: what the loop needs to answer or drop it.
+struct InFlight {
+    /// The provenance the effect was issued under, for its answer record.
+    provenance: Provenance,
+    /// Aborts the effect's future.
+    abort: AbortHandle,
+    /// Whether the effect is a tool call, which counts toward the cap.
+    tool_call: bool,
+    /// Whether the effect is a tool call that survives stops, which a
+    /// stop leaves alone.
+    survives_stop: bool,
+}
+
+/// A tool call waiting for a slot: its performer future, not yet polled.
+struct Waiting {
+    provenance: Provenance,
+    survives_stop: bool,
+    answer: BoxFuture<EffectAnswer>,
+}
+
+/// The effects in flight and their futures, and the tool calls waiting
+/// for a slot.
+///
+/// Every future in flight sits in one `FuturesUnordered` as an `Abortable`
+/// future under `catch_unwind`. An aborted future leaves the keyed set at
+/// once, since the loop answers its effect as it aborts it, and is torn
+/// down the next time the set is polled; whatever it yields then is
+/// discarded, so the run never sees two answers for one effect.
+struct Flights {
+    futures: FuturesUnordered<BoxFuture<Landing>>,
+    /// The effects in flight still owed an answer. A landing for an id not
+    /// here is an aborted future's late end and is discarded.
+    effects: HashMap<EffectId, InFlight>,
+    /// Tool calls waiting for a slot; the lowest id starts first.
+    waiting: BTreeMap<EffectId, Waiting>,
+    /// The most tool calls in flight at once.
+    cap: NonZeroUsize,
+}
+
+impl Flights {
+    fn new(cap: NonZeroUsize) -> Self {
+        Self {
+            futures: FuturesUnordered::new(),
+            effects: HashMap::new(),
+            waiting: BTreeMap::new(),
+            cap,
+        }
+    }
+
+    /// Whether no effect is owed an answer.
+    fn is_empty(&self) -> bool {
+        self.effects.is_empty() && self.waiting.is_empty()
+    }
+
+    /// How many effects are owed an answer, waiting calls included.
+    fn len(&self) -> usize {
+        self.effects.len() + self.waiting.len()
+    }
+
+    /// Tears down every future the set holds, aborted ones not yet polled
+    /// included, and every waiting call, with no answer for any of them.
+    fn clear(&mut self) {
+        self.futures.clear();
+        self.effects.clear();
+        self.waiting.clear();
+    }
+
+    /// Puts `answer`, the future of chat, render, or timer effect `id`, in
+    /// flight under `provenance`. It never waits and never counts toward
+    /// the cap.
+    fn start(&mut self, id: EffectId, provenance: Provenance, answer: BoxFuture<EffectAnswer>) {
+        self.launch(id, provenance, false, false, answer);
+    }
+
+    /// Queues `answer`, the performer future of tool call `id`, under
+    /// `provenance`, then starts waiting calls, lowest id first, while
+    /// fewer than `cap` tool calls are in flight. `survives_stop` marks a
+    /// call that survives stops.
+    fn queue(
+        &mut self,
+        id: EffectId,
+        provenance: Provenance,
+        survives_stop: bool,
+        answer: BoxFuture<EffectAnswer>,
+    ) {
+        self.waiting.insert(
+            id,
+            Waiting {
+                provenance,
+                survives_stop,
+                answer,
+            },
+        );
+        self.fill();
+    }
+
+    /// Starts waiting calls, lowest id first, while fewer than `cap` tool
+    /// calls are in flight.
+    fn fill(&mut self) {
+        let mut running = self
+            .effects
+            .values()
+            .filter(|in_flight| in_flight.tool_call)
+            .count();
+        while running < self.cap.get() {
+            let Some((id, call)) = self.waiting.pop_first() else {
+                return;
+            };
+            self.launch(id, call.provenance, true, call.survives_stop, call.answer);
+            running += 1;
+        }
+    }
+
+    /// Puts `answer`, the performer future of effect `id`, in flight under
+    /// `provenance`, inside a span that records the effect id, the task
+    /// path, and the task-local sequence, so a run's effects trace as a
+    /// group. `tool_call` marks a tool call, and `survives_stop` one that
+    /// survives stops.
+    fn launch(
+        &mut self,
+        id: EffectId,
+        provenance: Provenance,
+        tool_call: bool,
+        survives_stop: bool,
+        answer: BoxFuture<EffectAnswer>,
+    ) {
+        let span = tracing::info_span!(
+            "effect",
+            effect = %id,
+            task = %provenance.task,
+            seq = provenance.seq
+        );
+        let (abort, registration) = AbortHandle::new_pair();
+        let caught = AssertUnwindSafe(answer.instrument(span)).catch_unwind();
+        let landing = Abortable::new(caught, registration).map(move |landed| (id, landed));
+        self.futures.push(Box::pin(landing));
+        self.effects.insert(
+            id,
+            InFlight {
+                provenance,
+                abort,
+                tool_call,
+                survives_stop,
+            },
+        );
+    }
+
+    /// Polls for the next effect whose future landed, with its provenance
+    /// and answer. A future that panicked lands as `Dropped`, and the
+    /// panic is logged against its effect. A tool call that lands frees
+    /// its slot for the next waiting call.
+    fn poll_landed(&mut self, cx: &mut Context<'_>) -> Poll<(EffectId, Provenance, EffectAnswer)> {
+        loop {
+            let Poll::Ready(Some((id, landed))) = self.futures.poll_next_unpin(cx) else {
+                return Poll::Pending;
+            };
+            let Some(in_flight) = self.effects.remove(&id) else {
+                continue;
+            };
+            if in_flight.tool_call {
+                self.fill();
+            }
+            let answer = match landed {
+                Ok(Ok(answer)) => answer,
+                Ok(Err(panic)) => {
+                    tracing::error!(
+                        effect = %id,
+                        task = %in_flight.provenance.task,
+                        panic = panic_message(&*panic),
+                        "a performer panicked; its effect is dropped"
+                    );
+                    EffectAnswer::Dropped
+                }
+                // Only an aborted effect's future yields `Aborted`, and an
+                // aborted effect left `effects` as it was aborted.
+                Err(Aborted) => EffectAnswer::Dropped,
+            };
+            return Poll::Ready((id, in_flight.provenance, answer));
+        }
+    }
+
+    /// The next effect that has already landed, without waiting. Polling
+    /// also tears down every aborted future the set still holds.
+    fn landed_now(&mut self) -> Option<(EffectId, Provenance, EffectAnswer)> {
+        match self.poll_landed(&mut Context::from_waker(Waker::noop())) {
+            Poll::Ready(landed) => Some(landed),
+            Poll::Pending => None,
+        }
+    }
+
+    /// Takes every effect waiting or in flight that `reach` takes:
+    /// drops each waiting call's future unstarted, aborts each effect in
+    /// flight, and returns each one's id and provenance in effect order,
+    /// for the loop to answer `Dropped`. Then starts waiting calls in the
+    /// slots it freed, so it never starts a call the same reach takes.
+    fn abort(&mut self, reach: Reach<'_>) -> Vec<(EffectId, Provenance)> {
+        let in_flight = self
+            .effects
+            .iter()
+            .filter(|(id, in_flight)| reach.takes(**id, in_flight.survives_stop))
+            .map(|(id, _)| *id);
+        let waiting = self
+            .waiting
+            .iter()
+            .filter(|(id, call)| reach.takes(**id, call.survives_stop))
+            .map(|(id, _)| *id);
+        let mut chosen: Vec<EffectId> = in_flight.chain(waiting).collect();
+        chosen.sort_unstable();
+        let mut aborted = Vec::with_capacity(chosen.len());
+        for id in chosen {
+            if let Some(in_flight) = self.effects.remove(&id) {
+                in_flight.abort.abort();
+                aborted.push((id, in_flight.provenance));
+            } else if let Some(call) = self.waiting.remove(&id) {
+                aborted.push((id, call.provenance));
+            }
+        }
+        self.fill();
+        aborted
+    }
+}
+
 /// Answers one Vfs effect inline: performs `op` through the store view
 /// the effect carries and returns the answer to record and resume the run
 /// with. A panic out of the backend is caught here, logged against `id`
@@ -480,6 +733,15 @@ fn answer_vfs(
             EffectAnswer::Dropped
         }
     }
+}
+
+/// A panic payload's message, when it carries one.
+fn panic_message(payload: &(dyn Any + Send)) -> &str {
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("a panic with no message")
 }
 
 /// One record under `provenance`.

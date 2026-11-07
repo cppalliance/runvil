@@ -46,6 +46,7 @@ mod host;
 pub mod performers;
 pub mod prepare;
 pub mod recorder;
+mod recorder_memory;
 
 pub use display_chain::display_chain;
 pub use harness::{Harness, RunControl, RunReport, RunRequest};

@@ -30,10 +30,7 @@ use std::pin::Pin;
 use runvil::RunSeed;
 use runvil::error::{Error, ErrorCode, FactKey};
 
-#[path = "recorder-memory.rs"]
-mod memory;
-
-pub use memory::MemoryRecorder;
+pub use crate::recorder_memory::MemoryRecorder;
 
 /// The future that each [`RunRecorder`] method returns.
 ///
