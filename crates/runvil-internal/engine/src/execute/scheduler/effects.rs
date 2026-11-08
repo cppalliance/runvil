@@ -8,8 +8,8 @@
 //! silently. An effect issued in a step goes out with that step even when
 //! the run's end orphaned it in the same step, because the caller still
 //! owes it an answer. The step also lists the effects withdrawn since the
-//! last step, in id order: a tool call orphaned while the run goes on, and
-//! every outstanding effect, of every kind, once the run's end tears it
+//! last step, in id order: every effect orphaned while the run goes on, of
+//! every kind, and every outstanding effect once the run's end tears it
 //! down.
 //!
 //! An awaited entry holds what its chain asked for, in the terms
@@ -174,8 +174,8 @@ pub(super) struct EffectTable {
     /// One entry per issued effect the caller has not answered yet, keyed
     /// by the effect's id. An entry is awaited while its chain waits, and
     /// orphaned once the chain stopped waiting: a chain end, a task cancel
-    /// or abandonment, or the run's teardown. An entry leaves when its
-    /// answer arrives.
+    /// or abandonment, a message that withdrew a loop's round, or the run's
+    /// teardown. An entry leaves when its answer arrives.
     outstanding: HashMap<EffectId, Outstanding>,
     /// The effects issued since the step began, in issue order, each with
     /// the provenance of the task that built it; the step returns them.
@@ -231,25 +231,29 @@ impl EffectTable {
         }
     }
 
-    /// Orphans `id`, whose chain stopped waiting: the caller still owes the
-    /// answer, which is discarded on arrival. Any continuation other than a
-    /// tool call is orphaned the same way and returns `None`, since only a
-    /// tool call has an identity to end: a `chat` round, an `infer`, a
-    /// render, a store operation, and a timer all leave the entry orphaned
-    /// with nothing to report. A tool call is also listed as withdrawn, and
-    /// its chain and identity are returned so the call can be ended. An id
-    /// with no entry stays unknown, so an answer for it still fails loudly.
+    /// Orphans `id`, whose chain stopped waiting, and lists it as
+    /// withdrawn: the caller still owes the answer, which is discarded on
+    /// arrival. Only a tool call has an identity to end, so only a tool
+    /// call returns its chain and identity; a `chat` round, an `infer`, a
+    /// render, a store operation, and a timer return `None`. An id with no
+    /// entry stays unknown, so an answer for it still fails loudly, and an
+    /// orphan stays as it is.
     pub(super) fn orphan(&mut self, id: EffectId) -> Option<(ChainIndex, ExecId)> {
         let entry = self.outstanding.get_mut(&id)?;
-        let Outstanding::Awaited(Pending {
-            chain,
-            resume: Continuation::ToolCall(call),
-        }) = std::mem::replace(entry, Outstanding::Orphaned)
+        let Outstanding::Awaited(Pending { chain, resume }) =
+            std::mem::replace(entry, Outstanding::Orphaned)
         else {
             return None;
         };
         self.withdrawn.push(id);
-        Some((chain, call.exec))
+        match resume {
+            Continuation::ToolCall(call) => Some((chain, call.exec)),
+            Continuation::Infer(_)
+            | Continuation::Chat(_)
+            | Continuation::Render(_)
+            | Continuation::Vfs(_)
+            | Continuation::Timer(_) => None,
+        }
     }
 
     /// Orphans every awaited effect at the run's teardown and withdraws
@@ -274,6 +278,18 @@ impl EffectTable {
             .collect();
         effects.sort_unstable();
         effects
+    }
+
+    /// The `models.loop` round `chain` awaits, if it awaits one: a `chat`
+    /// request that has no answer yet.
+    pub(super) fn awaited_round(&self, chain: ChainIndex) -> Option<EffectId> {
+        self.outstanding.iter().find_map(|(id, entry)| match entry {
+            Outstanding::Awaited(Pending {
+                chain: awaiting,
+                resume: Continuation::Chat(_),
+            }) if *awaiting == chain => Some(*id),
+            _ => None,
+        })
     }
 
     /// Whether any chain awaits an effect's answer.
@@ -322,14 +338,14 @@ impl EffectTable {
 mod tests {
     //! Tests for the effect table alone, one rule each: an issued effect takes
     //! exactly one answer, an orphan's answer is discarded, unknown ids and
-    //! second answers are reported, only orphaned tool calls are withdrawn
-    //! until teardown withdraws every outstanding effect, in id order, a step
-    //! lists only withdrawals still owed an answer, and an effect orphaned in
-    //! its own step still goes out with that step.
+    //! second answers are reported, every orphaned effect is withdrawn, in id
+    //! order, and teardown withdraws every outstanding one, a step lists only
+    //! withdrawals still owed an answer, and an effect orphaned in its own
+    //! step still goes out with that step.
 
     use std::time::Duration;
 
-    use runvil_types::ids::{ChainId, Provenance, TaskId};
+    use runvil_types::ids::{ChainId, Provenance, RoundId, TaskId};
     use runvil_types::tools::{ToolId, ToolInfo};
     use runvil_vfs::{ExecId, Origin, VfsRef};
     use serde_json::json;
@@ -360,6 +376,17 @@ mod tests {
             provenance(),
             timer(),
             Continuation::Timer(TaskId::from(ChainId::root().child(0))),
+        )
+    }
+
+    /// Issues a `chat` round for `chain`. The table reads only the
+    /// continuation, so the effect itself is a timer's.
+    fn issue_round(table: &mut EffectTable, chain: ChainIndex) -> EffectId {
+        table.issue(
+            chain,
+            provenance(),
+            timer(),
+            Continuation::Chat(RoundId::new(0)),
         )
     }
 
@@ -450,20 +477,31 @@ mod tests {
     }
 
     #[test]
-    fn only_orphaned_tool_calls_are_withdrawn_in_id_order() {
+    fn every_orphaned_effect_is_withdrawn_in_id_order() {
         let mut table = EffectTable::default();
         let timer = issue_timer(&mut table, chain(0));
         let (first, first_exec) = issue_tool_call(&mut table, chain(1));
+        let round = issue_round(&mut table, chain(2));
         let (second, second_exec) = issue_tool_call(&mut table, chain(1));
         assert_eq!(table.orphan(second), Some((chain(1), second_exec)));
-        assert_eq!(table.orphan(timer), None);
+        assert_eq!(table.orphan(round), None, "a round has no call identity");
+        assert_eq!(table.orphan(timer), None, "a timer has no call identity");
         assert_eq!(table.orphan(first), Some((chain(1), first_exec)));
         let (_, withdrawn) = table.take_step();
-        assert_eq!(withdrawn, [first, second]);
+        assert_eq!(
+            withdrawn,
+            [timer, first, round, second],
+            "the timer and the round are withdrawn beside the calls"
+        );
+        assert_eq!(
+            table.orphan(round),
+            None,
+            "an orphan orphaned again stays as it is"
+        );
         let (_, withdrawn) = table.take_step();
         assert!(
             withdrawn.is_empty(),
-            "a step lists only the calls orphaned since the last one: {withdrawn:?}"
+            "a step lists only the effects orphaned since the last one: {withdrawn:?}"
         );
     }
 

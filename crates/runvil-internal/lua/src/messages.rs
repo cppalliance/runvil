@@ -251,6 +251,12 @@ impl Snapshot {
             .map(|record| MessageRecord::clone(record))
             .collect()
     }
+
+    /// Adds `records` after the snapshot's own, so putting it back keeps
+    /// them too.
+    pub(crate) fn extend(&mut self, records: impl IntoIterator<Item = MessageRecord>) {
+        self.0.extend(records.into_iter().map(Arc::new));
+    }
 }
 
 /// The fields a view reads, in the order `pairs` visits them.

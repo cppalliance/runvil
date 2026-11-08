@@ -1,6 +1,6 @@
 -- The `tasks` namespace shims for a section VM: spawn, the
--- waits, the non-blocking checks, the progress note, the inbox read,
--- cancel, and the admission limit.
+-- waits, the non-blocking checks, the progress note, the inbox read and
+-- send, cancel, and the admission limit.
 --
 -- The Engine installs this after the coroutine prelude (`__impl_coro.lua`)
 -- and installs the returned table as the `tasks` global. The chunk
@@ -249,6 +249,21 @@ local function tasks_receive(...)
   return result
 end
 
+-- tasks.send(task, text) -> boolean: queue `text` in the inbox of `task`,
+-- a Task handle or id the caller owns, and return true, or return false,
+-- dropping the text, once the task has ended. A text that is not a string
+-- raises a `lua` error, and a task the caller does not own raises
+-- task_not_owned.
+local function tasks_send(task, text)
+  local id = task_id(task, "tasks.send")
+  if type(text) ~= "string" then
+    raise("lua", { message = "tasks.send text must be a string, got " .. engine_type(text) })
+  end
+  local ok, result = yield({ op = "send", task = id, text = text })
+  if not ok then fail(result) end
+  return result
+end
+
 -- tasks.concurrency(limit?): set the chain's admission limit for the
 -- tasks it spawns from here on (clamped to the parent chain's limit, or
 -- the run's concurrency ceiling for the main walk), or read the effective limit
@@ -284,6 +299,7 @@ return {
   pending = tasks_pending,
   note = tasks_note,
   receive = tasks_receive,
+  send = tasks_send,
   cancel = tasks_cancel,
   concurrency = tasks_concurrency,
 }

@@ -120,6 +120,27 @@ pub(crate) fn make_tasks_live_error(tasks: &[TaskId]) -> Error {
     )
 }
 
+/// A run that stalled: no chain can move, and the main chain does not wait
+/// on its inbox, the one wait a caller's message can end. It names, in id
+/// order, the tasks that wait on their inboxes, which only their owners
+/// could have filled. The `Tasks` fact holds their ids.
+pub(crate) fn make_stalled_error(waiting: &[TaskId]) -> Error {
+    let ids: Vec<String> = waiting.iter().map(ToString::to_string).collect();
+    let message = if ids.is_empty() {
+        "the run stalled: no chain can move".to_owned()
+    } else {
+        format!(
+            "the run stalled: no chain can move, and these tasks wait on their inboxes: {}",
+            ids.join(", ")
+        )
+    };
+    with_fact(
+        make_failure_error(ErrorCode::Stalled, message),
+        ErrorFact::Tasks,
+        ids,
+    )
+}
+
 /// A store failure with no operation to render, such as a handle
 /// acquisition or the declared-store probe: the store's code and facts,
 /// and a message that tells a run that declares no store so and follows

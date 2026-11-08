@@ -1,8 +1,8 @@
 //! The task-operation request parsers: `spawn`'s target, seeds, and var
 //! snapshot; the `timer` leaf request's author-supplied `seconds`, its
 //! domain checks, and the `Duration` it parses into; `pending`'s refusal
-//! of any argument; `receive`, which has no fields; and `concurrency`'s
-//! optional shim-validated limit.
+//! of any argument; `receive` and `arrivals`, which have no fields; `send`'s
+//! task and text; and `concurrency`'s optional shim-validated limit.
 
 use super::*;
 
@@ -165,6 +165,45 @@ fn receive_parses_without_fields() {
     let table = lua_table(&lua, "{ op = 'receive' }");
     let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
     assert!(matches!(request, Request::Receive), "got {request:?}");
+}
+
+#[test]
+fn arrivals_parses_without_fields() {
+    let lua = Lua::new();
+    let table = lua_table(&lua, "{ op = 'arrivals' }");
+    let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
+    assert!(matches!(request, Request::Arrivals), "got {request:?}");
+}
+
+#[test]
+fn send_parses_its_task_and_its_text() {
+    let lua = Lua::new();
+    let table = lua_table(
+        &lua,
+        "{ op = 'send', task = '0.2', text = 'also cover the tests' }",
+    );
+    let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
+    let Request::Send { task, text } = request else {
+        panic!("a send request, got {request:?}");
+    };
+    assert_eq!(task, "0.2".parse::<TaskId>().expect("`0.2` is a task id"));
+    assert_eq!(text, "also cover the tests");
+}
+
+#[test]
+fn a_send_naming_no_task_id_is_the_calls_error() {
+    let lua = Lua::new();
+    let table = lua_table(&lua, "{ op = 'send', task = '0.x', text = 'hi' }");
+    match Request::from_yield(&lua, &Value::Table(table)) {
+        YieldParse::Refused(Error {
+            code: ErrorCode::LuaRuntime,
+            message,
+            ..
+        }) => {
+            assert!(message.starts_with("`0.x` is not a task id"), "{message}");
+        }
+        other => panic!("expected the task id call error, got {other:?}"),
+    }
 }
 
 #[test]

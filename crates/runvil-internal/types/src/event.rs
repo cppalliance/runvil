@@ -387,6 +387,11 @@ events! {
             /// The message as sent: untrusted text from whoever sent it.
             text: String,
         },
+        /// A chain parked in `tasks.receive()` or `tasks.reply`
+        /// with its inbox empty. Emitted under its provenance
+        /// in the step where it parks. Serialized with kind
+        /// `inbox_waiting`.
+        InboxWaiting {},
         // Debug.
         /// The JSON body sent to the chat-completions endpoint for one
         /// model turn: raw, unredacted, and including the full prompt.

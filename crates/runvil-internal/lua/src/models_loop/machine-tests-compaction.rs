@@ -1,11 +1,15 @@
 //! Tests for the machine's compaction after an overflow: the snapshot and
 //! the `compacting` flag around the compactor, the settled outcome, the
-//! uncounted retry, and the one compaction a round gets. Each test edits
-//! the list from Rust where a compactor would edit it from Lua.
+//! uncounted retry, the one compaction a round gets, and the messages a
+//! retry appends, which its restore keeps. Each test edits the list from
+//! Rust where a compactor would edit it from Lua.
 
 use serde_json::json;
 
-use super::{answered, batch, batched, called, chatting, records, reply, show};
+use super::{
+    answered, arrived, batch, batched, called, chatting, from_operator, records, reply, settle,
+    show,
+};
 use crate::compactors::OverflowReason;
 use crate::messages::MessageList;
 use crate::models_loop::machine::Input;
@@ -78,7 +82,8 @@ fn a_compaction_that_shrank_retries_without_counting_and_keeps_its_records() {
         "the retry is not counted against a cap of 1"
     );
     assert!(!list.compacting());
-    assert_eq!(show(&machine.step(reply("done"))), "return");
+    assert_eq!(show(&machine.step(reply("done"))), "arrivals");
+    settle(&mut machine);
     assert_eq!(records(&list), ["user short||", "assistant done||"]);
 }
 
@@ -132,8 +137,36 @@ fn a_retry_answered_with_tool_calls_drops_the_snapshot_so_a_later_round_compacts
         show(&machine.step(called(Ok("returned"), false))),
         "chat list -"
     );
-    assert_eq!(show(&machine.step(reply("done"))), "return");
+    assert_eq!(show(&machine.step(reply("done"))), "arrivals");
+    settle(&mut machine);
     assert_eq!(records(&list), ["user short||", "assistant done||"]);
+}
+
+#[test]
+fn a_message_a_compacted_retry_appends_survives_the_restore_of_a_second_overflow() {
+    let list = long_list();
+    let mut machine = chatting(2, &list);
+    machine.step(overflow(OverflowReason::Precheck));
+    short(&list);
+    machine.step(called(Ok("returned"), false));
+    assert_eq!(show(&machine.step(arrived(&["late"]))), "chat list -");
+    assert_eq!(
+        records(&list),
+        ["user short||".to_owned(), from_operator("late")]
+    );
+    assert_eq!(
+        show(&machine.step(overflow(OverflowReason::Provider))),
+        PROVIDER,
+        "the round still compacts once"
+    );
+    assert_eq!(
+        records(&list),
+        [
+            "user a prompt long enough to shrink||".to_owned(),
+            from_operator("late")
+        ],
+        "the restore puts back the records before the compaction and keeps the message"
+    );
 }
 
 #[test]

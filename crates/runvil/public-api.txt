@@ -667,6 +667,7 @@ pub runvil::ErrorCode::RequirementsUnmet = 701
 pub runvil::ErrorCode::RootProtected = 615
 pub runvil::ErrorCode::ScopeEnded = 612
 pub runvil::ErrorCode::ServerError = 408
+pub runvil::ErrorCode::Stalled = 704
 pub runvil::ErrorCode::StructureInvalid = 102
 pub runvil::ErrorCode::Substitution = 205
 pub runvil::ErrorCode::TaskCanceled = 304
@@ -796,6 +797,9 @@ pub runvil::event::Event::InboxMessage { .. }
 pub runvil::event::Event::InboxMessage::provenance: runvil::ids::Provenance
 pub runvil::event::Event::InboxMessage::section: alloc::string::String
 pub runvil::event::Event::InboxMessage::text: alloc::string::String
+pub runvil::event::Event::InboxWaiting { .. }
+pub runvil::event::Event::InboxWaiting::provenance: runvil::ids::Provenance
+pub runvil::event::Event::InboxWaiting::section: alloc::string::String
 pub runvil::event::Event::Lua { .. }
 pub runvil::event::Event::Lua::message: alloc::string::String
 pub runvil::event::Event::Lua::provenance: runvil::ids::Provenance

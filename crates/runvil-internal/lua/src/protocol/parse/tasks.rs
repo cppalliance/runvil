@@ -1,7 +1,7 @@
 //! The task-operation request parsers: `spawn` and its seeds, the wait
 //! shims' internal `timer` and its author-supplied seconds, the `join_any`
 //! set, the single-task `ready`, `status`, and `cancel`, the `note` text,
-//! and the `concurrency` limit. The shims
+//! the `send` task and text, and the `concurrency` limit. The shims
 //! resolve a `Task` handle to its bare id before yielding, so every task
 //! field arrives as a path string; an id that does not parse is the
 //! author's argument error, raised at the call site.
@@ -166,6 +166,15 @@ pub(super) fn parse_cancel(table: &mlua::Table) -> std::result::Result<Request, 
 /// Parses a `note` request: the author-supplied `text`.
 pub(super) fn parse_note(table: &mlua::Table) -> std::result::Result<Request, FieldFailure> {
     Ok(Request::Note {
+        text: call_string(table, "text")?,
+    })
+}
+
+/// Parses a `send` request: the one task id, then the author-supplied
+/// `text`, which the shim has already checked is a string.
+pub(super) fn parse_send(table: &mlua::Table) -> std::result::Result<Request, FieldFailure> {
+    Ok(Request::Send {
+        task: call_task(table)?,
         text: call_string(table, "text")?,
     })
 }

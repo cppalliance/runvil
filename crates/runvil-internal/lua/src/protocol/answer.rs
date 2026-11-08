@@ -246,7 +246,8 @@ pub struct TaskStatus {
 /// own variant except
 /// [`Request::AdhocToolDone`](super::Request::AdhocToolDone), which the
 /// driver answers with [`Answer::ToolCallResult`] for the `tools.call` it
-/// closes.
+/// closes, and a `chat` request, which [`Answer::Arrivals`] also answers
+/// when messages reach its chain's inbox first.
 ///
 /// The driver answers a request with a `Result` over it, rendered to the
 /// `(ok, result)` envelope at resume time, and a failure is the `Err` side
@@ -289,6 +290,14 @@ pub enum Answer {
     /// The message a `receive` request took from the chain's inbox, as
     /// sent.
     Receive(String),
+    /// Whether a `send` request queued its text: false
+    /// once the task has ended.
+    Send(bool),
+    /// The messages taken from the chain's inbox, oldest first, as sent:
+    /// every one queued, possibly none, for an `arrivals` request; and, for
+    /// a `chat` request, the ones that reached the inbox before its round
+    /// was sent or answered, which the loop appends before it sends again.
+    Arrivals(Vec<String>),
     /// A `cancel` request ended its task, or found it already ended.
     Cancel,
     /// The classified output for a `chat` request. Boxed so the field-heavy

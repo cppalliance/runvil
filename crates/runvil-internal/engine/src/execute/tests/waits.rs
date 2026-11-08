@@ -252,11 +252,12 @@ fn cancel_ends_a_parked_task_idempotently_and_reports_task_canceled_once() {
     // task - so no `make_tasks_live_error`. A wait on the canceled entry delivers
     // `ok = false` with a `canceled` error value.
     //
-    // The rig holds the child's write until the child's `TaskCanceled` is
-    // reported, then releases it, so the write's answer lands on the
-    // canceled task while the run is still live. The owner's own yields
-    // are `exists`: the one before the cancel lets the child run, and the
-    // one after it keeps the run undecided past the step that cancels.
+    // The rig holds the child's write, so the child is still parked on it
+    // when the cancel lands. The cancel withdraws the write, so the rig
+    // drops it unperformed while the run is still live. The owner's own
+    // yields are `exists`: the one before the cancel lets the child run,
+    // and the one after it keeps the run undecided past the step that
+    // cancels.
     let child_write = |effect: &Effect| matches!(effect, Effect::Vfs { op: VfsOp::Write { path, .. }, .. } if path == "child-park");
     let md = tasks_prompt(
         "local t = tasks.spawn('## Child')\n\
@@ -283,7 +284,6 @@ fn cancel_ends_a_parked_task_idempotently_and_reports_task_canceled_once() {
     {
         assert!(rig.step(), "the run stopped before the child's cancel");
     }
-    rig.release(child_write);
     let mut rig = rig.finish();
     assert_eq!(
         rig.trace().text(),
@@ -295,8 +295,8 @@ fn cancel_ends_a_parked_task_idempotently_and_reports_task_canceled_once() {
         effects.iter().any(|(effect, answer)| matches!(
             effect,
             EffectRecord::Vfs { op: VfsOp::Write { path, .. } } if path == "child-park"
-        ) && *answer != AnswerRecord::Dropped),
-        "the released write reaches the canceled task with a real answer: {effects:?}"
+        ) && *answer == AnswerRecord::Dropped),
+        "the cancel withdrew the held write, which the caller dropped: {effects:?}"
     );
     assert_eq!(
         rig.task_state_for_test(&task("0.0")),

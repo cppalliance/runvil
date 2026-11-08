@@ -12,7 +12,7 @@ use super::*;
 use crate::lua::VfsOutcome;
 
 /// The main chain's task, `0`.
-fn main_task() -> TaskId {
+pub(super) fn main_task() -> TaskId {
     TaskId::from(ChainId::root())
 }
 
@@ -26,14 +26,14 @@ fn run_of_source(source: &str) -> Run {
 
 /// A run of the Pack-free prompt whose sections are `sections`, the first
 /// one walked first.
-fn run_of_sections(sections: &[(&str, &str)]) -> Run {
+pub(super) fn run_of_sections(sections: &[(&str, &str)]) -> Run {
     run_of_source(&prompt("", sections))
 }
 
 /// Steps `run` and returns the pending step's effects, events, and
 /// `waiting_for_input`.
 #[track_caller]
-fn pending(run: &mut Run) -> (Vec<IssuedEffect>, Vec<Event>, bool) {
+pub(super) fn pending(run: &mut Run) -> (Vec<IssuedEffect>, Vec<Event>, bool) {
     match run.step() {
         Step::Pending {
             effects,
@@ -47,7 +47,7 @@ fn pending(run: &mut Run) -> (Vec<IssuedEffect>, Vec<Event>, bool) {
 
 /// Steps `run` and returns the finished run's result and unread messages.
 #[track_caller]
-fn done(run: &mut Run) -> (Result<String, Error>, Vec<String>) {
+pub(super) fn done(run: &mut Run) -> (Result<String, Error>, Vec<String>) {
     match run.step() {
         Step::Done { result, unread, .. } => (result, unread),
         other @ Step::Pending { .. } => panic!("the run is over: {other:?}"),
@@ -56,7 +56,7 @@ fn done(run: &mut Run) -> (Result<String, Error>, Vec<String>) {
 
 /// Answers the one store effect in `effects` with `outcome`.
 #[track_caller]
-fn answer_store(run: &mut Run, effects: &[IssuedEffect], outcome: VfsOutcome) {
+pub(super) fn answer_store(run: &mut Run, effects: &[IssuedEffect], outcome: VfsOutcome) {
     let id = only_effect_id(effects);
     assert!(
         matches!(effects[0].effect, Effect::Vfs { .. }),

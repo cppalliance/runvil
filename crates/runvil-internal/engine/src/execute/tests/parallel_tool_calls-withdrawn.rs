@@ -1,8 +1,9 @@
 //! The step's `withdrawn` list: a step that cancels a task parked on a
 //! batch lists the calls it orphaned, the calls the same step issued
-//! included, in effect-id order however many tasks it cancels, and the
-//! step that decides the run lists every effect still outstanding, of
-//! every kind, the ones it issued included.
+//! included, in effect-id order however many tasks it cancels, a step that
+//! cancels a task parked on a model round lists that round, and the step
+//! that decides the run lists every effect still outstanding, of every
+//! kind, the ones it issued included.
 
 use runvil_types::cancel::CancelHandle;
 
@@ -120,6 +121,38 @@ fn canceling_a_task_withdraws_its_unanswered_tool_calls() {
     for id in calls {
         run.resume(id, EffectAnswer::Dropped);
     }
+    run.resume(linger, chat_answer(&text("done")));
+    let result = match run.step() {
+        Step::Done { result, .. } => result,
+        other @ Step::Pending { .. } => panic!("Main's second round ends the run: {other:?}"),
+    };
+    assert_eq!(text_of(result), "canceled");
+}
+
+#[test]
+fn canceling_a_task_withdraws_its_unanswered_model_round_and_discards_its_dropped_answer() {
+    let (mut run, infer, round) = canceled_child(&CancelHandle::new());
+    run.resume(infer, chat_answer(&text("go")));
+    let (mut issued, withdrawn) = withdrawals(run.step());
+    assert_eq!(
+        withdrawn,
+        [round],
+        "the cancel withdraws Child's round, which nobody will read"
+    );
+    let (linger, effect) = match issued.len() {
+        1 => issued.remove(0),
+        _ => panic!("the cancel issues only Main's next round: {issued:?}"),
+    };
+    assert!(
+        matches!(&effect, Effect::Chat { round, .. } if round.origin == ReplyOrigin::Infer),
+        "Main lingers on its second round: {effect:?}"
+    );
+    run.resume(round, EffectAnswer::Dropped);
+    let (issued, withdrawn) = withdrawals(run.step());
+    assert!(
+        issued.is_empty() && withdrawn.is_empty(),
+        "the dropped round's answer is discarded and resumes nothing: {issued:?} {withdrawn:?}"
+    );
     run.resume(linger, chat_answer(&text("done")));
     let result = match run.step() {
         Step::Done { result, .. } => result,

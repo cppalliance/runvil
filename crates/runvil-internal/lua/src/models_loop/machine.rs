@@ -17,6 +17,15 @@
 //! place. A kept compaction retries the round without counting it, and a
 //! round compacts at most once, so a retry that overflows again puts the
 //! snapshot back and raises `make_context_exhausted_error`.
+//!
+//! Arrivals: the scheduler answers a `chat` request with the messages that
+//! reached the chain's inbox before the round was sent or answered. The
+//! loop appends each as its own user record under the chain's arrival line
+//! and sends again without counting a round, and a compacted retry's
+//! snapshot keeps them, so a restore cannot lose them. After the final
+//! reply the loop reads the inbox once more: messages it finds start
+//! another round, and none returns, so the loop never returns with a
+//! message unread.
 
 use runvil_model_client::model::make_completion_error;
 use runvil_types::error::{ErrorCode, ErrorFact};
@@ -36,6 +45,12 @@ const EMPTY_MODEL_REPLY: &str = "empty model reply";
 
 /// The invariant an input the machine's phase does not await breaks.
 const UNEXPECTED_INPUT: &str = "the models.loop step received an input its phase does not await";
+
+/// The line a message appended on the main chain starts with.
+const MAIN_ARRIVAL: &str = "This message arrived while you were working:";
+
+/// The line a message appended on a task starts with: its owner sent it.
+const TASK_ARRIVAL: &str = "The task that started you sent this message while you were working:";
 
 /// One loop call: its rules' state and the values it passes along.
 #[derive(Debug)]
@@ -64,6 +79,9 @@ pub(super) struct Machine<V> {
     calls: Vec<ToolCallEvent>,
     /// The current batch's results so far, one per answered call.
     results: Vec<String>,
+    /// The line each message the loop appends starts with: the main
+    /// chain's, or a task's.
+    arrival: &'static str,
     /// What the machine waits on.
     phase: Phase<V>,
 }
@@ -90,6 +108,10 @@ pub(super) enum Phase<V> {
     /// The `adhoc_tool_done` answer: `(ok, text)`, with the handler's own
     /// raised value when it raised.
     Reporting(Option<V>),
+    /// The `arrivals` answer after the final reply was appended: `(ok,
+    /// texts)`, the messages the chain's inbox held, which start another
+    /// round, or none, which returns.
+    Checking,
     /// The loop returned or raised.
     Done,
 }
@@ -116,6 +138,9 @@ pub(super) enum Input<V> {
     /// The `adhoc_tool_done` answer: the call's text, or the value to
     /// raise.
     Reported(std::result::Result<String, V>),
+    /// Messages taken from the chain's inbox, oldest first: the answer to
+    /// an `arrivals` request, or to a `chat` request they reached first.
+    Arrived(Vec<String>),
 }
 
 /// What runs next, after the records the step pushed.
@@ -143,6 +168,8 @@ pub(super) enum Then<V> {
     /// the handler returned, or `{ op = "adhoc_tool_done", ok = false }`
     /// when it raised.
     Report(Option<V>),
+    /// Yield `{ op = "arrivals" }`.
+    Arrivals,
     /// Return nil.
     Return,
     /// Raise this value unchanged.
@@ -156,13 +183,15 @@ pub(super) enum Then<V> {
 impl<V: Clone> Machine<V> {
     /// A loop over `list`, capped at `max_rounds` rounds, and its first
     /// step: the first round's `chat`, or `make_tool_loop_exhausted_error` when the
-    /// cap is 0.
+    /// cap is 0. `on_task` is whether the loop runs inside a task, whose
+    /// messages come from its owner, rather than on the main chain.
     pub(super) fn begin(
         max_rounds: usize,
         list: MessageList,
         messages: V,
         handle: Option<V>,
         compactor: V,
+        on_task: bool,
     ) -> (Self, Then<V>) {
         let mut machine = Machine {
             max_rounds,
@@ -175,6 +204,7 @@ impl<V: Clone> Machine<V> {
             turn: 0,
             calls: Vec::new(),
             results: Vec::new(),
+            arrival: if on_task { TASK_ARRIVAL } else { MAIN_ARRIVAL },
             phase: Phase::Done,
         };
         let first = machine.next_round();
@@ -197,6 +227,18 @@ impl<V: Clone> Machine<V> {
                 Ok(round) => self.judge(*round, compacted),
                 Err(failure) => Then::Raise(failure),
             },
+            (Phase::Chatting(mut compacted), Input::Arrived(texts)) => {
+                let records = self.arrivals(texts);
+                if let Some(snapshot) = compacted.as_mut() {
+                    snapshot.extend(records.iter().cloned());
+                }
+                self.push(records, |machine| machine.chat(compacted))
+            }
+            (Phase::Checking, Input::Arrived(texts)) if texts.is_empty() => Then::Return,
+            (Phase::Checking, Input::Arrived(texts)) => {
+                let records = self.arrivals(texts);
+                self.push(records, Self::next_round)
+            }
             (Phase::Compacting(reason, snapshot), Input::Called { outcome, canceled }) => {
                 match settle(&self.list, snapshot, outcome, canceled, Some(reason)) {
                     Ok(snapshot) => self.chat(Some(snapshot)),
@@ -255,9 +297,10 @@ impl<V: Clone> Machine<V> {
 
     /// Judges a round's answer: an overflow goes to [`Machine::overflow`]
     /// with the snapshot a compacted round holds, tool calls start a
-    /// batch, a reply is appended and the loop returns, an empty reply
-    /// that finished with `stop` after an answered call is the clean exit,
-    /// and anything else raises `empty_model_reply`.
+    /// batch, a reply is appended and the loop reads its inbox once more
+    /// before it returns, an empty reply that finished with `stop` after an
+    /// answered call is the clean exit, which reads it too, and anything
+    /// else raises `empty_model_reply`.
     fn judge(&mut self, round: ChatResult, compacted: Option<Snapshot>) -> Then<V> {
         let detail = match round.outcome {
             ChatOutcome::Overflow(reason) => return self.overflow(reason, compacted),
@@ -269,14 +312,14 @@ impl<V: Clone> Machine<V> {
             }
             ChatOutcome::Reply(reply) if !reply.is_empty() => {
                 let record = text_record(RecordRole::Assistant, reply);
-                return self.push(vec![record], |_| Then::Return);
+                return self.push(vec![record], Self::check);
             }
             ChatOutcome::Reply(_) => None,
             ChatOutcome::Empty(detail) => detail,
         };
         if round.finish_reason.as_deref() == Some("stop") && self.answered > 0 {
             let record = text_record(RecordRole::Assistant, String::new());
-            return self.push(vec![record], |_| Then::Return);
+            return self.push(vec![record], Self::check);
         }
         let mut empty = make_completion_error(
             ErrorCode::EmptyReply,
@@ -286,6 +329,23 @@ impl<V: Clone> Machine<V> {
             empty.facts.insert(ErrorFact::FinishReason, reason.into());
         }
         Then::RaiseNew(empty)
+    }
+
+    /// Reads the chain's inbox once more after the final reply, so the
+    /// loop never returns with a message unread.
+    fn check(&mut self) -> Then<V> {
+        self.phase = Phase::Checking;
+        Then::Arrivals
+    }
+
+    /// The user records for messages `texts` took from the chain's inbox,
+    /// one per message, in order, each under the chain's arrival line and
+    /// a blank line.
+    fn arrivals(&self, texts: Vec<String>) -> Vec<MessageRecord> {
+        texts
+            .into_iter()
+            .map(|text| text_record(RecordRole::User, format!("{}\n\n{text}", self.arrival)))
+            .collect()
     }
 
     /// Starts the round's compaction: snapshots the records, flags the

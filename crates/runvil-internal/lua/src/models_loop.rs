@@ -143,7 +143,8 @@ fn begin(
     }
     let messages = Value::UserData(messages);
     let flagged = list.clone();
-    let (mut machine, first) = Machine::begin(max_rounds, list, messages, handle, compactor);
+    let (mut machine, first) =
+        Machine::begin(max_rounds, list, messages, handle, compactor, on_task(lua));
     let started = !matches!(machine.phase(), Phase::Done);
     let hook = hook.clone();
     let cleared = Arc::clone(running);
@@ -249,11 +250,23 @@ fn refuse(lua: &Lua, message: &str) -> mlua::Result<MultiValue> {
     Ok(action)
 }
 
+/// Whether the loop runs inside a task rather than on the main chain: the
+/// section's `sys.taskid` is not `0`, the main chain's task, which its
+/// `call` children share. A VM with no `sys` runs as the main chain.
+fn on_task(lua: &Lua) -> bool {
+    let Ok(Value::Table(sys)) = lua.globals().raw_get::<Value>("sys") else {
+        return false;
+    };
+    sys.get::<String>("taskid").is_ok_and(|task| task != "0")
+}
+
 /// Reads the values the trampoline passed as the input `phase` awaits.
 /// A failed envelope's value goes through [`envelope_failure`]. A `chat`
 /// answer's [`ChatResult`] is taken out of the userdata it resumed as, so
-/// the machine gets the scheduler's own value. A raw `pcall`'s outcome is
-/// read beside the run's cancel flag.
+/// the machine gets the scheduler's own value, and an `arrivals` answer,
+/// which also answers a `chat` request that messages reached first,
+/// resumes as a sequence of their texts. A raw `pcall`'s outcome is read
+/// beside the run's cancel flag.
 fn read_input(
     lua: &Lua,
     phase: &Phase<Value>,
@@ -269,6 +282,11 @@ fn read_input(
             outcome: if ok { Ok(value) } else { Err(value) },
             canceled: hook.is_canceled(),
         }),
+        Phase::Chatting(_) if ok && matches!(value, Value::Table(_)) => {
+            Ok(Input::Arrived(texts(value)?))
+        }
+        Phase::Checking if ok => Ok(Input::Arrived(texts(value)?)),
+        Phase::Checking => Err(malformed("the loop's inbox read failed")),
         Phase::Chatting(_) => Ok(Input::Answered(answer(lua, ok, value, |round| {
             lua.unpack::<AnyUserData>(round)?
                 .take::<ChatResult>()
@@ -353,6 +371,7 @@ fn act(lua: &Lua, then: Then<Value>) -> mlua::Result<MultiValue> {
             let fields = [("ok", ok), ("value", returned.unwrap_or(Value::Nil))];
             ("yield", vec![request(lua, "adhoc_tool_done", fields)?])
         }
+        Then::Arrivals => ("yield", vec![request(lua, "arrivals", [])?]),
         Then::Return => ("return", Vec::new()),
         Then::Raise(value) => ("raise", vec![value]),
         Then::RaiseNormalized(failure) => ("raise", vec![normalized(lua, failure)?]),

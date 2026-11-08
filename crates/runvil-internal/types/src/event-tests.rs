@@ -40,9 +40,9 @@ fn round_trips(event: &Event) {
 }
 
 /// The lifecycle constant that builds `event`, or `None` for a variant
-/// with a payload. There is no wildcard arm, so a new variant fails to
-/// compile here until it is mapped; a new payload variant also needs a
-/// sample in `payload_samples`.
+/// with a payload or with no constant. There is no wildcard arm, so a new
+/// variant fails to compile here until it is mapped; a new variant mapped
+/// to `None` also needs a sample in `payload_samples`.
 fn lifecycle_of(event: &Event) -> Option<Lifecycle> {
     match event {
         Event::ParseStarted { .. } => Some(lifecycle::PARSE_STARTED),
@@ -102,13 +102,13 @@ fn lifecycle_of(event: &Event) -> Option<Lifecycle> {
         | Event::AssistantToolCalls { .. }
         | Event::ToolResult { .. }
         | Event::InboxMessage { .. }
+        | Event::InboxWaiting { .. }
         | Event::Request { .. }
         | Event::Response { .. } => None,
     }
 }
 
-/// One sample of every variant with a payload; the payload-free variants
-/// come from `lifecycle::ALL`.
+/// One sample of every variant `lifecycle::ALL` does not build.
 fn payload_samples() -> Vec<Event> {
     let mut samples = lifecycle_payload_samples();
     samples.extend(library::samples());
@@ -220,6 +220,10 @@ fn content_samples() -> Vec<Event> {
             section: "Gather".to_owned(),
             provenance: provenance("0", 17),
             text: "also cover the tests".to_owned(),
+        },
+        Event::InboxWaiting {
+            section: "Gather".to_owned(),
+            provenance: provenance("0", 18),
         },
     ]
 }
@@ -380,6 +384,18 @@ fn an_inbox_message_serializes_its_text_under_its_kind() {
     assert_wire(
         &event,
         r#"{"kind":"inbox_message","section":"Chat","provenance":{"task":"0","seq":4},"text":"also cover the tests"}"#,
+    );
+}
+
+#[test]
+fn an_inbox_wait_serializes_its_coordinates_under_its_kind() {
+    let event = Event::InboxWaiting {
+        section: "Chat".to_owned(),
+        provenance: provenance("0.1", 5),
+    };
+    assert_wire(
+        &event,
+        r#"{"kind":"inbox_waiting","section":"Chat","provenance":{"task":"0.1","seq":5}}"#,
     );
 }
 

@@ -1,6 +1,8 @@
 //! Tests for the `models.loop` machine, with no VM: `&str` values in
 //! place of the Lua values it passes along, and a plain list read back
-//! through `records()`.
+//! through `records()`. Messages that reach the chain's inbox append
+//! under their arrival line, and the loop reads its inbox once more before
+//! it returns.
 
 use runvil_types::error::ErrorFact;
 
@@ -33,6 +35,7 @@ fn show(then: &Then<V>) -> String {
         Then::Compact { compactor, reason } => format!("compact {compactor} {}", reason.tag()),
         Then::Handle { handler, args } => format!("handle {handler} {args}"),
         Then::Report(returned) => format!("report {}", returned.unwrap_or("raised")),
+        Then::Arrivals => "arrivals".to_owned(),
         Then::Return => "return".to_owned(),
         Then::Raise(value) => format!("raise {value}"),
         Then::RaiseNormalized(value) => format!("normalize {value}"),
@@ -114,17 +117,35 @@ fn called(outcome: Result<V, V>, canceled: bool) -> Input<V> {
     Input::Called { outcome, canceled }
 }
 
-/// A `models.loop` call capped at `cap` rounds over `list`, at its first
-/// chat.
+/// The messages taken from the chain's inbox, oldest first.
+pub(super) fn arrived(texts: &[&str]) -> Input<V> {
+    Input::Arrived(texts.iter().copied().map(str::to_owned).collect())
+}
+
+/// The record line of a message appended on the main chain.
+pub(super) fn from_operator(text: &str) -> String {
+    format!("user This message arrived while you were working:\n\n{text}||")
+}
+
+/// A `models.loop` call on the main chain capped at `cap` rounds over
+/// `list`, at its first chat.
 fn chatting(cap: usize, list: &MessageList) -> Machine<V> {
-    let (machine, first) = Machine::begin(cap, list.clone(), "list", None, "compactor");
+    let (machine, first) = Machine::begin(cap, list.clone(), "list", None, "compactor", false);
     assert_eq!(show(&first), "chat list -");
     machine
 }
 
+/// Answers the final check with no message, which returns.
+#[track_caller]
+pub(super) fn settle(machine: &mut Machine<V>) {
+    assert_eq!(show(&machine.step(arrived(&[]))), "return");
+    assert!(matches!(machine.phase(), Phase::Done));
+}
+
 #[test]
 fn a_zero_cap_raises_tool_loop_exhausted_before_any_chat() {
-    let (machine, first) = Machine::begin(0, MessageList::default(), "list", None, "compactor");
+    let (machine, first) =
+        Machine::begin(0, MessageList::default(), "list", None, "compactor", false);
     assert_eq!(
         show(&first),
         "new tool_loop_exhausted|tool-call loop did not converge"
@@ -135,7 +156,7 @@ fn a_zero_cap_raises_tool_loop_exhausted_before_any_chat() {
 #[test]
 fn a_round_starts_with_the_chat_naming_the_handle_and_pushes_nothing() {
     let list = MessageList::default();
-    let (machine, first) = Machine::begin(2, list.clone(), "list", Some("h"), "compactor");
+    let (machine, first) = Machine::begin(2, list.clone(), "list", Some("h"), "compactor", false);
     assert_eq!(show(&first), "chat list h");
     assert!(matches!(machine.phase(), Phase::Chatting(_)));
     assert!(
@@ -160,7 +181,7 @@ fn each_round_outcome_is_judged_overflow_calls_reply_or_empty() {
             finished(ChatOutcome::ToolCalls(vec![echo_call("c1")])),
             "tool_calls c1@7",
         ),
-        (finished(ChatOutcome::Reply("text".to_owned())), "return"),
+        (finished(ChatOutcome::Reply("text".to_owned())), "arrivals"),
         (
             finished(ChatOutcome::Reply(String::new())),
             "new empty_model_reply|empty model reply|stop",
@@ -190,8 +211,8 @@ fn a_batch_dispatches_in_order_and_appends_its_records_only_once_complete() {
         "an unanswered batch adds nothing"
     );
     assert_eq!(show(&machine.step(batched(&["one", "two"]))), "chat list -");
-    assert_eq!(show(&machine.step(reply("done"))), "return");
-    assert!(matches!(machine.phase(), Phase::Done));
+    assert_eq!(show(&machine.step(reply("done"))), "arrivals");
+    settle(&mut machine);
     assert_eq!(
         records(&list),
         [
@@ -244,7 +265,8 @@ fn the_clean_exit_counts_answered_calls_across_batches_and_resets_per_call() {
         machine.step(batch(&[id]));
         assert_eq!(show(&machine.step(batched(&["ok"]))), "chat list -");
     }
-    assert_eq!(show(&machine.step(stop())), "return");
+    assert_eq!(show(&machine.step(stop())), "arrivals");
+    settle(&mut machine);
     assert_eq!(
         records(&list).last().map(String::as_str),
         Some("assistant ||")
@@ -400,7 +422,8 @@ fn cancellation_raises_a_failed_handler_or_compactor_raw_and_a_return_still_wins
 fn an_input_its_phase_does_not_await_raises_internal() {
     let unexpected = "new internal|internal invariant violated: the models.loop step received \
                       an input its phase does not await";
-    let (mut machine, _) = Machine::begin(2, MessageList::default(), "list", None, "compactor");
+    let (mut machine, _) =
+        Machine::begin(2, MessageList::default(), "list", None, "compactor", false);
     assert_eq!(show(&machine.step(dispatched("early"))), unexpected);
     assert_eq!(
         show(&machine.step(reply("late"))),
@@ -413,5 +436,85 @@ fn an_input_its_phase_does_not_await_raises_internal() {
         show(&machine.step(batched(&["one", "two"]))),
         unexpected,
         "a batch answer holds no more texts than the calls it was sent"
+    );
+    let mut machine = chatting(2, &MessageList::default());
+    assert_eq!(show(&machine.step(reply("done"))), "arrivals");
+    assert_eq!(
+        show(&machine.step(reply("again"))),
+        unexpected,
+        "the final check awaits the inbox's messages, not a round"
+    );
+}
+
+#[test]
+fn messages_that_answer_a_chat_append_under_the_main_chains_line_and_send_again_uncounted() {
+    let list = MessageList::default();
+    let mut machine = chatting(1, &list);
+    assert_eq!(
+        show(&machine.step(arrived(&["one", "two"]))),
+        "chat list -",
+        "the loop sends again, and a cap of 1 is not spent"
+    );
+    assert_eq!(
+        records(&list),
+        [from_operator("one"), from_operator("two")],
+        "each message is its own user record under its arrival line"
+    );
+    assert_eq!(show(&machine.step(reply("done"))), "arrivals");
+    settle(&mut machine);
+    assert_eq!(
+        records(&list).last().map(String::as_str),
+        Some("assistant done||")
+    );
+}
+
+#[test]
+fn on_a_task_a_message_appends_under_the_owners_line() {
+    let list = MessageList::default();
+    let (mut machine, first) = Machine::begin(2, list.clone(), "list", None, "compactor", true);
+    assert_eq!(show(&first), "chat list -");
+    assert_eq!(show(&machine.step(arrived(&["shorter"]))), "chat list -");
+    assert_eq!(
+        records(&list),
+        ["user The task that started you sent this message while you were working:\n\nshorter||"]
+    );
+}
+
+#[test]
+fn the_final_check_appends_late_messages_after_the_reply_and_starts_a_counted_round() {
+    let list = MessageList::default();
+    let mut machine = chatting(2, &list);
+    assert_eq!(show(&machine.step(reply("done"))), "arrivals");
+    assert_eq!(
+        show(&machine.step(arrived(&["late"]))),
+        "chat list -",
+        "a message the final check takes keeps the loop going"
+    );
+    assert_eq!(
+        records(&list),
+        ["assistant done||".to_owned(), from_operator("late")]
+    );
+    assert_eq!(show(&machine.step(reply("again"))), "arrivals");
+    settle(&mut machine);
+    let mut capped = chatting(1, &MessageList::default());
+    assert_eq!(show(&capped.step(reply("done"))), "arrivals");
+    assert_eq!(
+        show(&capped.step(arrived(&["late"]))),
+        "new tool_loop_exhausted|tool-call loop did not converge",
+        "the round a late message starts counts against the cap"
+    );
+}
+
+#[test]
+fn the_clean_exit_reads_the_inbox_once_more_before_it_returns() {
+    let list = MessageList::default();
+    let mut machine = chatting(3, &list);
+    machine.step(batch(&["c1"]));
+    machine.step(batched(&["ok"]));
+    assert_eq!(show(&machine.step(stop())), "arrivals");
+    assert_eq!(show(&machine.step(arrived(&["more"]))), "chat list -");
+    assert_eq!(
+        records(&list)[2..],
+        ["assistant ||".to_owned(), from_operator("more")]
     );
 }

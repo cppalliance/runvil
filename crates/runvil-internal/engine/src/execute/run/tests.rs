@@ -25,8 +25,12 @@ use crate::test_support::scenario::{TEST_SEED, only_effect, round_trip, test_bin
 mod drops;
 #[path = "tests-inbox.rs"]
 mod inbox;
+#[path = "tests-send.rs"]
+mod send;
 #[path = "tests-start.rs"]
 mod start;
+#[path = "tests-steer.rs"]
+mod steer;
 
 /// The params for a run under fixed caller inputs; nothing here reads
 /// the seed or `sys.when`.

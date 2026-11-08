@@ -539,17 +539,25 @@ impl Chain {
         }
     }
 
-    /// Takes back the message a `tasks.receive()` answer holds for the
-    /// chain's suspended block, which has not resumed with it, so the
-    /// chain never read it. `None` when the block holds any other answer,
+    /// Takes back the messages an inbox answer holds for the chain's
+    /// suspended block, which has not resumed with it, so the chain never
+    /// read them: the one a `tasks.receive()` took, or the ones a
+    /// `models.loop` took. Empty when the block holds any other answer,
     /// or none.
-    pub(super) fn take_unread_message(&mut self) -> Option<String> {
-        let running = self.entered.as_mut()?.running.as_mut()?;
+    pub(super) fn take_unread_messages(&mut self) -> Vec<String> {
+        let Some(running) = self
+            .entered
+            .as_mut()
+            .and_then(|entered| entered.running.as_mut())
+        else {
+            return Vec::new();
+        };
         match running.answer.take() {
-            Some(Ok(Answer::Receive(text))) => Some(text),
+            Some(Ok(Answer::Receive(text))) => vec![text],
+            Some(Ok(Answer::Arrivals(texts))) => texts,
             other => {
                 running.answer = other;
-                None
+                Vec::new()
             }
         }
     }
@@ -791,6 +799,19 @@ impl ChainArena {
         self.iter()
             .find(|(_, chain)| &chain.task == task && chain.waits_on_inbox())
             .map(|(id, _)| id)
+    }
+
+    /// The tasks with a chain waiting in `tasks.receive()` for a message
+    /// that has not arrived, in id order.
+    pub(in crate::execute::scheduler) fn inbox_waiters(&self) -> Vec<TaskId> {
+        let mut tasks: Vec<TaskId> = self
+            .iter()
+            .filter(|(_, chain)| chain.waits_on_inbox())
+            .map(|(_, chain)| chain.task.clone())
+            .collect();
+        tasks.sort();
+        tasks.dedup();
+        tasks
     }
 
     /// The chain that runs `task`'s work while the run waits between

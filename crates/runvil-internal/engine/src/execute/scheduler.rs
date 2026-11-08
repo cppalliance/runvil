@@ -59,8 +59,9 @@
 //! arm (the two arms the section-visible `models.loop` shim drives),
 //! `tasks` the task arena and the `spawn` arm, `admission` the admission
 //! owner and its view of the chain tree, `task_end` the chain-end rules
-//! for tasks, `inbox` the inboxes and the `receive` arm, `waits` the
-//! `join_any` wait and the `ready`, `status`, `pending`, `note`,
+//! for tasks, `inbox` the inboxes, the delivery rules, and the `receive`,
+//! `send`, and `arrivals` arms and a `chat` request's inbox check, `waits`
+//! the `join_any` wait and the `ready`, `status`, `pending`, `note`,
 //! `concurrency`, and `cancel` arms over the arena, `timer` the wait
 //! shims' internal timeout as an effect-backed entry, and `test_hooks`
 //! (test builds only) the seams the suites inspect the arena through. A

@@ -192,6 +192,13 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
             Seam::Observed,
         ),
         (
+            Event::InboxWaiting {
+                section: "A".to_owned(),
+                provenance: provenance(),
+            },
+            Seam::Observed,
+        ),
+        (
             Event::Thinking {
                 section: "A".to_owned(),
                 provenance: provenance(),

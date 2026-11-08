@@ -13,7 +13,8 @@
 //! `spawn` arm, `tool_call` the `tool_call`, `tool_calls`, and
 //! `adhoc_tool_done` arms, `timer` the `timer` arm, `waits` the task
 //! wait, inspection, note, concurrency, and cancel arms, and `inbox` the
-//! `receive` arm.
+//! `receive`, `send`, and `arrivals` arms and the inbox check a `chat`
+//! request passes before the `chat` arm sends its round.
 
 use std::sync::Arc;
 
@@ -60,6 +61,8 @@ fn parked_on(request: &Request) -> Option<Parked> {
         | Request::Pending
         | Request::Concurrency { .. }
         | Request::Note { .. }
+        | Request::Send { .. }
+        | Request::Arrivals
         | Request::Cancel { .. }
         | Request::AdhocToolDone { .. } => None,
     }
@@ -97,6 +100,8 @@ impl Scheduler {
             Request::Concurrency { limit } => self.dispatch_concurrency(id, limit),
             Request::Note { text } => self.dispatch_note(id, text),
             Request::Receive => self.dispatch_receive(id),
+            Request::Send { task, text } => self.dispatch_send(id, &task, text),
+            Request::Arrivals => self.dispatch_arrivals(id),
             Request::Cancel { task } => self.dispatch_cancel(id, &task),
             Request::ToolCall { alias, args, model } => {
                 self.with_chain(id, |ops| ops.dispatch_tool_call(&alias, args, model))
@@ -108,9 +113,7 @@ impl Scheduler {
                 self.with_chain(id, |ops| ops.dispatch_adhoc_tool_done(outcome))
             }
             Request::Store { op } => self.with_chain(id, |ops| ops.dispatch_vfs(op)),
-            Request::Chat { list, binding } => {
-                self.with_chain(id, |ops| ops.dispatch_chat(&list, binding))
-            }
+            Request::Chat { list, binding } => self.dispatch_round(id, &list, binding),
         }
     }
 

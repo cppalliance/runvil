@@ -3,9 +3,9 @@
 //! direct-yield message, and an author-argument failure becomes the call's
 //! answer so the shim raises it at the call site. Field reads are raw: the
 //! table comes from script space, so a metatable must not intercept or
-//! forge a field. `infer`, `call`, and the argument-free `pending` and
-//! `receive` parse here; the other per-op parsers sit in the child modules
-//! `chat`, `store`, `tasks`, and `tools`.
+//! forge a field. `infer`, `call`, and the argument-free `pending`,
+//! `receive`, and `arrivals` parse here; the other per-op parsers sit in
+//! the child modules `chat`, `store`, `tasks`, and `tools`.
 
 mod chat;
 mod store;
@@ -18,8 +18,8 @@ use runvil_model_client::model::ModelBinding;
 use chat::parse_chat;
 use store::parse_store;
 use tasks::{
-    parse_cancel, parse_concurrency, parse_join_any, parse_note, parse_ready, parse_spawn,
-    parse_status, parse_timer,
+    parse_cancel, parse_concurrency, parse_join_any, parse_note, parse_ready, parse_send,
+    parse_spawn, parse_status, parse_timer,
 };
 use tools::{parse_adhoc_tool_done, parse_tool_call, parse_tool_calls};
 
@@ -202,6 +202,8 @@ impl Request {
             "pending" => YieldParse::Request(Request::Pending),
             "note" => classify(parse_note(table)),
             "receive" => YieldParse::Request(Request::Receive),
+            "send" => classify(parse_send(table)),
+            "arrivals" => YieldParse::Request(Request::Arrivals),
             "concurrency" => classify(parse_concurrency(table)),
             "cancel" => classify(parse_cancel(table)),
             "tool_call" => classify(parse_tool_call(lua, table)),

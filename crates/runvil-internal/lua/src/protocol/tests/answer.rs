@@ -48,6 +48,38 @@ fn an_ok_receive_answer_resumes_the_message_text() {
 }
 
 #[test]
+fn an_ok_send_answer_resumes_whether_the_text_was_queued() {
+    let lua = Lua::new();
+    for queued in [true, false] {
+        let (envelope, retained) =
+            answer_envelope(&lua, Ok(Answer::Send(queued))).expect("the envelope renders");
+        assert!(retained.is_none());
+        let (ok, result) = echo_through_lua(&lua, envelope);
+        assert!(ok);
+        assert_eq!(result, Value::Boolean(queued));
+    }
+}
+
+#[test]
+fn an_ok_arrivals_answer_resumes_its_messages_as_a_sequence_oldest_first() {
+    let lua = Lua::new();
+    let texts = vec!["first".to_owned(), "second".to_owned()];
+    let (envelope, retained) =
+        answer_envelope(&lua, Ok(Answer::Arrivals(texts))).expect("the envelope renders");
+    assert!(retained.is_none());
+    let (ok, result) = echo_through_lua(&lua, envelope);
+    assert!(ok);
+    let Value::Table(sequence) = result else {
+        panic!("expected a sequence, got {result:?}");
+    };
+    let read: Vec<String> = sequence
+        .sequence_values::<String>()
+        .collect::<mlua::Result<_>>()
+        .expect("every entry is a string");
+    assert_eq!(read, ["first", "second"]);
+}
+
+#[test]
 fn an_ok_spawn_answer_resumes_the_task_id_as_its_path_text() {
     let lua = Lua::new();
     let task: TaskId = "0.2".parse().expect("a task id parses");

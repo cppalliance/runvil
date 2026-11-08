@@ -431,6 +431,11 @@ pub enum ErrorCode {
     Canceled = 702,
     /// An internal invariant broke; nothing the prompt can fix.
     Internal = 703,
+    /// No chain can move and the main chain is not
+    /// waiting on its inbox: the run deadlocked. Wire
+    /// name `stalled`; names the tasks waiting on their
+    /// inboxes. A run code, beside `Internal`.
+    Stalled = 704,
 
     /// The run recorder failed to store a write.
     RecorderFailed = 801,
@@ -519,6 +524,7 @@ impl ErrorCode {
             ErrorCode::RequirementsUnmet => "requirements_unmet",
             ErrorCode::Canceled => "canceled",
             ErrorCode::Internal => "internal",
+            ErrorCode::Stalled => "stalled",
             ErrorCode::RecorderFailed => "recorder_failed",
             ErrorCode::PluginLoadFailed => "plugin_load_failed",
             ErrorCode::NoOutput => "no_output",
@@ -595,6 +601,7 @@ impl ErrorCode {
             "requirements_unmet" => ErrorCode::RequirementsUnmet,
             "canceled" => ErrorCode::Canceled,
             "internal" => ErrorCode::Internal,
+            "stalled" => ErrorCode::Stalled,
             "recorder_failed" => ErrorCode::RecorderFailed,
             "plugin_load_failed" => ErrorCode::PluginLoadFailed,
             "no_output" => ErrorCode::NoOutput,
@@ -806,6 +813,10 @@ impl ErrorCode {
             }
             ErrorCode::Canceled => "The operation was canceled.",
             ErrorCode::Internal => "An internal error occurred. Retrying will not help.",
+            ErrorCode::Stalled => {
+                "No chain can move, so the run stopped. Send each task that waits on its inbox the \
+                 message it waits for, or stop waiting on that task."
+            }
             ErrorCode::RecorderFailed => "The run could not be recorded, so it stopped.",
             ErrorCode::PluginLoadFailed => {
                 "A plugin could not be loaded, so its tools are not available."

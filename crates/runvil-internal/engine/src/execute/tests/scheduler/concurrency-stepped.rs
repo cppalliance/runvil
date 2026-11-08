@@ -76,7 +76,7 @@ fn a_queued_task_that_can_never_be_admitted_is_reported_as_a_stall() {
     );
     let error = rig.trace().error();
     let message = error.located_message();
-    assert_eq!(error.code, ErrorCode::Internal, "{message}");
+    assert_eq!(error.code, ErrorCode::Stalled, "{message}");
     assert!(
         message.contains("stalled"),
         "the run reports the stall: {message}"

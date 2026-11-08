@@ -145,6 +145,8 @@ pub(crate) fn render_envelope(
             values
         }
         Answer::Ready(ready) => vec![Value::Boolean(ready)],
+        Answer::Send(queued) => vec![Value::Boolean(queued)],
+        Answer::Arrivals(texts) => vec![Value::Table(lua.create_sequence_from(texts)?)],
         Answer::Status(status) => vec![Value::Table(task_status_table(lua, *status)?)],
         Answer::Pending(tasks) => vec![Value::Table(task_id_sequence(lua, &tasks)?)],
         // The effective limit resumes as a plain number, so the shim

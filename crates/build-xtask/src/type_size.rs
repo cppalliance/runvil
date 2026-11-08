@@ -45,11 +45,12 @@ const ALLOWED: &[Allowed] = &[
         krate: "crates/runvil-internal/engine",
         name: "Scheduler",
         limit: Limit::Methods,
-        recorded: 75,
+        recorded: 79,
         reason: "The run's protocol orchestrator: the 2026-10-26 split moved its bookkeeping \
                  into four state owners, the inboxes added a fifth, and each remaining method \
-                 runs the run's lifecycle or coordinates two or more of them (12 are test \
-                 hooks).",
+                 runs the run's lifecycle or coordinates two or more of them, as the inbox \
+                 arms and delivery rules coordinate the inboxes with the chains, the tasks, \
+                 and the effect table (12 are test hooks).",
     },
     Allowed {
         krate: "crates/runvil-internal/engine",

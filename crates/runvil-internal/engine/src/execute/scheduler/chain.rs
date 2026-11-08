@@ -319,7 +319,9 @@ impl Scheduler {
         }
     }
 
-    /// Orphans one in-flight leaf effect whose chain is going away, as
+    /// Withdraws one in-flight leaf effect whose chain stopped waiting on
+    /// it, because the chain is going away or a message withdrew its loop's
+    /// round, as
     /// [`EffectTable::orphan`](super::effects::EffectTable::orphan)
     /// describes, and ends a tool call's identity through
     /// [`Scheduler::end_tool_call`] as its answer would, so what the tool

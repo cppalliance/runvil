@@ -234,7 +234,8 @@ impl ErrorField {
 /// failure is `store`; a canceled task's delivery is `canceled`, as any
 /// other cancel is; and a failure outside the prompt the author cannot act
 /// on (a parse failure, a failed tool freeze, a refused requirement, a
-/// make_determinism_error violation, an internal fault) is `internal`.
+/// make_determinism_error violation, a stalled run, which ends the run
+/// before any Lua could catch it, an internal fault) is `internal`.
 fn kind_of(code: ErrorCode) -> ErrorKind {
     match code {
         ErrorCode::LuaRuntime
@@ -301,6 +302,7 @@ fn kind_of(code: ErrorCode) -> ErrorKind {
         | ErrorCode::Determinism
         | ErrorCode::RequirementsUnmet
         | ErrorCode::Internal
+        | ErrorCode::Stalled
         | ErrorCode::RecorderFailed
         | ErrorCode::PluginLoadFailed
         | ErrorCode::NoOutput => ErrorKind::Internal,

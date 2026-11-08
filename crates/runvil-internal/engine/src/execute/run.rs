@@ -50,12 +50,12 @@ pub enum Step {
         /// answers will be discarded, so the caller may drop each one
         /// unperformed, or abort it, and answer it
         /// [`EffectAnswer::Dropped`]; it still owes each one answer. A step
-        /// withdraws a tool call whose chain stopped waiting on it. The
-        /// step that decides the run's result withdraws every effect still
-        /// outstanding, of every kind, so a caller that follows this list
-        /// drops everything it holds for the run. It may name an effect
-        /// that `effects` lists, because one step can issue an effect and
-        /// then withdraw it.
+        /// withdraws every effect whose chain stopped waiting on it, and
+        /// the step that decides the run's result withdraws every effect
+        /// still outstanding, so a caller that follows this list drops
+        /// everything it holds for the run. It may name an effect that
+        /// `effects` lists, because one step can issue an effect and then
+        /// withdraw it.
         withdrawn: Vec<EffectId>,
         /// The main chain waits on its inbox, so only [`Run::deliver`] or
         /// a cancel can move it.

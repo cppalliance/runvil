@@ -122,7 +122,12 @@ fn a_models_loop_round_costs_the_trampoline_a_few_lua_instructions_per_yield() {
         marks.push(executed.load(Ordering::Relaxed));
     }
 
-    let returned = resume_with(&vm, &thread, reply_round("done"));
+    let checked = resume_with(&vm, &thread, reply_round("done"));
+    assert!(
+        matches!(parse_request(&vm, checked), Request::Arrivals),
+        "after the terminal reply the loop reads its inbox once more"
+    );
+    let returned = resume_with(&vm, &thread, Answer::Arrivals(Vec::new()));
     // user + (assistant tool-call record + tool record) per round + terminal.
     let expected_len = 1 + 2 * (MEASURED_ROUNDS + 1) + 1;
     assert_eq!(

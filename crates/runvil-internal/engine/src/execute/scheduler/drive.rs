@@ -5,9 +5,10 @@
 //! call, drains the ready queue, and returns the effects the drain issued
 //! with the events it reported.
 //! An empty ready queue with no parked effect and no queued chain that can
-//! be admitted is a stall, which fails loudly rather than hangs, unless the
-//! main chain waits on its inbox: then the step reports
-//! `waiting_for_input`, since the caller's next message can move it.
+//! be admitted is a stall, which ends the run as `stalled`, naming the
+//! tasks that wait on their inboxes, rather than hangs, unless the main
+//! chain waits on its inbox: then the step reports `waiting_for_input`,
+//! since the caller's next message can move it.
 //! The run's `Done` is withheld until
 //! every issued effect has its answer, so every effect the caller was
 //! handed has exactly one answer, and it hands back the main chain's
@@ -71,9 +72,10 @@ impl Scheduler {
         // run waiting for input, not stalled. Otherwise an empty ready
         // queue with no parked effect and no admissible queued chain means
         // nothing can move (nothing ready, nothing parked, no slot that
-        // will ever free, and whatever is waiting can never be woken) -
-        // fail loudly rather than hang. A running drain returns only after
-        // `admit` left the ready queue empty, so no queued chain is
+        // will ever free, and whatever is waiting can never be woken, a
+        // task's inbox included, which only its owner fills) - the run
+        // ends as stalled rather than hangs. A running drain returns only
+        // after `admit` left the ready queue empty, so no queued chain is
         // admissible here. Those conditions are the whole guard; the
         // admission queue needs no other, because a chain that can be
         // admitted is a queued chain the drain already offered.
@@ -83,10 +85,7 @@ impl Scheduler {
             && !self.effects.has_awaited()
             && !waiting_for_input
         {
-            self.end(Err(error::make_internal_error(
-                "the scheduler stalled with no ready chain, no in-flight request, \
-                 and no queued chain that can be admitted",
-            )));
+            self.end(Err(error::make_stalled_error(&self.chains.inbox_waiters())));
         }
         let (effects, withdrawn) = self.effects.take_step();
         let events = self.ctx.take_events();
@@ -298,8 +297,8 @@ impl Scheduler {
     /// every entry is terminal by now, `end` having
     /// settled the live ones, so nothing here reports. Each chain joins
     /// the tasks it owns before its access drops, closing the run's
-    /// happens-before record. A message a woken reader never resumed with
-    /// goes back first in its inbox, unread.
+    /// happens-before record. The messages a woken reader never resumed
+    /// with go back first in their inbox, unread.
     fn teardown(&mut self) {
         self.ready.clear();
         self.admission.clear();
@@ -310,9 +309,8 @@ impl Scheduler {
             self.join_owned_tasks(owner, access);
         }
         for chain in self.chains.iter_mut() {
-            if let Some(text) = chain.take_unread_message() {
-                self.inboxes.put_back(&chain.task, text);
-            }
+            let unread = chain.take_unread_messages();
+            self.inboxes.put_back(&chain.task, unread);
             chain.parked = None;
             chain.entered = None;
             chain.access = None;

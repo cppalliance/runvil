@@ -119,6 +119,19 @@ pub enum Request {
     /// inbox, or park the chain until one arrives. A `call` chain reads
     /// its caller's inbox, since it runs inside its caller's task.
     Receive,
+    /// `tasks.send(task, text)`: queue `text` in the
+    /// inbox of a task the caller owns, waking it when
+    /// it waits there; a task that has ended drops it.
+    Send {
+        /// The task to send to.
+        task: TaskId,
+        /// The author-supplied message text.
+        text: String,
+    },
+    /// The `models.loop` step's last read of its chain's inbox before the
+    /// loop returns: takes every queued message at once and never waits.
+    /// Shim-produced, so it is never refused.
+    Arrivals,
     /// `tasks.cancel(task)`: end a task the caller owns. Idempotent: a
     /// task already in a terminal state is left as it is.
     Cancel {
@@ -166,7 +179,11 @@ pub enum Request {
     /// yielded by the `models.loop` shim once per round. The round sends
     /// the section's Static Set, which the dispatch arm freezes with the
     /// Dynamic Set from the section's offers at the first round to reach
-    /// the merge and attaches to the list.
+    /// the merge and attaches to the list. Messages already queued in the
+    /// chain's inbox when the round would be sent, or arriving before it
+    /// answers, answer the request with
+    /// [`Answer::Arrivals`](super::Answer::Arrivals) instead: the round is
+    /// not sent, or is withdrawn.
     Chat {
         /// The list the round sends, which may be empty, since the
         /// dispatch, not the parse, refuses an empty list. Its records

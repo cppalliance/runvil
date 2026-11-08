@@ -321,6 +321,21 @@ fn a_chat_answer_resumes_as_a_chat_result_userdata_the_step_takes_whole() {
     );
 }
 
+#[test]
+fn an_arrivals_answer_reads_as_its_messages_in_a_round_and_in_the_final_check() {
+    let lua = Lua::new();
+    let hook = CancelHook::default();
+    for phase in [Phase::Chatting(None), Phase::Checking] {
+        let texts = vec!["first".to_owned(), "second".to_owned()];
+        let (envelope, _) = answer_envelope(&lua, Ok(Answer::Arrivals(texts.clone()))).unwrap();
+        let input = read_input(&lua, &phase, envelope, &hook).unwrap();
+        let Input::Arrived(read) = input else {
+            panic!("the step reads the messages in {phase:?}, got {input:?}");
+        };
+        assert_eq!(read, texts);
+    }
+}
+
 /// `act`'s tag and values for `then`.
 fn action(lua: &Lua, then: Then<Value>) -> (String, Vec<Value>) {
     let mut values = act(lua, then).unwrap().into_vec().into_iter();
@@ -367,6 +382,8 @@ fn act_yields_each_request_as_the_protocol_parses_it() {
         outcome(Then::Report(None)),
         AdhocToolOutcome::Raised
     ));
+    let arrivals = parsed(&lua, Then::Arrivals);
+    assert!(matches!(arrivals, Request::Arrivals), "got {arrivals:?}");
     let list = Value::UserData(lua.create_userdata(MessageList::default()).unwrap());
     let receiver = handle(&lua);
     for (handle, expected) in [(Some(receiver.clone()), receiver), (None, Value::Nil)] {

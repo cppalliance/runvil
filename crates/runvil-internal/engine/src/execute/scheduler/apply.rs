@@ -94,8 +94,10 @@ impl Scheduler {
     /// (emitting the round's events), and re-queues the chain. A batched
     /// tool call's answer fills its slot instead, and the chain re-queues
     /// once the whole batch has landed. A timer's firing completes its entry
-    /// and wakes its waiter instead, and a render's answer is applied by
-    /// [`ChainOps::accept_render`]. A `Dropped` answer is the caller
+    /// and wakes its waiter instead, and a render's answer is merged by
+    /// [`ChainOps::merge_render`] before the round that issued it is
+    /// dispatched again through the inbox check, or answers that round
+    /// with the merge's error. A `Dropped` answer is the caller
     /// giving the effect up: the chain resumes with the canceled error.
     /// Every answer to a tool call, `Dropped` included, first ends the
     /// call's identity through [`Scheduler::end_tool_call`], so whatever
@@ -136,7 +138,10 @@ impl Scheduler {
                 self.with_chain(chain, |ops| ops.accept_chat(round, result))?
             }
             (Continuation::Render(binding), EffectAnswer::Render(rendered)) => {
-                return self.with_chain(chain, |ops| ops.accept_render(binding, rendered));
+                return match self.with_chain(chain, |ops| ops.merge_render(rendered)) {
+                    Ok(list) => self.dispatch_round(chain, &list, Some(binding)),
+                    Err(error) => self.answer_inline(chain, Err(error)),
+                };
             }
             (Continuation::ToolCall(call), EffectAnswer::ToolCall(result)) => self
                 .with_chain(chain, |ops| ops.accept_tool_call(&call, result))

@@ -13,7 +13,7 @@
 //! A first round whose offers name a catalog tool issues a `Render`
 //! effect before the merge instead, and dispatches again under the same
 //! binding once the render's answer is merged
-//! ([`ChainOps::accept_render`]).
+//! ([`ChainOps::merge_render`]).
 //! The driver classifies the answered completion into the round's answer
 //! when it arrives ([`ChainOps::accept_chat`]), emitting the round's
 //! events (the turn advance, then `report_model_turn`'s sequence, which
@@ -87,8 +87,8 @@ impl ChainOps<'_> {
     /// refused first round still fixes them; a round refused earlier
     /// attaches nothing, and so does a failed merge. When that round's
     /// offers name a catalog tool, it issues the render instead and parks
-    /// the chain on it with the binding, and the render's answer merges and
-    /// dispatches the round again ([`ChainOps::accept_render`]), so the
+    /// the chain on it with the binding, and the render's answer merges
+    /// ([`ChainOps::merge_render`]) and dispatches the round again, so the
     /// round is projected, prechecked, numbered, and recorded once. The
     /// send is recorded on the list only once the precheck passes, so a
     /// refused round leaves the list's last send in place.
@@ -186,31 +186,20 @@ impl ChainOps<'_> {
     }
 
     /// Applies a section entry's render: merges the rendered tools into
-    /// the entry's frozen sets, attaches them, and dispatches the round
-    /// that issued the render under `binding`, which issues its `Chat`
-    /// effect or answers the chain inline. A failed merge answers the
-    /// parked round with its error and attaches nothing.
-    pub(super) fn accept_render(
-        &mut self,
-        binding: ModelBinding,
-        rendered: Vec<PackToolSets<ToolInfo>>,
-    ) -> Result<()> {
-        match self.merge_render(rendered) {
-            Ok(list) => self.dispatch_chat(&list, Some(binding)),
-            Err(error) => self.answer(Err(error)),
-        }
-    }
-
-    /// The fallible half of a render's application: the merge, over the
-    /// offers read back from the parked frame's VM, which runs no Lua
-    /// while the chain is parked, so they are the offers the render was
-    /// asked about, and the attach to the VM's one list, the list the
-    /// round named. Returns that list.
+    /// the entry's frozen sets, over the offers read back from the parked
+    /// frame's VM, which runs no Lua while the chain is parked, so they are
+    /// the offers the render was asked about, and attaches them to the
+    /// VM's one list, the list the round named. Returns that list, for the
+    /// round that issued the render to be dispatched again; a failed merge
+    /// attaches nothing.
     ///
     /// # Errors
     /// Returns the merge's error, or an `Internal` failure when the parked
     /// chain has lost its frame.
-    fn merge_render(&self, rendered: Vec<PackToolSets<ToolInfo>>) -> Result<MessageList> {
+    pub(super) fn merge_render(
+        &self,
+        rendered: Vec<PackToolSets<ToolInfo>>,
+    ) -> Result<MessageList> {
         let chain = &*self.chain;
         let frame = chain.frame()?;
         let vm = frame.vm();

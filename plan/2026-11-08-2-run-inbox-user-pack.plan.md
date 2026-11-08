@@ -301,7 +301,7 @@ A message is not a stop. It withdraws only a model request that has no answer ye
 - Orphaning withdraws every effect, not only tool calls, so a message withdrawing a model request and a task's cancel or abandonment share one path, `abort_effect`, and a canceled task no longer pays for a model reply nobody reads.
 - `tasks.receive()` raises when given any argument, as `input.ask` does today, and `tasks.send` raises a `lua` error when `text` is not a string, as `tasks.note` does (`crates/runvil-internal/lua/src/__impl_tasks.lua` lines 231 to 237).
 - `ToolInfo::survives_stop` stays. After step 7 no shipped tool sets it, since reading the operator becomes an inbox wait, which a stop never reaches, where today the ask tool sets it (`crates/plugin-user-input/src/ask.rs` line 43). Any Plugin tool may still set it. A stop cannot cut such a tool, so under the tool batch rule a message to its chain waits until it finishes, and only a cancel ends it.
-- Each `tasks` function this plan adds reaches the scheduler through one `Request` variant and resumes through one `Answer` variant of the Lua protocol (`crates/runvil-internal/lua/src/protocol/request.rs` and `answer.rs`), as `tasks.note` and `tasks.cancel` do: `Receive` in step 1, `Send` in step 2, and `Reply` in step 3. Both enums are public to the Engine crate, so the step that adds a variant fences it.
+- Each `tasks` function this plan adds reaches the scheduler through one `Request` variant and resumes through one `Answer` variant of the Lua protocol (`crates/runvil-internal/lua/src/protocol/request.rs` and `answer.rs`), as `tasks.note` and `tasks.cancel` do: `Receive` in step 1, `Send` in step 2, and `Reply` in step 3. Step 2 adds one more pair for `models.loop`, `Arrivals`: the loop's read of its inbox before it returns, which takes every queued message and never waits, and whose answer also answers a `chat` request that queued messages cut short. Both enums are public to the Engine crate, so the step that adds a variant fences it.
 
 ## Out of scope
 
@@ -456,8 +456,8 @@ function tasks.receive() end
 
 <step-2>
 
-2. **Task inboxes, tasks.send, and models.loop** (points: 10) - Add `tasks.send`, `Event::InboxWaiting` when a chain parks on its empty inbox, and the `Stalled` error, mapped to the `internal` kind in `kind_of` (`crates/runvil-internal/lua/src/error_value.rs` lines 238 to 308), since no Lua code catches it, and added to `ALL` and to the exhaustive `family` match in `crates/runvil-internal/types/src/error-tests.rs` (lines 90 to 160 and 162 to 231). A task waiting on its inbox gives back its slot through step 1's `Parked` case. Replace the scheduler's `Internal` stall error (`crates/runvil-internal/engine/src/execute/scheduler/drive.rs` lines 70 to 78) with the one rule from Stalls. Make `EffectTable::orphan` (`crates/runvil-internal/engine/src/execute/scheduler/effects.rs` lines 234 to 253) list every effect it orphans as withdrawn, not only tool calls, and reword `Step::Pending`'s `withdrawn` doc to match (`crates/runvil-internal/engine/src/execute/run.rs` lines 48 to 58): a step withdraws every effect whose chain stopped waiting on it, and the step that decides the run withdraws every effect still outstanding. Then implement the delivery rules for `models.loop` in `crates/runvil-internal/lua/src/models_loop/machine.rs` and the scheduler's chat arm: withdraw a model request that has no answer yet through `abort_effect` (`crates/runvil-internal/engine/src/execute/scheduler/chain.rs` lines 322 to 332) and issue it again with the message appended, leave a tool batch alone and append before the next request, prefix each appended message with its arrival line, check the inbox once more before returning, and apply a step's answers before its messages. Tests: the effect table lists every effect it orphans as withdrawn, a timer and a model round beside the tool calls, in id order, where `only_orphaned_tool_calls_are_withdrawn_in_id_order` pinned tool calls only; canceling a task whose model round has no answer withdraws that round, and its `Dropped` answer is discarded; `InboxWaiting` is emitted when the main chain parks on an empty inbox, and not when a message already waits; an owner's send returns true, resumes its task's `tasks.receive()`, and emits `InboxMessage` under the task's provenance; a non-owner sending by id string raises `task_not_owned`; a send to a task that returned returns false and queues nothing; a send whose text is not a string raises a `lua` error; `tasks.status(t).blocked` reads `inbox` while the task waits, and `InboxWaiting` is emitted under its provenance; a waiting task frees its slot, so a queued spawn starts; a main chain joining a task that waits on its inbox, with nothing else to run, ends with `stalled` naming that task; a message queued before the first request is appended before it, under the main chain's arrival line; a message while a model request has no answer withdraws it, raises nothing, leaves nothing of the withdrawn request in `messages`, and the reissued request holds the message, and the withdrawn one counts toward neither `max_tool_iterations` nor the chain's turns; a message while tool calls have no answer withdraws nothing, every call keeps its real result, and the message is appended before the next request; a message while the final request has no answer keeps the loop going; on a task the arrival line is the task's; a message to one task does not withdraw another chain's request; a tool call answered `Dropped` still raises `Canceled` at the call site and leaves the queued message in the inbox; a `Dropped` answer to the model request in flight and a message applied in the same step raise `Canceled` and leave the message queued; two messages queued before one request become two user records, each with its arrival line.
-   - Score: `tasks.send` 1, with its wire, `Request` 0 (`Send`) and `Answer` 0 (`Send`), `Event` 1 (`InboxWaiting`), `ErrorCode` 1 (`Stalled`). Other changes: the slot give-back through step 1's `Parked` case 0, the one stall rule 1, the pre-request append and final check 1, the orphan path withdrawing every effect 1, reissuing an unanswered request 2, the arrival line 1, answers before messages 1.
+2. [done] **Task inboxes, tasks.send, and models.loop** (points: 10) - Add `tasks.send`, `Event::InboxWaiting` when a chain parks on its empty inbox, and the `Stalled` error, mapped to the `internal` kind in `kind_of` (`crates/runvil-internal/lua/src/error_value.rs` lines 238 to 308), since no Lua code catches it, and added to `ALL` and to the exhaustive `family` match in `crates/runvil-internal/types/src/error-tests.rs` (lines 90 to 160 and 162 to 231). A task waiting on its inbox gives back its slot through step 1's `Parked` case. Replace the scheduler's `Internal` stall error (`crates/runvil-internal/engine/src/execute/scheduler/drive.rs` lines 70 to 78) with the one rule from Stalls. Make `EffectTable::orphan` (`crates/runvil-internal/engine/src/execute/scheduler/effects.rs` lines 234 to 253) list every effect it orphans as withdrawn, not only tool calls, and reword `Step::Pending`'s `withdrawn` doc to match (`crates/runvil-internal/engine/src/execute/run.rs` lines 48 to 58): a step withdraws every effect whose chain stopped waiting on it, and the step that decides the run withdraws every effect still outstanding. Then implement the delivery rules for `models.loop` in `crates/runvil-internal/lua/src/models_loop/machine.rs` and the scheduler's chat arm: withdraw a model request that has no answer yet through `abort_effect` (`crates/runvil-internal/engine/src/execute/scheduler/chain.rs` lines 322 to 332) and answer it with `Answer::Arrivals`, so the loop appends the messages and sends it again, and answer a `chat` request the same way when messages already wait; leave a tool batch alone and append before the next request; prefix each appended message with its arrival line; check the inbox once more before returning, with `Request::Arrivals`; and apply a step's answers before its messages. Tests: the effect table lists every effect it orphans as withdrawn, a timer and a model round beside the tool calls, in id order, where `only_orphaned_tool_calls_are_withdrawn_in_id_order` pinned tool calls only; canceling a task whose model round has no answer withdraws that round, and its `Dropped` answer is discarded; `InboxWaiting` is emitted when the main chain parks on an empty inbox, and not when a message already waits; an owner's send returns true, resumes its task's `tasks.receive()`, and emits `InboxMessage` under the task's provenance; a non-owner sending by id string raises `task_not_owned`; a send to a task that returned returns false and queues nothing; a send whose text is not a string raises a `lua` error; `tasks.status(t).blocked` reads `inbox` while the task waits, and `InboxWaiting` is emitted under its provenance; a waiting task frees its slot, so a queued spawn starts; a main chain joining a task that waits on its inbox, with nothing else to run, ends with `stalled` naming that task; a message queued before the first request is appended before it, under the main chain's arrival line; a message while a model request has no answer withdraws it, raises nothing, leaves nothing of the withdrawn request in `messages`, and the reissued request holds the message, and the withdrawn one counts toward neither `max_tool_iterations` nor the chain's turns; a message while tool calls have no answer withdraws nothing, every call keeps its real result, and the message is appended before the next request; a message while the final request has no answer keeps the loop going; on a task the arrival line is the task's; a message to one task does not withdraw another chain's request; a tool call answered `Dropped` still raises `Canceled` at the call site and leaves the queued message in the inbox; a `Dropped` answer to the model request in flight and a message applied in the same step raise `Canceled` and leave the message queued; two messages queued before one request become two user records, each with its arrival line; the loop's last inbox read before it returns appends a message that reached the inbox after its final reply was answered, and the loop sends again.
+   - Score: `tasks.send` 1, `Request` 0 (`Send` and `Arrivals`) and `Answer` 0 (`Send` and `Arrivals`), the wire for `tasks.send` and the loop's inbox reads, `Event` 1 (`InboxWaiting`), `ErrorCode` 1 (`Stalled`). Other changes: the slot give-back through step 1's `Parked` case 0, the one stall rule 1, the pre-request append and final check 1, the orphan path withdrawing every effect 1, reissuing an unanswered request 2, the arrival line 1, answers before messages 1.
 
 `crates/runvil-internal/lua/src/__impl_tasks.lua`
 
@@ -488,32 +488,47 @@ pub enum Request {
         /// The author-supplied message text.
         text: String,
     },
+    /// The `models.loop` step's last read of its
+    /// chain's inbox before the loop returns: takes
+    /// every queued message at once and never waits.
+    /// Shim-produced, so it is never refused.
+    Arrivals,
 }
-// changed, was: no `Send`
+// changed, was: no `Send` or `Arrivals`; a `chat`
+//   request may now be answered with
+//   `Answer::Arrivals`
 // callers:
 // crates/runvil-internal/engine/src/execute/
-//   scheduler/dispatch.rs (31)
-// crates/runvil-internal/lua/src/protocol/parse.rs (3)
-// and 20 more files
+//   scheduler/dispatch.rs (37)
+// crates/runvil-internal/lua/src/protocol/
+//   tests/parse_tasks.rs (32)
+// and 46 more files
 ```
 
 `crates/runvil-internal/lua/src/protocol/answer.rs`
 
 ```rust
-/// One dispatched request's successful outcome, one
-/// variant per request kind.
+/// One dispatched request's successful outcome.
 pub enum Answer {
     // the other variants are unchanged
     /// Whether a `send` request queued its text: false
     /// once the task has ended.
     Send(bool),
+    /// The messages taken from the chain's inbox,
+    /// oldest first, as sent: every one queued, maybe
+    /// none, for an `arrivals` request; for a `chat`
+    /// request, those that reached the inbox before
+    /// its round was sent or answered, which the loop
+    /// appends before it sends again.
+    Arrivals(Vec<String>),
 }
-// changed, was: no `Send`
+// changed, was: no `Send` or `Arrivals`
 // callers:
-// crates/runvil-internal/lua/src/protocol/render.rs (15)
 // crates/runvil-internal/engine/src/execute/
-//   scheduler/tool_call.rs (20)
-// and 13 more files
+//   scheduler/apply.rs (31)
+// crates/runvil-internal/engine/src/execute/
+//   scheduler/tool_call.rs (23)
+// and 49 more files
 ```
 
 `crates/runvil-internal/types/src/event.rs`
@@ -592,8 +607,7 @@ pub enum Request {
 `crates/runvil-internal/lua/src/protocol/answer.rs`
 
 ```rust
-/// One dispatched request's successful outcome, one
-/// variant per request kind.
+/// One dispatched request's successful outcome.
 pub enum Answer {
     // the other variants are unchanged
     /// The owner's next message, which resumes a
