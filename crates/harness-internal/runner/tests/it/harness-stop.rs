@@ -18,8 +18,8 @@ use serde_json::json;
 
 use super::{PendingTimer, answers_to, answers_where, calls, launch, run_beside, setup, until};
 use crate::scripted::{
-    Held, HeldTimer, MODEL, Operator, ScriptedBroker, held_broker, hold_host, reply,
-    surviving_hold_host,
+    Held, HeldTimer, MODEL, Operator, ScriptedBroker, calls_hold_once, held_broker, hold_host,
+    reply, surviving_hold_host,
 };
 use crate::support::assert_canceled;
 
@@ -160,20 +160,6 @@ async fn an_uncaught_stopped_round_ends_the_run_canceled() {
         answers_to(&recorder.records(run_id), "Chat"),
         [json!("Dropped")]
     );
-}
-
-/// The round that asks for the held tool: the model's first round calls
-/// its wire name `harness_hold`, and every later round replies with text.
-fn calls_hold_once() -> ScriptedBroker {
-    ScriptedBroker::new(|round, _messages| {
-        Box::pin(async move {
-            if round.id.get() > 0 {
-                return reply("done");
-            }
-            let call = ToolCall::from_parts("call-1", "harness_hold", json!({}))?;
-            Completion::from_result(CompletionResult::ToolCalls(vec![call]), MODEL).map(Box::new)
-        })
-    })
 }
 
 /// The round that asks for the held tool twice: the model's first round

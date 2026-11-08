@@ -59,6 +59,10 @@ fn name(text: &str) -> PackId {
 /// A factory or the reason its Pack was inserted unavailable.
 type Inserted = Result<Arc<dyn PackFactory>, Error>;
 
+/// The built-ins every fresh registry holds, which `install` does not
+/// insert.
+const BUILTINS: [&str; 2] = ["runvil/subagents", "runvil/user"];
+
 /// Each Pack `install` inserts into a fresh registry with `config` and the
 /// Host-wide `services`, beside its Pack id and its factory or the reason
 /// it was inserted unavailable.
@@ -67,7 +71,7 @@ fn inserted(config: Value, services: &HostServices) -> Vec<(&'static str, PackId
     install(&mut packs, config, services).expect("a registry without web takes it");
     packs
         .into_entries()
-        .filter(|(info, _, _)| info.fqn != "runvil/subagents")
+        .filter(|(info, _, _)| !BUILTINS.contains(&info.fqn))
         .map(|(info, id, factory)| (info.fqn, id, factory))
         .collect()
 }

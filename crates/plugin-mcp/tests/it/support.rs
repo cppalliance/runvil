@@ -34,6 +34,10 @@ pub(crate) fn runtime_services() -> HostServices {
 /// A factory or the reason its Pack was inserted unavailable.
 pub(crate) type Inserted = Result<Arc<dyn PackFactory>, Error>;
 
+/// The built-ins every fresh registry holds, which `install` does not
+/// insert.
+const BUILTINS: [&str; 2] = ["runvil/subagents", "runvil/user"];
+
 /// Each Pack `install` inserts into a fresh registry with `config` and the
 /// Host-wide `services`, beside its Pack id and its factory or the reason
 /// it was inserted unavailable.
@@ -45,7 +49,7 @@ pub(crate) fn inserted(
     plugin_mcp::install(&mut packs, config, services).expect("a fresh registry takes the Pack");
     packs
         .into_entries()
-        .filter(|(info, _, _)| info.fqn != "runvil/subagents")
+        .filter(|(info, _, _)| !BUILTINS.contains(&info.fqn))
         .collect()
 }
 

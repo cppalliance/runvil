@@ -10,7 +10,8 @@
 //! a stop reaches the tool calls waiting for a slot and how a task's early
 //! end drops its stop-surviving call while the run goes on in the
 //! `stop_cap` child module, how what a stop reaches depends on when the
-//! loop sees it in the `stop_timing` child module, and the runs that end
+//! loop sees it in the `stop_timing` child module, the messages a Host
+//! sends the main chain in the `inbox` child module, and the runs that end
 //! before they start and the one error `run` returns in the `errors` child
 //! module.
 
@@ -35,6 +36,8 @@ use crate::support::{HookedBackend, PendingTimer, assert_not_completed, host_ove
 
 #[path = "harness-errors.rs"]
 mod errors;
+#[path = "harness-inbox.rs"]
+mod inbox;
 #[path = "harness-stop.rs"]
 mod stop;
 #[path = "harness-stop-cap.rs"]

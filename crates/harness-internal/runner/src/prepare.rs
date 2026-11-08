@@ -76,9 +76,10 @@ pub(crate) async fn begin(
 /// root, and `model` fills all five roles, so the run's first step checks
 /// each declared role's requirements against it. A Pack whose factory
 /// refuses or panics, or whose `ready` fails, is unavailable to this run,
-/// with the reason. A cancel ends the wait, and each Pack is snapshotted
-/// as it stands. A prompt the environment cannot satisfy is prepared all
-/// the same: the run's first step ends it with the Engine's notice, or as
+/// with the reason, and so is `runvil/user` when `setup.has_user` is
+/// false. A cancel ends the wait, and each Pack is snapshotted as it
+/// stands. A prompt the environment cannot satisfy is prepared all the
+/// same: the run's first step ends it with the Engine's notice, or as
 /// canceled when the run's cancel fired first.
 ///
 /// # Errors
@@ -119,7 +120,7 @@ pub(crate) async fn prepare(
     // snapshot itself is the run's tool performer.
     let packs = host
         .packs
-        .snapshot(&prompt, setup.services.clone(), cancel)
+        .snapshot(&prompt, setup.services.clone(), setup.has_user, cancel)
         .await;
     let params = params
         .with_cancel(cancel.clone())

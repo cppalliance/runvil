@@ -26,6 +26,10 @@ fn block_on<F: Future>(future: F) -> F::Output {
     }
 }
 
+/// The built-ins every fresh registry holds, which `install` does not
+/// insert.
+const BUILTINS: [&str; 2] = ["runvil/subagents", "runvil/user"];
+
 /// The Pack `install` inserts into a fresh registry with `config`, and its
 /// factory or the reason it was inserted unavailable.
 fn inserted_with(config: Value) -> (PackInfo, Result<Arc<dyn PackFactory>, Error>) {
@@ -33,7 +37,7 @@ fn inserted_with(config: Value) -> (PackInfo, Result<Arc<dyn PackFactory>, Error
     install(&mut packs, config, &HostServices::new()).expect("a fresh registry takes the Pack");
     let (info, _id, factory) = packs
         .into_entries()
-        .find(|(info, _, _)| info.fqn != "runvil/subagents")
+        .find(|(info, _, _)| !BUILTINS.contains(&info.fqn))
         .expect("install inserts one Pack");
     (info, factory)
 }
@@ -50,7 +54,7 @@ fn inserted(config: Value) -> Vec<(String, String, Option<String>)> {
     install(&mut packs, config, &HostServices::new()).expect("a fresh registry takes the Pack");
     packs
         .into_entries()
-        .filter(|(info, _, _)| info.fqn != "runvil/subagents")
+        .filter(|(info, _, _)| !BUILTINS.contains(&info.fqn))
         .map(|(info, id, factory)| {
             let reason = factory.err().map(|error| error.to_string());
             (info.fqn.to_owned(), id.to_string(), reason)

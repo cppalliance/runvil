@@ -13,8 +13,9 @@
 //! services sits in the `host_services` child module, a
 //! Pack's prelude reaching the prepared run sits in the `prelude` child
 //! module, the prompt's declared input and output files sit in the
-//! `files` child module, and the wait for each Pack to be ready sits in
-//! the `ready` child module.
+//! `files` child module, the wait for each Pack to be ready sits in
+//! the `ready` child module, and the built-in `runvil/user`, which only a
+//! run with a user holds, sits in the `user` child module.
 
 use std::num::NonZeroU32;
 use std::sync::Arc;
@@ -50,6 +51,8 @@ mod input;
 mod prelude;
 #[path = "prepare-ready.rs"]
 mod ready;
+#[path = "prepare-user.rs"]
+mod user;
 
 /// A prompt declaring `web` as a required Pack that no
 /// Host here installs.

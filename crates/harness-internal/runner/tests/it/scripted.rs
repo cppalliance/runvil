@@ -15,7 +15,7 @@ use runvil::effect::Round;
 use runvil::make_tool_error;
 use runvil::model::{
     Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
-    ModelInfo, ThinkingMode, ToolSchema, make_completion_error, phrase,
+    ModelInfo, ThinkingMode, ToolCall, ToolSchema, make_completion_error, phrase,
 };
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
@@ -146,6 +146,20 @@ fn catalog() -> ModelCatalog {
 /// A text completion of `text` from the scripted model.
 pub(crate) fn reply(text: impl Into<String>) -> Result<Box<Completion>, Error> {
     Completion::from_result(CompletionResult::Text(text.into()), MODEL).map(Box::new)
+}
+
+/// The round that asks for the held tool: the model's first round calls
+/// its wire name `harness_hold`, and every later round replies with text.
+pub(crate) fn calls_hold_once() -> ScriptedBroker {
+    ScriptedBroker::new(|round, _messages| {
+        Box::pin(async move {
+            if round.id.get() > 0 {
+                return reply("done");
+            }
+            let call = ToolCall::from_parts("call-1", "harness_hold", json!({}))?;
+            Completion::from_result(CompletionResult::ToolCalls(vec![call]), MODEL).map(Box::new)
+        })
+    })
 }
 
 /// Counts the futures a held performer started and the ones torn down. A

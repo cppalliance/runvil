@@ -9,14 +9,14 @@
 //! [`Host::parse`] finds a prompt by its name and parses it. For each run
 //! the launcher builds a [`RunSetup`] with the run's recorder, inference
 //! broker, services, filesystem, model selection, workspace roots,
-//! [`RunLimits`], tool-call cap, arguments, and input text, and
-//! [`Harness::new`] takes the Host, the parsed prompt, and that setup.
-//! [`Harness::run`] runs the prompt to its end and returns its
-//! [`RunReport`]. The run makes its own instance of each Pack it holds,
-//! handing each factory the setup's services, and drops the instances
-//! when it ends. While the run goes on, the launcher steers it through
-//! the [`RunControl`] it took from `Harness::control` before the run
-//! started.
+//! [`RunLimits`], tool-call cap, arguments, input text, and whether a
+//! user answers it, and [`Harness::new`] takes the Host, the parsed
+//! prompt, and that setup. [`Harness::run`] runs the prompt to its end and
+//! returns its [`RunReport`]. The run makes its own instance of each Pack
+//! it holds, handing each factory the setup's services, and drops the
+//! instances when it ends. While the run goes on, the launcher sends its
+//! main chain messages and steers it through the [`RunControl`] it took
+//! from `Harness::control` before the run started.
 //!
 //! Every run gets a record and ends with its result: the final text, or
 //! the error that ended it, where a cancel is the error whose code is

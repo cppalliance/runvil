@@ -153,6 +153,12 @@ pub(crate) fn run_of_sections(sections: &[(&str, &str)], vfs: VfsRef) -> Run {
     prepared(prompt(sections), vfs, &CancelHandle::new())
 }
 
+/// [`run`] under the cancel flag `cancel`, which the test also hands the
+/// loop.
+pub(crate) fn run_with_cancel(lua: &str, cancel: &CancelHandle) -> Run {
+    prepared(prompt(&[("Only", lua)]), VfsRef::default(), cancel)
+}
+
 /// A Pack-free run over two sections: `## Main` runs `main`, and
 /// `## Child` runs `child` when the main spawns it as a task.
 pub(crate) fn run_with_child(main: &str, child: &str) -> Run {

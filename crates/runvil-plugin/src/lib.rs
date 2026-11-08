@@ -26,8 +26,10 @@
 //! it in under a name of its own.
 //! The Harness loads these entry points when a Host inserts them; they
 //! insert no Packs yet.
-//! `runvil/subagents` is a built-in Pack every registry holds, which
-//! reserves its id for the Engine's subagent tools.
+//! Every registry holds two built-in Packs: `runvil/subagents`, which
+//! reserves its id for the Engine's subagent tools, and `runvil/user`,
+//! which a prompt that needs a human declares and which the Harness
+//! makes unavailable to a run with no user.
 //!
 //! The Host owns the [`PackRegistry`]; a Plugin only inserts its Packs into it.
 //!

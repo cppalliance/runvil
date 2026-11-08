@@ -15,9 +15,12 @@
 //! with the run's own services. A factory's refusal or panic is not an
 //! error: the Pack is unavailable to that run alone, with the refusal or
 //! "the Pack's factory panicked" as its reason, and the next run calls
-//! the factory again. Then it waits for each instance to be ready, and a
-//! Pack whose `ready` fails is unavailable to that run the same way. Then
-//! it takes a snapshot of the instances: the catalog the Engine offers
+//! the factory again. The built-in `runvil/user` is made only for a run
+//! whose setup has a user; any other run holds it unavailable, with the
+//! reason "this run has no user". Then it waits for each instance to be
+//! ready, and a Pack whose `ready` fails is unavailable to that run the
+//! same way. Then it takes a snapshot of the instances: the catalog the
+//! Engine offers
 //! the run, the roster that says how each Pack stands, a declared Pack
 //! the pick could not resolve included, the preludes of the Packs the
 //! prompt declares, and the performer that sends each tool call to the
@@ -60,6 +63,12 @@ const RUNVIL: &str = "runvil";
 /// The reason a Pack is unavailable to a run whose call of its factory
 /// panicked.
 const FACTORY_PANICKED: &str = "the Pack's factory panicked";
+
+/// The built-in a run holds only when a user answers its main chain.
+const USER: &str = "runvil/user";
+
+/// The reason [`USER`] is unavailable to a run with no user.
+const NO_USER: &str = "this run has no user";
 
 /// Every Pack a Host installed in its registry, each with its factory or
 /// the reason it was inserted unavailable. Built once and shared by every
@@ -127,16 +136,18 @@ impl Packs {
     /// `cancel` fires, and takes the run's snapshot.
     ///
     /// A Pack whose factory refuses or panics, or whose `ready` fails, is
-    /// unavailable to this run, with the reason. A cancel ends the wait,
-    /// and each Pack is snapshotted as it stands.
+    /// unavailable to this run, with the reason, and so is `runvil/user`
+    /// when `has_user` is false. A cancel ends the wait, and each Pack is
+    /// snapshotted as it stands.
     pub(crate) async fn snapshot(
         &self,
         prompt: &Prompt,
         services: HostServices,
+        has_user: bool,
         cancel: &CancelHandle,
     ) -> RunPacks {
         let picked = self.pick(prompt);
-        let made = self.make(&picked, &services);
+        let made = self.make(&picked, &services, has_user);
         let failures = wait_ready(&made, cancel).await;
         RunPacks::snapshot(made, failures, &picked.unresolved)
     }
@@ -175,13 +186,14 @@ impl Packs {
     /// Makes the run's instance of each of its `packs` with `run`, the
     /// run's own services, in pick order.
     ///
-    /// A Pack inserted unavailable keeps its reason and is never made. A
-    /// factory that refuses leaves its Pack unavailable to this run with
-    /// the refusal as the reason, logged at debug, since a Host with no
-    /// operator refuses `runvil/user-input` on every run. A factory that
-    /// panics leaves its Pack unavailable with [`FACTORY_PANICKED`],
-    /// logged at error.
-    fn make(&self, packs: &Picked, run: &HostServices) -> Vec<Made<'_>> {
+    /// A Pack inserted unavailable keeps its reason and is never made, and
+    /// neither is [`USER`] when `has_user` is false: it is unavailable to
+    /// the run with [`NO_USER`] as the reason. A factory that refuses
+    /// leaves its Pack unavailable to this run with the refusal as the
+    /// reason, logged at debug, since a Host with no operator refuses
+    /// `runvil/user-input` on every run. A factory that panics leaves its
+    /// Pack unavailable with [`FACTORY_PANICKED`], logged at error.
+    fn make(&self, packs: &Picked, run: &HostServices, has_user: bool) -> Vec<Made<'_>> {
         packs
             .fqns
             .iter()
@@ -189,6 +201,7 @@ impl Packs {
                 let (&fqn, installed) = self.installed.get_key_value(fqn)?;
                 let pack = match &installed.factory {
                     Err(reason) => Err(reason.clone()),
+                    Ok(_) if fqn == USER && !has_user => Err(NO_USER.to_owned()),
                     Ok(factory) => new_pack(factory.as_ref(), installed, run),
                 };
                 Some(Made {

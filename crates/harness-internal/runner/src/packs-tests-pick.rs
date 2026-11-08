@@ -148,6 +148,7 @@ fn the_roster_covers_every_declared_pack_the_run_cannot_serve() {
                 unavailable_for("needy needs tests/session, and this run provides none"),
             ),
             (name("subagents"), usable_from("runvil")),
+            (name("user"), unavailable_for("this run has no user")),
         ]),
         "the absent Pack, which no vendor has, stays off the roster"
     );
@@ -215,7 +216,7 @@ fn refusals_are_empty_when_every_declared_pack_is_installed() {
 /// `host` resolves without waiting, and its failures when it does.
 fn waits(host: &Packs, prompt: &Prompt) -> Option<BTreeMap<&'static str, String>> {
     let picked = host.pick(prompt);
-    let made = host.make(&picked, &HostServices::new());
+    let made = host.make(&picked, &HostServices::new(), false);
     wait_ready(&made, &CancelHandle::new()).now_or_never()
 }
 
@@ -241,7 +242,7 @@ fn the_ready_wait_covers_only_the_runs_packs() {
 /// beside the failures the wait found.
 fn waited(host: &Packs, prompt: &Prompt) -> (BTreeMap<&'static str, String>, RunPacks) {
     let picked = host.pick(prompt);
-    let made = host.make(&picked, &HostServices::new());
+    let made = host.make(&picked, &HostServices::new(), false);
     let failures = wait_ready(&made, &CancelHandle::new())
         .now_or_never()
         .unwrap();

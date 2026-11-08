@@ -25,12 +25,12 @@ mod tests;
 /// by calling [`insert`](PackRegistry::insert) or
 /// [`insert_unavailable`](PackRegistry::insert_unavailable) from its
 /// `install` function. The Host makes the registry with
-/// [`new`](PackRegistry::new), which holds the built-ins such as
-/// `runvil/subagents` from the start, and calls each Plugin it links. Then
-/// it hands the registry to `Packs::new`, which reads it through
-/// [`into_entries`](PackRegistry::into_entries) and keeps each Pack's
-/// factory. Each run calls the factory of each Pack it holds to make that
-/// run's instance.
+/// [`new`](PackRegistry::new), which holds the built-ins
+/// `runvil/subagents` and `runvil/user` from the start, and calls each
+/// Plugin it links. Then it hands the registry to `Packs::new`, which
+/// reads it through [`into_entries`](PackRegistry::into_entries) and keeps
+/// each Pack's factory. Each run calls the factory of each Pack it holds
+/// to make that run's instance.
 pub struct PackRegistry {
     entries: BTreeMap<&'static str, Registered>,
 }
@@ -48,8 +48,10 @@ struct Registered {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum PackOrigin {
-    /// Built into every registry; its behavior will live in the Engine, and
-    /// today's one built-in, `runvil/subagents`, has none yet.
+    /// Built into every registry, with no tools of its own:
+    /// `runvil/subagents`, whose behavior will live in the Engine and which
+    /// has none yet, and `runvil/user`, which marks a prompt that needs a
+    /// human.
     Builtin,
     /// Inserted by a linked Plugin with [`PackRegistry::insert`].
     Linked,
@@ -225,20 +227,30 @@ fn make_refusal_error(reason: &'static str, message: String, fqn: &str) -> Error
     error
 }
 
-/// The built-ins every registry holds from the start.
+/// The Packs every registry holds from the start: `runvil/subagents`, and
+/// `runvil/user`, which marks a prompt that needs a human. Neither offers
+/// tools or has a prelude. A run holds `runvil/user` only when its setup
+/// has a user.
 ///
 /// A built-in Pack's behavior and tools live in the Engine. Its instance
 /// exists only so making, readiness, and the run snapshot treat it like
-/// any other Pack, so a built-in must never offer tools, carry a prelude,
-/// or refuse a run. Its `call` is unreachable, because the
-/// Engine never issues a call under a built-in's id: a built-in lists no
-/// tools, so no section offers one of its tools and no render of it adds
-/// one. A built-in never takes a [reserved](PackId::is_reserved) Pack id:
-/// the Harness puts every `runvil` Pack no `uses:` entry replaces into
-/// every run's roster, so a reserved one would refuse every run.
-const BUILTIN: [PackInfo; 1] = [PackInfo::new("runvil/subagents").description(
-    "Reserves the subagents name for the Engine's subagent tools, which are not built yet",
-)];
+/// any other Pack, so a built-in must never offer tools or carry a
+/// prelude, and its factory never refuses a run. A built-in can still be
+/// unavailable to a run: `runvil/user` is unavailable in a run without a
+/// user, which the Harness decides from the run's setup instead of making
+/// the Pack. Its `call` is unreachable, because the Engine never issues a
+/// call under a built-in's id: a built-in lists no tools, so no section
+/// offers one of its tools and no render of it adds one. A built-in never
+/// takes a [reserved](PackId::is_reserved) Pack id: the Harness puts every
+/// `runvil` Pack no `uses:` entry replaces into every run's roster, so a
+/// reserved one would refuse every run.
+const BUILTIN: [PackInfo; 2] = [
+    PackInfo::new("runvil/subagents").description(
+        "Reserves the subagents name for the Engine's subagent tools, which are not built yet",
+    ),
+    PackInfo::new("runvil/user")
+        .description("Marks a prompt that needs a human; only a run with a user holds it"),
+];
 
 /// The factory of every built-in: makes each run's [`Builtin`] instance;
 /// see [`BUILTIN`].

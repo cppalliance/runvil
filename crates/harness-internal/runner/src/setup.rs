@@ -43,13 +43,17 @@ pub struct RunSetup {
     /// The most tool calls in flight at once; the
     /// rest wait and start oldest first.
     pub max_tool_calls_in_flight: NonZeroUsize,
+    /// A user answers the main chain's inbox, so the
+    /// run holds `runvil/user`, which is unavailable
+    /// otherwise.
+    pub has_user: bool,
 }
 
 impl RunSetup {
     /// A setup over `recorder` and `broker`. Every other field starts
     /// empty or at its default: no services, a fresh memory store, no
-    /// selection, no roots, no args, no input, `RunLimits::default()`, and
-    /// at most 10 tool calls in flight.
+    /// selection, no roots, no args, no input, `RunLimits::default()`, at
+    /// most 10 tool calls in flight, and no user.
     #[must_use]
     pub fn new(recorder: Arc<dyn RunRecorder>, broker: Arc<dyn InferenceBroker>) -> RunSetup {
         RunSetup {
@@ -63,6 +67,7 @@ impl RunSetup {
             input_text: None,
             limits: RunLimits::default(),
             max_tool_calls_in_flight: DEFAULT_MAX_TOOL_CALLS_IN_FLIGHT,
+            has_user: false,
         }
     }
 }
@@ -79,6 +84,7 @@ impl fmt::Debug for RunSetup {
             .field("input_text", &self.input_text)
             .field("limits", &self.limits)
             .field("max_tool_calls_in_flight", &self.max_tool_calls_in_flight)
+            .field("has_user", &self.has_user)
             .finish_non_exhaustive()
     }
 }

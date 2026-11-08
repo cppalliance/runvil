@@ -22,9 +22,11 @@
 //! and answered `Dropped`, so the step that decides the run leaves the
 //! loop nothing to perform.
 //!
-//! The loop waits on three things at once: the run's cancel flag, the stop
+//! The loop waits on four things at once: the run's cancel flag, the stop
 //! a Host raises through [`RunControl::stop_round`](crate::RunControl::stop_round),
-//! and the next effect to land. A cancel aborts every effect in flight,
+//! the messages a Host sends through
+//! [`RunControl::send`](crate::RunControl::send), and the next effect to
+//! land. A cancel aborts every effect in flight,
 //! answers each `Dropped`, and steps the run, which reads the same flag,
 //! to `Done`. A stop aborts every effect in flight except tool calls that
 //! survive stops and answers each `Dropped`, leaving the cancel flag
@@ -48,10 +50,23 @@
 //! performer can never leave the run waiting forever. A Vfs operation that
 //! panics is caught where it runs and answered `Dropped` the same way.
 //!
+//! The loop delivers each message a Host sends to the run's main chain
+//! through `Run::deliver`, and records the `InboxMessage` event that
+//! returns before the step that applies the message. A message sent
+//! before the run starts is delivered before its first step, and a later
+//! one the next time the loop waits, and then the loop steps again. A stop
+//! raised before a send is handled first, and so is every answer that
+//! landed beside it, so a round whose answer arrived is not withdrawn for
+//! the message. A message the loop never delivers before the run ends
+//! comes back after the run's own unread ones, and the queue refuses every
+//! send after that.
+//!
 //! The run's `Done` ends the run at the recorder with its result. A run
 //! that is pending with nothing issued and nothing in flight ends there
 //! with an `Internal` error: the run reports a stall itself, so reaching
-//! this means the loop lost an effect.
+//! this means the loop lost an effect. The one exception is a run whose
+//! main chain waits for input, which the loop leaves waiting for a send
+//! or a cancel.
 
 use std::any::Any;
 use std::collections::{BTreeMap, HashMap};
@@ -73,7 +88,7 @@ use runvil::{Error, ErrorCode};
 use runvil::{Run, Step};
 use tracing::Instrument as _;
 
-use crate::harness::StopSignal;
+use crate::harness::{RunControl, SendQueue, StopSignal};
 use crate::performers::{BoxFuture, InferenceBroker, Timer, ToolPerformer};
 use crate::recorder::{Record, RecordKind, RunId, RunRecorder, make_recorder_error, refused};
 use crate::setup::RunSetup;
@@ -94,7 +109,9 @@ const STALLED: &str = "the effect loop has nothing to await for a pending run";
 /// the final text or the error that ended it, and returns it.
 ///
 /// A run that is pending with nothing to await ends with an `Internal`
-/// error, once every future the loop still holds is torn down.
+/// error, once every future the loop still holds is torn down, unless its
+/// main chain waits for input: nothing can send to a run this function
+/// drives, so only `cancel` ends that wait.
 ///
 /// The future is boxed internally: the step machinery is large, and the
 /// caller's own future stays small. It is `Send`, and it needs no runtime
@@ -114,20 +131,24 @@ pub async fn drive_run(
     run_id: RunId,
     cancel: CancelHandle,
 ) -> Result<String, Error> {
-    drive(run, setup, timer, tool, run_id, cancel, Arc::default()).await
+    let control = RunControl::new(cancel);
+    let (result, _unread) = drive(run, setup, timer, tool, run_id, &control).await;
+    result
 }
 
-/// As `drive_run`, and drops the effects in flight
-/// but stop survivors each time `stop` is raised.
+/// As `drive_run` under `control`'s cancel flag, and
+/// drops the effects in flight but stop survivors
+/// each time `control` raises a stop, and delivers
+/// each message it sends. Returns the result beside
+/// the messages the run never read, oldest first.
 pub(crate) async fn drive(
     run: Run,
     setup: &RunSetup,
     timer: Arc<dyn Timer>,
     tool: Arc<dyn ToolPerformer>,
     run_id: RunId,
-    cancel: CancelHandle,
-    stop: Arc<StopSignal>,
-) -> Result<String, Error> {
+    control: &RunControl,
+) -> (Result<String, Error>, Vec<String>) {
     let mut driver = Driver {
         run,
         broker: Arc::clone(&setup.broker),
@@ -136,10 +157,13 @@ pub(crate) async fn drive(
         recorder: Arc::clone(&setup.recorder),
         run_id,
         flights: Flights::new(setup.max_tool_calls_in_flight),
-        cancel,
-        stop,
+        cancel: control.cancel_handle().clone(),
+        stop: Arc::clone(control.stop_signal()),
+        sends: Arc::clone(control.send_queue()),
+        unread: Vec::new(),
     };
-    Box::pin(driver.drive()).await
+    let result = Box::pin(driver.drive()).await;
+    (result, driver.unread)
 }
 
 /// One run being driven.
@@ -159,6 +183,11 @@ struct Driver {
     flights: Flights,
     cancel: CancelHandle,
     stop: Arc<StopSignal>,
+    /// The messages the Host sent that the loop has not delivered yet.
+    sends: Arc<SendQueue>,
+    /// The messages the run never read, once it ends: `Done`'s, then the
+    /// ones the loop never delivered.
+    unread: Vec<String>,
 }
 
 /// What ended the loop's wait.
@@ -167,15 +196,25 @@ enum Woken {
     Cancel,
     /// The Host raised a stop.
     Stop,
+    /// The Host sent these messages, oldest first.
+    Sent(Vec<String>),
     /// An effect's future landed with its answer.
     Landed(EffectId, Provenance, EffectAnswer),
 }
 
 impl Driver {
     async fn drive(&mut self) -> Result<String, Error> {
+        let early = self.sends.take();
+        self.deliver(early).await?;
         loop {
             match self.run.step() {
-                Step::Done { result, events, .. } => {
+                Step::Done {
+                    result,
+                    events,
+                    unread,
+                } => {
+                    self.unread = unread;
+                    self.unread.extend(self.sends.end());
                     self.commit_events(events).await?;
                     // `Done` is returned only once every effect is
                     // answered, so nothing is in flight.
@@ -185,7 +224,7 @@ impl Driver {
                     effects,
                     events,
                     withdrawn,
-                    ..
+                    waiting_for_input,
                 } => {
                     // The run reads this same flag, so its next step tears
                     // every chain down.
@@ -241,10 +280,11 @@ impl Driver {
                         // in flight to await.
                         continue;
                     }
-                    if self.flights.is_empty() {
+                    if self.flights.is_empty() && !waiting_for_input {
                         // Nothing is owed an answer, but the set may still
                         // hold aborted futures it has not polled.
                         self.flights.clear();
+                        self.unread = self.sends.end();
                         return self
                             .end(Err(Error::new(
                                 ErrorCode::Internal,
@@ -253,6 +293,8 @@ impl Driver {
                             )))
                             .await;
                     }
+                    // A main chain waiting for input with nothing in
+                    // flight leaves only a send or a cancel to wait for.
                     self.await_answer().await?;
                 }
             }
@@ -270,11 +312,24 @@ impl Driver {
 
     /// Waits for the next answer, then answers every effect already
     /// landed behind it, or acts on a cancel or a stop as soon as one is
-    /// raised.
+    /// raised, or delivers what the Host sent.
+    ///
+    /// Before a delivery, a stop raised before the messages were sent is
+    /// handled, so a Host that stops and then sends gets the stop, and
+    /// every effect already landed is answered, so the next step finds a
+    /// round whose answer arrived answered and does not withdraw it for the
+    /// message.
     async fn await_answer(&mut self) -> Result<(), Error> {
         match self.wake().await {
             Woken::Cancel => self.drop_in_flight(Reach::All).await,
             Woken::Stop => self.act_on_stop().await.map(drop),
+            Woken::Sent(texts) => {
+                if self.stop.is_raised() {
+                    self.act_on_stop().await?;
+                }
+                self.answer_landed().await?;
+                self.deliver(texts).await
+            }
             Woken::Landed(id, provenance, answer) => {
                 self.answer(id, &provenance, answer).await?;
                 self.answer_landed().await
@@ -293,14 +348,16 @@ impl Driver {
         Ok(self.flights.len() < owed)
     }
 
-    /// Waits for the cancel flag, a raised stop, or the next effect to
-    /// land, checked in that order, so a stop drops a round whose answer
-    /// arrived beside it. Every arm is event-driven: the cancel and the
-    /// stop wake the loop as they are raised and a future wakes it as it
-    /// lands, so a fully suspended run costs no wakeups while it waits.
+    /// Waits for the cancel flag, a raised stop, a sent message, or the
+    /// next effect to land, checked in that order, so a stop drops a round
+    /// whose answer or message arrived beside it. Every arm is
+    /// event-driven: the cancel, the stop, and a send wake the loop as they
+    /// are raised and a future wakes it as it lands, so a fully suspended
+    /// run costs no wakeups while it waits.
     async fn wake(&mut self) -> Woken {
         let mut canceled = self.cancel.canceled();
         let stop = &self.stop;
+        let sends = &self.sends;
         let flights = &mut self.flights;
         poll_fn(|cx| {
             if Pin::new(&mut canceled).poll(cx).is_ready() {
@@ -308,6 +365,9 @@ impl Driver {
             }
             if stop.poll_raised(cx).is_ready() {
                 return Poll::Ready(Woken::Stop);
+            }
+            if let Poll::Ready(texts) = sends.poll_sent(cx) {
+                return Poll::Ready(Woken::Sent(texts));
             }
             flights
                 .poll_landed(cx)
@@ -423,15 +483,31 @@ impl Driver {
         None
     }
 
+    /// Delivers each of `texts`, oldest first, to the run's main chain
+    /// for the next step to apply, and records the `InboxMessage` event
+    /// each delivery returns as it is made.
+    async fn deliver(&mut self, texts: Vec<String>) -> Result<(), Error> {
+        for text in texts {
+            let event = self.run.deliver(text);
+            self.commit_event(&event).await?;
+        }
+        Ok(())
+    }
+
     /// Appends one step's events to the recorder.
     async fn commit_events(&mut self, events: Vec<Event>) -> Result<(), Error> {
         for event in events {
-            let payload = serde_json::to_value(&event)
-                .map_err(|error| refused(self.run_id, make_recorder_error(error)))?;
-            self.append(record(event.provenance(), RecordKind::Event, None, payload))
-                .await?;
+            self.commit_event(&event).await?;
         }
         Ok(())
+    }
+
+    /// Appends one event to the recorder.
+    async fn commit_event(&mut self, event: &Event) -> Result<(), Error> {
+        let payload = serde_json::to_value(event)
+            .map_err(|error| refused(self.run_id, make_recorder_error(error)))?;
+        self.append(record(event.provenance(), RecordKind::Event, None, payload))
+            .await
     }
 
     /// Appends one issued effect's record.
@@ -774,3 +850,7 @@ fn record(
         payload,
     }
 }
+
+#[cfg(test)]
+#[path = "effect_loop-tests.rs"]
+mod tests;

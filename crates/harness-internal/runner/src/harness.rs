@@ -11,12 +11,13 @@
 //! polled inside that one future, and every VFS operation runs inline in
 //! it, so the Harness starts no task and names no runtime. The stop and
 //! the cancel a [`RunControl`] raises are plain flags any thread can set,
-//! and the run's effect loop is their one waiter.
+//! the messages it sends wait in a queue any thread can fill, and the
+//! run's effect loop is their one waiter.
 
 use std::fmt;
 use std::pin::pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::task::{Context, Poll};
 
 use futures_util::future::{Either, select};
@@ -74,6 +75,9 @@ pub struct RunReport {
     /// run that left no file, or the store's failure, each with the
     /// declared path as the `Path` fact when there is one.
     pub output: Result<String, runvil::Error>,
+    /// Messages sent to the main chain that the run
+    /// never read, oldest first.
+    pub unread: Vec<String>,
 }
 
 /// The failure that stops a run before `Harness::run` can record its
@@ -105,7 +109,8 @@ impl Harness {
     /// `setup.limits`. It makes its own instance of each Pack of
     /// `host.packs` that the prompt picks, handing each factory
     /// `setup.services`, and its tool calls go to those instances, which
-    /// drop when the run ends. A run has at most
+    /// drop when the run ends; when `setup.has_user` is false, it holds
+    /// `runvil/user` unavailable instead of making it. A run has at most
     /// `setup.max_tool_calls_in_flight` tool calls in flight; the rest wait
     /// and start oldest first. All of this work happens in
     /// [`Harness::run`].
@@ -156,7 +161,15 @@ impl Harness {
     /// cancel cuts short the wait for a Pack that is still starting, ends
     /// the run canceled instead. A run that is pending with nothing to
     /// await, which means the Harness lost track of an effect, ends with
-    /// an `Internal` error.
+    /// an `Internal` error. A run whose main chain waits on its inbox with
+    /// nothing else to run is not stalled: it waits for a
+    /// [`RunControl::send`] or a cancel.
+    ///
+    /// The report's `unread` holds the messages sent to the main chain
+    /// that the run never read, oldest first: the ones still in its inbox
+    /// when it ended, then the ones the Harness accepted and never
+    /// delivered, which for a run that ended before it started is every
+    /// message sent to it.
     ///
     /// # Errors
     /// Returns `RecorderFailed` when the recorder refuses a write. That is
@@ -175,6 +188,9 @@ impl Harness {
             setup,
             control,
         } = self;
+        // However this future ends, a refusal or a drop included, the run
+        // accepts no message after it.
+        let _ended = EndOnDrop(Arc::clone(control.send_queue()));
         let cancel = control.cancel_handle();
 
         let (run_id, params) = begin(&setup, host.timer.now())
@@ -195,6 +211,7 @@ impl Harness {
                     run_id,
                     result: Err(error),
                     output: Err(make_not_completed_error()),
+                    unread: control.send_queue().end(),
                 });
             }
         };
@@ -212,21 +229,21 @@ impl Harness {
                     run_id,
                     result: Err(error),
                     output: Err(make_not_completed_error()),
+                    unread: control.send_queue().end(),
                 });
             }
         };
 
-        let result = match drive(
+        let (result, unread) = drive(
             run,
             &setup,
             Arc::clone(&host.timer),
             Arc::new(packs),
             run_id,
-            cancel.clone(),
-            Arc::clone(control.stop_signal()),
+            &control,
         )
-        .await
-        {
+        .await;
+        let result = match result {
             Err(refusal) if is_refusal(&refusal) => return Err(recorded(refusal)),
             result => result,
         };
@@ -235,13 +252,26 @@ impl Harness {
             run_id,
             result,
             output,
+            unread,
         })
     }
 }
 
-/// A handle that drops a run's in-flight round or cancels the run, from
-/// outside the future that drives it.
+/// Ends a run's [`SendQueue`] when dropped, discarding what it still
+/// holds.
+struct EndOnDrop(Arc<SendQueue>);
+
+impl Drop for EndOnDrop {
+    fn drop(&mut self) {
+        self.0.end();
+    }
+}
+
+/// A handle that sends a run's main chain a message, drops the run's
+/// in-flight round, or cancels the run, from outside the future that
+/// drives it.
 ///
+/// [`send`](Self::send) hands the main chain a message and
 /// [`stop_round`](Self::stop_round) drops the work in flight, and the run
 /// goes on. [`cancel`](Self::cancel) ends the run.
 ///
@@ -253,15 +283,35 @@ impl Harness {
 pub struct RunControl {
     cancel: CancelHandle,
     stop: Arc<StopSignal>,
+    sends: Arc<SendQueue>,
 }
 
 impl RunControl {
-    /// The control over a run whose Engine cancel flag is `cancel`.
-    fn new(cancel: CancelHandle) -> Self {
+    /// The control over a run whose Engine cancel flag is `cancel`, with
+    /// no stop raised and no message sent.
+    pub(crate) fn new(cancel: CancelHandle) -> Self {
         Self {
             cancel,
             stop: Arc::default(),
+            sends: Arc::default(),
         }
+    }
+
+    /// Sends `text` to the run's main-chain inbox and returns true, or
+    /// returns false, dropping the text, once the run has ended. Text sent
+    /// before the run starts is delivered before its first step. True
+    /// means accepted, not read: text the run never reads comes back on
+    /// `RunReport::unread`.
+    ///
+    /// Once the run has started, the loop that drives it delivers each
+    /// message the next time it waits, oldest first, and it handles a stop
+    /// raised before a send first. So a Host that stops and then sends
+    /// always gets the stop: the round in flight is dropped, and the
+    /// message waits for the run's next read of its inbox instead of
+    /// steering that round.
+    #[must_use]
+    pub fn send(&self, text: String) -> bool {
+        self.sends.push(text)
     }
 
     /// Drops the effects in flight, except tool calls that survive stops,
@@ -299,13 +349,19 @@ impl RunControl {
     }
 
     /// The run's Engine cancel flag.
-    fn cancel_handle(&self) -> &CancelHandle {
+    pub(crate) fn cancel_handle(&self) -> &CancelHandle {
         &self.cancel
     }
 
     /// The run's stop signal.
-    fn stop_signal(&self) -> &Arc<StopSignal> {
+    pub(crate) fn stop_signal(&self) -> &Arc<StopSignal> {
         &self.stop
+    }
+
+    /// The messages sent to the run that its effect loop has not
+    /// delivered yet.
+    pub(crate) fn send_queue(&self) -> &Arc<SendQueue> {
+        &self.sends
     }
 }
 
@@ -314,6 +370,85 @@ impl fmt::Debug for RunControl {
         f.debug_struct("RunControl")
             .field("canceled", &self.cancel.is_canceled())
             .field("stop_raised", &self.stop.raised.load(Ordering::SeqCst))
+            .field("sends", &self.sends)
+            .finish()
+    }
+}
+
+/// The messages a Host sent through [`RunControl::send`] that the run's
+/// effect loop has not delivered yet, oldest first, and whether the run
+/// has ended. Any thread can send, and the effect loop is the one taker.
+#[derive(Default)]
+pub(crate) struct SendQueue {
+    sends: Mutex<Sends>,
+    waker: AtomicWaker,
+}
+
+/// What a [`SendQueue`] guards.
+#[derive(Default)]
+struct Sends {
+    /// The messages accepted and not yet delivered, oldest first.
+    queued: Vec<String>,
+    /// The run has ended, so every send is refused.
+    ended: bool,
+}
+
+impl SendQueue {
+    /// Queues `text` and wakes the loop waiting on the queue, or refuses it
+    /// once the run has ended.
+    fn push(&self, text: String) -> bool {
+        {
+            let mut sends = self.lock();
+            if sends.ended {
+                return false;
+            }
+            sends.queued.push(text);
+        }
+        self.waker.wake();
+        true
+    }
+
+    /// Takes every queued message, oldest first, without waiting.
+    pub(crate) fn take(&self) -> Vec<String> {
+        std::mem::take(&mut self.lock().queued)
+    }
+
+    /// Ready with every queued message, oldest first, or registers `cx` to
+    /// be woken by the next send. The queue is read after the
+    /// registration, so a message sent between the two is never lost.
+    pub(crate) fn poll_sent(&self, cx: &mut Context<'_>) -> Poll<Vec<String>> {
+        self.waker.register(cx.waker());
+        let sent = self.take();
+        if sent.is_empty() {
+            Poll::Pending
+        } else {
+            Poll::Ready(sent)
+        }
+    }
+
+    /// Ends the queue as the run ends, so every later send is refused, and
+    /// returns the messages it accepted and never delivered, oldest first.
+    pub(crate) fn end(&self) -> Vec<String> {
+        let mut sends = self.lock();
+        sends.ended = true;
+        std::mem::take(&mut sends.queued)
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Sends> {
+        // Every writer leaves the queue whole between its pushes and takes,
+        // so a poisoned lock still holds a usable value.
+        self.sends.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+impl fmt::Debug for SendQueue {
+    /// Shows how many messages wait and whether the run has ended, never
+    /// their text.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let sends = self.lock();
+        f.debug_struct("SendQueue")
+            .field("queued", &sends.queued.len())
+            .field("ended", &sends.ended)
             .finish()
     }
 }

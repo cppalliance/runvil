@@ -3,7 +3,8 @@
 //! drops every outstanding effect with one `Dropped` answer each; a
 //! performer that panics drops its effect rather than stranding the run;
 //! a run left with nothing to await ends recorded with an `Internal`
-//! error; and a refused recorder write ends the drive with the recorder's
+//! error, unless its main chain waits for input, which only a cancel ends
+//! here; and a refused recorder write ends the drive with the recorder's
 //! error and tears down the performers still out. The Vfs effect the loop
 //! answers inline has its own module, `vfs`, the `Chat` effect the
 //! inference broker answers has `broker`, and the tool-call cap has `cap`.
@@ -23,7 +24,8 @@ use serde_json::json;
 
 use crate::support::{
     ClosingTool, PanickingTool, PendingTimer, PendingTool, TEST_SEED, TIMED_MAIN, TextTool, Unused,
-    WAITS, assert_canceled, loop_setup, run, run_over, run_with_child, run_with_child_and_cancel,
+    WAITS, assert_canceled, loop_setup, run, run_over, run_with_cancel, run_with_child,
+    run_with_child_and_cancel,
 };
 
 #[path = "effect_loop-broker.rs"]
@@ -408,5 +410,37 @@ async fn a_run_left_with_nothing_to_await_ends_recorded_with_an_internal_error()
     assert!(
         recorder.records(run_id).is_empty(),
         "the stalled step reported nothing and issued nothing"
+    );
+}
+
+#[tokio::test]
+async fn a_run_waiting_for_input_with_nothing_in_flight_waits_for_a_cancel_instead_of_stalling() {
+    let (recorder, run_id) = begun_log().await;
+    let cancel = CancelHandle::new();
+    cancel_after(&cancel, Duration::from_millis(50));
+
+    // Nothing can send to a run `drive_run` drives, so only the cancel
+    // ends the main chain's wait on its inbox.
+    let result = drive_run(
+        run_with_cancel("return tasks.receive()", &cancel),
+        &loop_setup(recorder.clone()),
+        Arc::new(Unused),
+        Arc::new(Unused),
+        run_id,
+        cancel,
+    )
+    .await;
+    assert_canceled(&result);
+    assert_eq!(recorder.result(run_id), Some(result));
+    let records = recorder.records(run_id);
+    assert!(
+        records
+            .iter()
+            .any(|record| record.task_id == "0" && record.payload["kind"] == "inbox_waiting"),
+        "the main chain waited on its inbox: {records:?}"
+    );
+    assert!(
+        !kinds(&records).contains(&RecordKind::Effect),
+        "the wait issued nothing: {records:?}"
     );
 }

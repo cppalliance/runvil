@@ -1,8 +1,9 @@
 //! Tests for the Host's Packs and each run's snapshot: `new` makes no
 //! Pack, and each snapshot makes its own instance of each Pack the run
 //! holds and of no other, a factory's refusal or panic leaving that Pack
-//! unavailable to that run alone and never waited on; and the snapshot's
-//! roster, catalog, preludes, and calls. The pick of each run's Packs and
+//! unavailable to that run alone and never waited on, and a run with no
+//! user holding `runvil/user` unavailable; and the snapshot's roster,
+//! catalog, preludes, and calls. The pick of each run's Packs and
 //! the ready wait over them sit in the `pick` child module, and the
 //! snapshot's renders and its routing of a call the catalog lacks in the
 //! `render` child module.
@@ -223,9 +224,10 @@ fn prompt(frontmatter: &str) -> Prompt {
     prompt.unwrap()
 }
 
-/// Picks `prompt`'s Packs, makes them with `services` as the run's own,
-/// and takes the run's snapshot of them with `failures` as the Packs
-/// whose `ready` failed, without waiting on any `ready`.
+/// Picks `prompt`'s Packs, makes them with `services` as the run's own
+/// for a run with no user, and takes the run's snapshot of them with
+/// `failures` as the Packs whose `ready` failed, without waiting on any
+/// `ready`.
 fn begin(
     host: &Packs,
     services: &HostServices,
@@ -233,14 +235,15 @@ fn begin(
     prompt: &Prompt,
 ) -> RunPacks {
     let picked = host.pick(prompt);
-    let made = host.make(&picked, services);
+    let made = host.make(&picked, services, false);
     RunPacks::snapshot(made, failures, &picked.unresolved)
 }
 
-/// The run's snapshot of `prompt`'s Packs, made with `services` as the
-/// run's own, or `None` when it waits on a Pack's `ready`.
+/// The snapshot of a run with no user of `prompt`'s Packs, made with
+/// `services` as the run's own, or `None` when it waits on a Pack's
+/// `ready`.
 fn snapshot(host: &Packs, services: &HostServices, prompt: &Prompt) -> Option<RunPacks> {
-    host.snapshot(prompt, services.clone(), &CancelHandle::new())
+    host.snapshot(prompt, services.clone(), false, &CancelHandle::new())
         .now_or_never()
 }
 
@@ -314,9 +317,11 @@ fn the_roster_hands_each_usable_pack_with_the_vendor_the_run_picked() {
         BTreeMap::from([
             (name("kit"), usable_from("acme")),
             (name("subagents"), usable_from("runvil")),
+            (name("user"), unavailable_for("this run has no user")),
             (name("web"), usable_from("runvil")),
         ]),
-        "the declared acme/kit reports acme, and every undeclared Pack reports runvil"
+        "the declared acme/kit reports acme, every undeclared usable Pack reports runvil, and \
+         a run with no user cannot use runvil/user"
     );
 }
 
@@ -359,7 +364,12 @@ fn each_snapshot_makes_each_pack_the_run_holds_once_and_each_run_gets_its_own_in
     }
     assert_eq!(snapshot_ids(&first), ["kit/a", "web/fetch"]);
     let shown = format!("{host:?}");
-    for fqn in ["runvil/kit", "runvil/subagents", "runvil/web"] {
+    for fqn in [
+        "runvil/kit",
+        "runvil/subagents",
+        "runvil/user",
+        "runvil/web",
+    ] {
         assert!(shown.contains(fqn), "{fqn} is installed: {shown}");
     }
 }
@@ -594,9 +604,43 @@ fn the_roster_lists_the_builtin_stub_as_usable_and_each_pack_that_cannot_serve_w
                 unavailable_for("needy needs tests/session, and this run provides none"),
             ),
             (name("subagents"), usable_from("runvil")),
+            (name("user"), unavailable_for("this run has no user")),
         ]),
-        "the undeclared stub with no tools is on the roster, and a failed ready and a \
-         factory's refusal each carry their reason"
+        "the undeclared stub with no tools is on the roster, and a failed ready, a factory's \
+         refusal, and a run with no user each carry their reason"
+    );
+}
+
+#[test]
+fn only_a_run_with_a_user_holds_runvil_user_usable() {
+    let host = host(&[]);
+    let roster = |prompt: &Prompt, has_user: bool| {
+        let picked = host.pick(prompt);
+        let made = host.make(&picked, &HostServices::new(), has_user);
+        RunPacks::snapshot(made, BTreeMap::new(), &picked.unresolved).roster()
+    };
+    for prompt in [prompt(""), prompt("uses:\n  - user\n")] {
+        assert_eq!(
+            roster(&prompt, true).get(&name("user")),
+            Some(&usable_from("runvil")),
+            "a run with a user holds runvil/user, declared or not"
+        );
+        assert_eq!(
+            roster(&prompt, false).get(&name("user")),
+            Some(&unavailable_for("this run has no user")),
+            "a run with no user holds it unavailable, declared or not"
+        );
+    }
+    let declares = prompt("uses:\n  - user\n");
+    let picked = host.pick(&declares);
+    let run = RunPacks::snapshot(
+        host.make(&picked, &HostServices::new(), true),
+        BTreeMap::new(),
+        &picked.unresolved,
+    );
+    assert!(
+        run.catalog().tools().is_empty() && run.preludes(&declares).is_empty(),
+        "runvil/user adds no catalog tool and no prelude"
     );
 }
 
