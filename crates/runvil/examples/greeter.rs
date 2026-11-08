@@ -110,6 +110,7 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
                 effects,
                 events,
                 withdrawn,
+                ..
             } => {
                 log.extend(events);
                 for IssuedEffect { id, effect, .. } in effects {
@@ -120,7 +121,7 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
                     }
                 }
             }
-            Step::Done { result, events } => {
+            Step::Done { result, events, .. } => {
                 log.extend(events);
                 break result;
             }

@@ -130,6 +130,7 @@ pub(crate) fn render_envelope(
     let values = match answer {
         Answer::Infer(text)
         | Answer::Call(text)
+        | Answer::Receive(text)
         | Answer::ToolCallResult(ToolCallOutcome::Plain(text)) => {
             vec![Value::String(lua.create_string(&text)?)]
         }

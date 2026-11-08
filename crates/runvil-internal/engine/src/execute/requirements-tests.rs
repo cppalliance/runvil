@@ -85,7 +85,7 @@ fn unavailable(pack: &str, reason: &str) -> (PackId, RosterEntry) {
 #[track_caller]
 fn refusal(prompt: Prompt, ctx: RunParams) -> Option<String> {
     let mut run = Run::new(Arc::new(prompt), "", ctx);
-    let Step::Done { result, events } = run.step() else {
+    let Step::Done { result, events, .. } = run.step() else {
         panic!("the fixture run is done at its first step");
     };
     match result {

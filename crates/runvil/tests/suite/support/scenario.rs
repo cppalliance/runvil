@@ -204,11 +204,12 @@ impl Driver {
                 effects,
                 events,
                 withdrawn,
+                ..
             } => {
                 self.events.extend(events);
                 (effects, withdrawn)
             }
-            Step::Done { result, events } => {
+            Step::Done { result, events, .. } => {
                 self.events.extend(events);
                 let held = self.held.len();
                 if held > 0 {

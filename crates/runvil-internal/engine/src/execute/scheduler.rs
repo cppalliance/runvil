@@ -36,12 +36,12 @@
 //! borrow, and the scheduler owns itself outright.
 //!
 //! This file holds the scheduler core: the run's lifecycle and the ready
-//! queue. The core owns four sub-objects that each hold their state and
+//! queue. The core owns five sub-objects that each hold their state and
 //! enforce their own rules, and none writes another: the chain arena, the
-//! effect table, the task arena, and admission, which holds the admission
-//! queues (resumed chains, admitted first, and fresh spawns, which wait
-//! there until the run's concurrency limits admit them) and the slots
-//! held, and reads the chain tree through a read-only view - the one
+//! effect table, the task arena, the inboxes, and admission, which holds
+//! the admission queues (resumed chains, admitted first, and fresh spawns,
+//! which wait there until the run's concurrency limits admit them) and the
+//! slots held, and reads the chain tree through a read-only view - the one
 //! cross-read. A request that touches only its own chain runs
 //! in a view of that chain, which borrows the chain, the effect table, and
 //! the run context and nothing else, and holds the one `issue` path every
@@ -59,13 +59,13 @@
 //! arm (the two arms the section-visible `models.loop` shim drives),
 //! `tasks` the task arena and the `spawn` arm, `admission` the admission
 //! owner and its view of the chain tree, `task_end` the chain-end rules
-//! for tasks, `waits` the `join_any`
-//! wait and the `ready`, `status`, `pending`, `note`, `concurrency`, and
-//! `cancel` arms over the arena, `timer` the wait shims' internal timeout
-//! as an effect-backed entry, and `test_hooks` (test builds only) the seams
-//! the suites inspect the arena through. A fanout is Lua over those arms
-//! (the `fanout` shim spawns one task per member, all up front, and waits
-//! on the live set).
+//! for tasks, `inbox` the inboxes and the `receive` arm, `waits` the
+//! `join_any` wait and the `ready`, `status`, `pending`, `note`,
+//! `concurrency`, and `cancel` arms over the arena, `timer` the wait
+//! shims' internal timeout as an effect-backed entry, and `test_hooks`
+//! (test builds only) the seams the suites inspect the arena through. A
+//! fanout is Lua over those arms (the `fanout` shim spawns one task per
+//! member, all up front, and waits on the live set).
 
 mod admission;
 mod apply;
@@ -77,6 +77,7 @@ mod dispatch;
 mod drive;
 mod effects;
 mod h1;
+mod inbox;
 mod step;
 mod task_end;
 mod tasks;
@@ -104,6 +105,7 @@ use admission::Admission;
 use chain_ops::ChainOps;
 use chain_record::{Chain, ChainArena, ChainIndex, ChatAnchor, Counters};
 use effects::{CallSite, Continuation, EffectTable, Pending, ToolCallContinuation};
+use inbox::Inboxes;
 use tasks::TaskArena;
 
 /// The run's final result when no section produced a reply, which three
@@ -167,6 +169,9 @@ pub(crate) struct Scheduler {
     /// The task arena; [`TaskArena`] and the `tasks` module state its
     /// lifecycle.
     tasks: TaskArena,
+    /// The inboxes: each task's unread messages, the main chain's among
+    /// them, and the messages `Run::deliver` queued for the next step.
+    inboxes: Inboxes,
     /// Admission: the task chains waiting for slots - resumed chains,
     /// admitted first, and fresh spawns with their spawn records - and the
     /// chains holding slots now.
@@ -201,6 +206,7 @@ impl Scheduler {
             ready: VecDeque::new(),
             effects: EffectTable::default(),
             tasks: TaskArena::default(),
+            inboxes: Inboxes::default(),
             admission: Admission::default(),
             phase: Phase::Fresh,
             scope: None,

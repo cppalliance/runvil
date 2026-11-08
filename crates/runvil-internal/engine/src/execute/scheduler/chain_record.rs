@@ -194,8 +194,9 @@ impl CallDepth {
 /// What a suspended chain is parked on, from its dispatch until its
 /// answer resumes it. A wait keeps its data until the wake: the
 /// `join_any` set until a member's end answers it, the `tool_calls` slots
-/// until the last one lands. From that answer to the resume, the chain
-/// reports what it was parked on, unless the wake requeued it for a slot.
+/// until the last one lands, the inbox wait until a message answers it.
+/// From that answer to the resume, the chain reports what it was parked
+/// on, unless the wake requeued it for a slot.
 #[derive(Debug)]
 pub(super) enum Parked {
     /// A `chat` or `infer` round.
@@ -218,6 +219,14 @@ pub(super) enum Parked {
     /// A concurrency slot: a fresh spawn before admission, or a wake that
     /// takes back the slots its wait gave up.
     Queued,
+    /// The inbox of the chain's task, read by `tasks.receive()`.
+    Inbox {
+        /// Whether the chain waits for a message: false from dispatch
+        /// until the arm parks on an empty inbox, and again once a
+        /// message has answered the wait, so no later message wakes the
+        /// chain again.
+        waiting: bool,
+    },
 }
 
 impl Parked {
@@ -230,6 +239,7 @@ impl Parked {
             Parked::Tasks(_) => Blocked::Tasks,
             Parked::Call => Blocked::Call,
             Parked::Queued => Blocked::Queued,
+            Parked::Inbox { .. } => Blocked::Inbox,
         }
     }
 }
@@ -511,6 +521,39 @@ impl Chain {
         }
     }
 
+    /// Whether the chain waits in `tasks.receive()` for a message that has
+    /// not arrived.
+    pub(super) fn waits_on_inbox(&self) -> bool {
+        matches!(self.parked, Some(Parked::Inbox { waiting: true }))
+    }
+
+    /// Ends the chain's inbox wait when no message has answered it yet,
+    /// and reports whether it did.
+    pub(super) fn end_inbox_wait(&mut self) -> bool {
+        match &mut self.parked {
+            Some(Parked::Inbox { waiting }) if *waiting => {
+                *waiting = false;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Takes back the message a `tasks.receive()` answer holds for the
+    /// chain's suspended block, which has not resumed with it, so the
+    /// chain never read it. `None` when the block holds any other answer,
+    /// or none.
+    pub(super) fn take_unread_message(&mut self) -> Option<String> {
+        let running = self.entered.as_mut()?.running.as_mut()?;
+        match running.answer.take() {
+            Some(Ok(Answer::Receive(text))) => Some(text),
+            other => {
+                running.answer = other;
+                None
+            }
+        }
+    }
+
     /// Hands `answer` to the chain's suspended block, to be taken when
     /// the block resumes.
     ///
@@ -739,6 +782,32 @@ impl ChainArena {
         self.iter()
             .filter(move |(_, chain)| chain.kind.parent() == Some(parent))
             .map(|(child, _)| child)
+    }
+
+    /// The chain of `task` waiting in `tasks.receive()` for a message that
+    /// has not arrived, if one is: at most one does, since a `call` child
+    /// blocks its caller.
+    pub(in crate::execute::scheduler) fn inbox_reader(&self, task: &TaskId) -> Option<ChainIndex> {
+        self.iter()
+            .find(|(_, chain)| &chain.task == task && chain.waits_on_inbox())
+            .map(|(id, _)| id)
+    }
+
+    /// The chain that runs `task`'s work while the run waits between
+    /// steps, when every live chain is parked: the one of `task`'s chains
+    /// parked on anything but a `call` child. `None` when none is, before
+    /// the run starts and after it ends.
+    pub(in crate::execute::scheduler) fn leaf_of(&self, task: &TaskId) -> Option<ChainIndex> {
+        self.iter()
+            .filter(|(_, chain)| {
+                &chain.task == task
+                    && chain
+                        .parked
+                        .as_ref()
+                        .is_some_and(|parked| !matches!(parked, Parked::Call))
+            })
+            .map(|(id, _)| id)
+            .last()
     }
 
     /// Shrinks the chain-count bound so a test can drive the overflow path.

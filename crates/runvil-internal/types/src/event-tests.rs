@@ -101,6 +101,7 @@ fn lifecycle_of(event: &Event) -> Option<Lifecycle> {
         | Event::AssistantReply { .. }
         | Event::AssistantToolCalls { .. }
         | Event::ToolResult { .. }
+        | Event::InboxMessage { .. }
         | Event::Request { .. }
         | Event::Response { .. } => None,
     }
@@ -214,6 +215,11 @@ fn content_samples() -> Vec<Event> {
             vendor: Some("acme".to_owned()),
             content: "file contents".to_owned(),
             trusted: false,
+        },
+        Event::InboxMessage {
+            section: "Gather".to_owned(),
+            provenance: provenance("0", 17),
+            text: "also cover the tests".to_owned(),
         },
     ]
 }
@@ -361,6 +367,19 @@ fn a_degraded_metadata_report_serializes_its_turn_and_message_under_its_kind() {
     assert_wire(
         &event,
         r#"{"kind":"model_metadata_degraded","section":"Gather","provenance":{"task":"0","seq":3},"turn":1,"message":"completion response named no string `model`; recorded as empty"}"#,
+    );
+}
+
+#[test]
+fn an_inbox_message_serializes_its_text_under_its_kind() {
+    let event = Event::InboxMessage {
+        section: "Chat".to_owned(),
+        provenance: provenance("0", 4),
+        text: "also cover the tests".to_owned(),
+    };
+    assert_wire(
+        &event,
+        r#"{"kind":"inbox_message","section":"Chat","provenance":{"task":"0","seq":4},"text":"also cover the tests"}"#,
     );
 }
 

@@ -24,7 +24,7 @@ fn a_run_that_cannot_start_reports_its_failure_on_the_first_step() {
         .0
         .expect("the prompt parses whatever version it declares");
     let mut run = Run::new(Arc::new(prompt), "", run_params());
-    let Step::Done { result, events } = run.step() else {
+    let Step::Done { result, events, .. } = run.step() else {
         panic!("a run that cannot start is done at once");
     };
     assert!(events.is_empty(), "nothing ran, nothing reported");
@@ -54,7 +54,7 @@ fn an_answer_before_the_first_step_fails_the_run_with_no_run_events() {
     let mut run = run_of("return 'never runs'", run_params());
     run.resume(EffectId(7), EffectAnswer::Timer);
     assert!(run.decided_for_test(), "the stray answer decides the run");
-    let Step::Done { result, events } = run.step() else {
+    let Step::Done { result, events, .. } = run.step() else {
         panic!("a run decided before it started is done at its first step");
     };
     assert!(

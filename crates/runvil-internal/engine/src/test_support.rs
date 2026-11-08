@@ -195,7 +195,7 @@ pub(crate) fn drive_step(
     reported: &mut Vec<Event>,
 ) -> Option<Result<String, Error>> {
     match run.step() {
-        Step::Done { result, events } => {
+        Step::Done { result, events, .. } => {
             reported.extend(events);
             Some(result)
         }
@@ -203,6 +203,7 @@ pub(crate) fn drive_step(
             effects,
             events,
             withdrawn,
+            ..
         } => {
             reported.extend(events);
             if effects.is_empty() && held.is_empty() {

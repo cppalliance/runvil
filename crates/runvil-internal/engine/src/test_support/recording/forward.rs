@@ -2,9 +2,10 @@
 //! seams: each event replayed onto the [`Observer`] and, for the debug
 //! variants, the [`DebugCapture`].
 //!
-//! Lifecycle variants become the matching [`Observation`]; content
-//! variants become the `on_*` hooks; `Request` and `Response` become the
-//! capture pair. The order of the batch is the order the observer sees.
+//! Lifecycle variants become the matching [`Observation`], and an inbox
+//! message an `Other` trace line; content variants become the `on_*`
+//! hooks; `Request` and `Response` become the capture pair. The order of
+//! the batch is the order the observer sees.
 
 use runvil_types::event::Event;
 use runvil_types::tools::OutputTrust;
@@ -72,7 +73,7 @@ lifecycle_pairs! {
     VfsExistsFailed,
 }
 
-/// The lifecycle and task variants with payloads, the ones
+/// The lifecycle, task, and inbox variants with payloads, the ones
 /// [`forward_lifecycle`] owns.
 macro_rules! task_lifecycle_variants {
     () => {
@@ -86,6 +87,7 @@ macro_rules! task_lifecycle_variants {
             | Event::TaskFailed { .. }
             | Event::TaskCanceled { .. }
             | Event::TaskAbandoned { .. }
+            | Event::InboxMessage { .. }
     };
 }
 
@@ -154,7 +156,8 @@ pub(crate) fn forward_one(event: Event, observer: &dyn Observer, debug: Option<&
     }
 }
 
-/// The lifecycle and task variants with payloads, as observations.
+/// The lifecycle, task, and inbox variants with payloads, as
+/// observations.
 fn forward_lifecycle(event: Event, observer: &dyn Observer) {
     match event {
         Event::ModelMetadataDegraded {
@@ -163,6 +166,12 @@ fn forward_lifecycle(event: Event, observer: &dyn Observer) {
             &section,
             Observation::Other(format!("Model metadata degraded: {message}")),
         ),
+        Event::InboxMessage { section, text, .. } => {
+            observer.observe(
+                &section,
+                Observation::Other(format!("Inbox message: {text}")),
+            );
+        }
         Event::LuaLibraryLoadStarted {
             section, library, ..
         } => observer.observe(&section, Observation::LuaLibraryLoadStarted { library }),

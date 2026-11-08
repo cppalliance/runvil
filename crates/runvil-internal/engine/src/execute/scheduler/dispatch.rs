@@ -11,8 +11,9 @@
 //! This file keeps three routing arms: `infer`, `call`, and `store`. Every
 //! other group lives in its own module - `chat` the `chat` arm, `tasks` the
 //! `spawn` arm, `tool_call` the `tool_call`, `tool_calls`, and
-//! `adhoc_tool_done` arms, `timer` the `timer` arm, and `waits` the task
-//! wait, inspection, note, concurrency, and cancel arms.
+//! `adhoc_tool_done` arms, `timer` the `timer` arm, `waits` the task
+//! wait, inspection, note, concurrency, and cancel arms, and `inbox` the
+//! `receive` arm.
 
 use std::sync::Arc;
 
@@ -41,13 +42,14 @@ pub(super) enum Dispatched {
 
 /// What a chain parks on when it yields `request`; `None` for the arms
 /// answered inline, whose chain is back on the ready queue before anyone
-/// can look. A wait's set and a batch's slots start empty, and their arms
-/// fill them when the chain parks.
+/// can look. A wait's set and a batch's slots start empty, and an inbox
+/// wait starts not waiting; their arms fill them in when the chain parks.
 fn parked_on(request: &Request) -> Option<Parked> {
     match request {
         Request::Infer { .. } | Request::Chat { .. } => Some(Parked::Chat),
         Request::Call { .. } => Some(Parked::Call),
         Request::JoinAny { .. } => Some(Parked::Tasks(Vec::new())),
+        Request::Receive => Some(Parked::Inbox { waiting: false }),
         Request::ToolCall { .. } => Some(Parked::ToolCall),
         Request::ToolCalls { .. } => Some(Parked::Batch(Vec::new())),
         Request::Store { .. } => Some(Parked::Store),
@@ -94,6 +96,7 @@ impl Scheduler {
             Request::Pending => self.dispatch_pending(id),
             Request::Concurrency { limit } => self.dispatch_concurrency(id, limit),
             Request::Note { text } => self.dispatch_note(id, text),
+            Request::Receive => self.dispatch_receive(id),
             Request::Cancel { task } => self.dispatch_cancel(id, &task),
             Request::ToolCall { alias, args, model } => {
                 self.with_chain(id, |ops| ops.dispatch_tool_call(&alias, args, model))

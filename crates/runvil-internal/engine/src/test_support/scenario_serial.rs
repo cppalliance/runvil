@@ -146,6 +146,7 @@ pub(crate) fn drive_batched(mut run: Run, batching: Batching) -> Outcome {
             Step::Done {
                 result,
                 events: more,
+                ..
             } => {
                 events.extend(more);
                 return Outcome {

@@ -1,13 +1,17 @@
 //! The run-level step: `resume -> match request -> dispatch -> resume with
-//! answer`, run until no chain can proceed without an answer from the
-//! caller. The step checks that the run can start and starts its first
-//! chain on its first call, drains the ready queue, and returns the
-//! effects the drain issued with the events it reported.
+//! answer`, run until no chain can proceed without an answer or a message
+//! from the caller. The step applies the messages `Run::deliver` queued,
+//! checks that the run can start and starts its first chain on its first
+//! call, drains the ready queue, and returns the effects the drain issued
+//! with the events it reported.
 //! An empty ready queue with no parked effect and no queued chain that can
-//! be admitted is a stall, which fails loudly rather than hangs.
+//! be admitted is a stall, which fails loudly rather than hangs, unless the
+//! main chain waits on its inbox: then the step reports
+//! `waiting_for_input`, since the caller's next message can move it.
 //! The run's `Done` is withheld until
 //! every issued effect has its answer, so every effect the caller was
-//! handed has exactly one answer.
+//! handed has exactly one answer, and it hands back the main chain's
+//! unread messages.
 
 use runvil_types::error::{ErrorCode, make_failure_error, place};
 use runvil_types::event_lifecycle;
@@ -19,18 +23,23 @@ use crate::{Error, Result, error};
 
 use super::chain::ChainStep;
 use super::effects::Arrival;
+use super::inbox::main_task;
 use super::{GENERIC_COMPLETION, Phase, Scheduler};
 
 impl Scheduler {
     /// Drains the ready queue and returns the step's outcome: the effects
     /// issued and the events reported while chains ran, or the run's
-    /// result once it is over and every issued effect is answered. The
-    /// first call checks that the run can start, then starts the H1 pass
-    /// when the prompt has H1 blocks, else the root chain over the prompt's
-    /// sections. A run that cannot start ends with that failure, or as
-    /// canceled when its cancel flag is already set, and reports no run
-    /// events.
+    /// result once it is over and every issued effect is answered. Every
+    /// call first applies the messages `Run::deliver` queued since the last
+    /// one. The first call checks that the run can start, then starts the
+    /// H1 pass when the prompt has H1 blocks, else the root chain over the
+    /// prompt's sections. A run that cannot start ends with that failure,
+    /// or as canceled when its cancel flag is already set, and reports no
+    /// run events.
     pub(crate) fn step(&mut self) -> Step {
+        if let Err(error) = self.apply_deliveries() {
+            self.end(Err(error));
+        }
         if matches!(self.phase, Phase::Fresh) {
             if let Err(error) = self.check_start() {
                 let error = if self.ctx.cancel().is_canceled() {
@@ -56,20 +65,23 @@ impl Scheduler {
             self.drain();
         }
         // Every unfinished chain is ready, parked on an effect, blocked on
-        // a child, waiting on a task, or queued for admission, and a
-        // blocked or waiting chain transitively bottoms out in a ready or
-        // parked chain, so an empty ready queue with no parked effect and
-        // no admissible queued chain can only be a scheduler bug (nothing
-        // ready, nothing parked, no slot that will ever free, and whatever
-        // is waiting can never be woken) - fail loudly rather than hang. A
-        // running drain returns only after `admit` left the ready queue
-        // empty, so no queued chain is admissible here. Those two
-        // conditions are the whole guard; the admission queue needs no
-        // third, because a chain that can be admitted is a queued chain the
-        // drain already offered.
+        // a child, waiting on a task or an inbox, or queued for admission.
+        // The main chain's inbox is the one wait the caller can end,
+        // through `Run::deliver`, so a main chain waiting there leaves the
+        // run waiting for input, not stalled. Otherwise an empty ready
+        // queue with no parked effect and no admissible queued chain means
+        // nothing can move (nothing ready, nothing parked, no slot that
+        // will ever free, and whatever is waiting can never be woken) -
+        // fail loudly rather than hang. A running drain returns only after
+        // `admit` left the ready queue empty, so no queued chain is
+        // admissible here. Those conditions are the whole guard; the
+        // admission queue needs no other, because a chain that can be
+        // admitted is a queued chain the drain already offered.
+        let waiting_for_input = self.chains.inbox_reader(&main_task()).is_some();
         if matches!(self.phase, Phase::Running)
             && self.ready.is_empty()
             && !self.effects.has_awaited()
+            && !waiting_for_input
         {
             self.end(Err(error::make_internal_error(
                 "the scheduler stalled with no ready chain, no in-flight request, \
@@ -87,6 +99,7 @@ impl Scheduler {
                 Step::Done {
                     result: finished(result),
                     events,
+                    unread: self.inboxes.take_unread(),
                 }
             }
             Phase::Done => Step::Done {
@@ -94,6 +107,7 @@ impl Scheduler {
                     "a finished run cannot be stepped again",
                 )),
                 events,
+                unread: self.inboxes.take_unread(),
             },
             phase @ (Phase::Fresh | Phase::Running | Phase::Ending(_)) => {
                 self.phase = phase;
@@ -101,6 +115,7 @@ impl Scheduler {
                     effects,
                     events,
                     withdrawn,
+                    waiting_for_input,
                 }
             }
         }
@@ -283,7 +298,8 @@ impl Scheduler {
     /// every entry is terminal by now, `end` having
     /// settled the live ones, so nothing here reports. Each chain joins
     /// the tasks it owns before its access drops, closing the run's
-    /// happens-before record.
+    /// happens-before record. A message a woken reader never resumed with
+    /// goes back first in its inbox, unread.
     fn teardown(&mut self) {
         self.ready.clear();
         self.admission.clear();
@@ -294,6 +310,9 @@ impl Scheduler {
             self.join_owned_tasks(owner, access);
         }
         for chain in self.chains.iter_mut() {
+            if let Some(text) = chain.take_unread_message() {
+                self.inboxes.put_back(&chain.task, text);
+            }
             chain.parked = None;
             chain.entered = None;
             chain.access = None;

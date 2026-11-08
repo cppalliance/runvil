@@ -3,9 +3,9 @@
 //! direct-yield message, and an author-argument failure becomes the call's
 //! answer so the shim raises it at the call site. Field reads are raw: the
 //! table comes from script space, so a metatable must not intercept or
-//! forge a field. `infer`, `call`, and the argument-free `pending` parse
-//! here; the other per-op parsers sit in the child modules `chat`, `store`,
-//! `tasks`, and `tools`.
+//! forge a field. `infer`, `call`, and the argument-free `pending` and
+//! `receive` parse here; the other per-op parsers sit in the child modules
+//! `chat`, `store`, `tasks`, and `tools`.
 
 mod chat;
 mod store;
@@ -201,6 +201,7 @@ impl Request {
             "status" => classify(parse_status(table)),
             "pending" => YieldParse::Request(Request::Pending),
             "note" => classify(parse_note(table)),
+            "receive" => YieldParse::Request(Request::Receive),
             "concurrency" => classify(parse_concurrency(table)),
             "cancel" => classify(parse_cancel(table)),
             "tool_call" => classify(parse_tool_call(lua, table)),

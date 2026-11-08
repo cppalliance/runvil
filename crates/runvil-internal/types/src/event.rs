@@ -379,6 +379,14 @@ events! {
             /// not nonce-wrapped).
             trusted: bool,
         },
+        /// A message entered a chain's inbox, from `Run::deliver` or
+        /// `tasks.send`, under the receiving chain's provenance.
+        /// `Run::deliver` returns it; the step that applies a `tasks.send`
+        /// message emits it.
+        InboxMessage {
+            /// The message as sent: untrusted text from whoever sent it.
+            text: String,
+        },
         // Debug.
         /// The JSON body sent to the chat-completions endpoint for one
         /// model turn: raw, unredacted, and including the full prompt.

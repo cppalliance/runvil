@@ -1,7 +1,8 @@
 //! The task-operation request parsers: `spawn`'s target, seeds, and var
 //! snapshot; the `timer` leaf request's author-supplied `seconds`, its
 //! domain checks, and the `Duration` it parses into; `pending`'s refusal
-//! of any argument; and `concurrency`'s optional shim-validated limit.
+//! of any argument; `receive`, which has no fields; and `concurrency`'s
+//! optional shim-validated limit.
 
 use super::*;
 
@@ -156,6 +157,14 @@ fn pending_parses_without_fields() {
     let table = lua_table(&lua, "{ op = 'pending' }");
     let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
     assert!(matches!(request, Request::Pending), "got {request:?}");
+}
+
+#[test]
+fn receive_parses_without_fields() {
+    let lua = Lua::new();
+    let table = lua_table(&lua, "{ op = 'receive' }");
+    let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
+    assert!(matches!(request, Request::Receive), "got {request:?}");
 }
 
 #[test]

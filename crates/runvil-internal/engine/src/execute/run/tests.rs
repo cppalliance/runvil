@@ -23,6 +23,8 @@ use crate::test_support::scenario::{TEST_SEED, only_effect, round_trip, test_bin
 
 #[path = "tests-drops.rs"]
 mod drops;
+#[path = "tests-inbox.rs"]
+mod inbox;
 #[path = "tests-start.rs"]
 mod start;
 
@@ -394,7 +396,7 @@ fn a_child_cancel_handles_cancel_is_observed_by_the_instruction_hook() {
     });
     let step = run.step();
     canceller.join().expect("the canceller thread finishes");
-    let Step::Done { result, events } = step else {
+    let Step::Done { result, events, .. } = step else {
         panic!("the hook aborts the loop and nothing is outstanding, got {step:?}");
     };
     assert!(

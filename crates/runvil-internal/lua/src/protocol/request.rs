@@ -115,6 +115,10 @@ pub enum Request {
         /// The author-supplied note text.
         text: String,
     },
+    /// `tasks.receive()`: take the oldest message in the calling chain's
+    /// inbox, or park the chain until one arrives. A `call` chain reads
+    /// its caller's inbox, since it runs inside its caller's task.
+    Receive,
     /// `tasks.cancel(task)`: end a task the caller owns. Idempotent: a
     /// task already in a terminal state is left as it is.
     Cancel {

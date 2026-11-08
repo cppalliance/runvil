@@ -184,6 +184,14 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
             Seam::Observed,
         ),
         (
+            Event::InboxMessage {
+                section: "A".to_owned(),
+                provenance: provenance(),
+                text: "also cover the tests".to_owned(),
+            },
+            Seam::Observed,
+        ),
+        (
             Event::Thinking {
                 section: "A".to_owned(),
                 provenance: provenance(),

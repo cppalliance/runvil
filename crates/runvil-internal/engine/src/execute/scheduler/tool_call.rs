@@ -366,6 +366,7 @@ impl ChainOps<'_> {
                 | Answer::Pending(_)
                 | Answer::Concurrency(_)
                 | Answer::Note
+                | Answer::Receive(_)
                 | Answer::Cancel
                 | Answer::Chat(_)
                 | Answer::ToolCallsResult(_)

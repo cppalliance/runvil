@@ -183,8 +183,10 @@ impl Emitter {
         self.debug
     }
 
-    /// Stamps one issued effect: this task's next provenance, drawn from
-    /// the counter its events advance, so the effect orders among them.
+    /// Stamps one issued effect, or an event the Engine returns to its
+    /// caller instead of pushing it: this task's next provenance, drawn
+    /// from the counter its events advance, so the stamped value orders
+    /// among them.
     #[must_use]
     pub fn stamp_effect(&self) -> Provenance {
         self.sink.allocate(&self.task)

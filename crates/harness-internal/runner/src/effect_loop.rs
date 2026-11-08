@@ -175,7 +175,7 @@ impl Driver {
     async fn drive(&mut self) -> Result<String, Error> {
         loop {
             match self.run.step() {
-                Step::Done { result, events } => {
+                Step::Done { result, events, .. } => {
                     self.commit_events(events).await?;
                     // `Done` is returned only once every effect is
                     // answered, so nothing is in flight.
@@ -185,6 +185,7 @@ impl Driver {
                     effects,
                     events,
                     withdrawn,
+                    ..
                 } => {
                     // The run reads this same flag, so its next step tears
                     // every chain down.

@@ -40,8 +40,9 @@ pub enum Step {
     Pending {
         /// The effects this step issued, in issue order, each with the
         /// provenance of the task that built it, for the caller to perform
-        /// and answer through [`Run::resume`]. An empty list means every
-        /// chain is waiting on an effect that an earlier step issued.
+        /// and answer through [`Run::resume`]. An empty list means the run
+        /// waits on effects an earlier step issued, or, when
+        /// `waiting_for_input` is set, on the main chain's next message.
         effects: Vec<IssuedEffect>,
         /// The events the step reported, in order.
         events: Vec<Event>,
@@ -56,6 +57,9 @@ pub enum Step {
         /// that `effects` lists, because one step can issue an effect and
         /// then withdraw it.
         withdrawn: Vec<EffectId>,
+        /// The main chain waits on its inbox, so only [`Run::deliver`] or
+        /// a cancel can move it.
+        waiting_for_input: bool,
     },
     /// The run is over.
     ///
@@ -72,6 +76,9 @@ pub enum Step {
         result: Result<String, Error>,
         /// The events reported since the previous step.
         events: Vec<Event>,
+        /// The main chain's unread messages, oldest first: still in its
+        /// inbox when the run ended.
+        unread: Vec<String>,
     },
 }
 
@@ -161,10 +168,10 @@ impl Run {
     /// Advances the run until it needs an answer, and returns the effects
     /// it issued and the events it reported.
     ///
-    /// It returns [`Step::Pending`] while the run waits on an answer, and
-    /// [`Step::Done`] once the run is over and every issued effect is
-    /// answered. Calling `step` after `Done` is a caller error: it returns
-    /// `Done` again with an internal failure.
+    /// It returns [`Step::Pending`] while the run waits on an answer or a
+    /// message, and [`Step::Done`] once the run is over and every issued
+    /// effect is answered. Calling `step` after `Done` is a caller error:
+    /// it returns `Done` again with an internal failure.
     ///
     /// The first call checks that the run can start, as
     /// [`new`](Self::new) describes.
@@ -194,6 +201,19 @@ impl Run {
     /// returning an error or panicking.
     pub fn resume(&mut self, id: EffectId, answer: EffectAnswer) {
         self.scheduler.resume(id, answer);
+    }
+
+    /// Queues `text` for the main chain's inbox and returns the
+    /// [`Event::InboxMessage`] that reports it, which the caller records
+    /// before its next `step`. The next `step` applies it: a
+    /// `tasks.receive()` waiting on the inbox resumes with it, and
+    /// otherwise it waits behind the messages delivered before it. A
+    /// message the run never reads comes back in [`Step::Done`]'s
+    /// `unread`.
+    ///
+    /// Call it only before `step` returns `Done`.
+    pub fn deliver(&mut self, text: String) -> Event {
+        self.scheduler.deliver_message(text)
     }
 
     /// Whether the run's result is decided: it has reported its end

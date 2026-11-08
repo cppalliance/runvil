@@ -109,7 +109,7 @@ fn a_dropped_chat_or_tool_call_resumes_a_pcall_with_the_canceled_error_and_the_r
     let completion = Completion::from_result(CompletionResult::Text("kept".to_owned()), "m")
         .expect("a text result is accepted");
     run.resume(id, EffectAnswer::Chat(Ok(Box::new(completion))));
-    let Step::Done { result, events } = run.step() else {
+    let Step::Done { result, events, .. } = run.step() else {
         panic!("the run ends once its last round is answered");
     };
     let text = result.expect("a caught drop leaves the run to succeed");
@@ -174,7 +174,7 @@ fn a_dropped_loop_round_resumes_a_pcall_with_the_canceled_error_and_the_run_cont
     let completion = Completion::from_result(CompletionResult::Text("kept".to_owned()), "m")
         .expect("a text result is accepted");
     run.resume(id, EffectAnswer::Chat(Ok(Box::new(completion))));
-    let Step::Done { result, events } = run.step() else {
+    let Step::Done { result, events, .. } = run.step() else {
         panic!("the run ends once its last round is answered");
     };
     let text = result.expect("a caught drop leaves the run to succeed");

@@ -31,7 +31,8 @@
 //! that store failure, never as a Lua runtime error.
 //!
 //! The VM also holds `tasks`, the shims for spawning,
-//! waiting on, checking, noting, and canceling tasks. Each Pack the
+//! waiting on, checking, noting, and canceling tasks, and for reading the
+//! calling chain's inbox. Each Pack the
 //! prompt declares can contribute a prelude, Lua that defines globals once
 //! per VM before `require` installs ([`install_preludes`] states the
 //! rules). The `input` table that `user-input` defines is one such global:

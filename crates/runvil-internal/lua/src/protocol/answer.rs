@@ -202,11 +202,13 @@ pub enum Blocked {
     Call,
     /// A concurrency slot, before admission.
     Queued,
+    /// Its own inbox, reported as `inbox`.
+    Inbox,
 }
 
 impl Blocked {
     /// The tag `tasks.status` reports: `chat`, `tool_call`, `store`,
-    /// `tasks`, `call`, or `queued`.
+    /// `tasks`, `call`, `queued`, or `inbox`.
     #[must_use]
     pub(crate) fn tag(self) -> &'static str {
         match self {
@@ -216,6 +218,7 @@ impl Blocked {
             Blocked::Tasks => "tasks",
             Blocked::Call => "call",
             Blocked::Queued => "queued",
+            Blocked::Inbox => "inbox",
         }
     }
 }
@@ -283,6 +286,9 @@ pub enum Answer {
     Concurrency(usize),
     /// A `note` request recorded its text.
     Note,
+    /// The message a `receive` request took from the chain's inbox, as
+    /// sent.
+    Receive(String),
     /// A `cancel` request ended its task, or found it already ended.
     Cancel,
     /// The classified output for a `chat` request. Boxed so the field-heavy

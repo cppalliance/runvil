@@ -333,6 +333,7 @@ pub fn runvil::Prompt::frontmatter(&self) -> &runvil::prompt::Frontmatter
 pub fn runvil::Prompt::parse(finder: &dyn runvil::PromptFinder, name: &str) -> (core::result::Result<runvil::Prompt, runvil::Error>, alloc::vec::Vec<runvil::event::Event>)
 pub fn runvil::Prompt::title(&self) -> &str
 pub fn runvil::PromptFinder::find(&self, name: &str) -> core::result::Result<alloc::string::String, runvil::Error>
+pub fn runvil::Run::deliver(&mut self, text: alloc::string::String) -> runvil::event::Event
 pub fn runvil::Run::new(prompt: alloc::sync::Arc<runvil::Prompt>, args: &str, params: runvil::RunParams) -> runvil::Run
 pub fn runvil::Run::resume(&mut self, id: runvil::effect::EffectId, answer: runvil::effect::EffectAnswer)
 pub fn runvil::Run::step(&mut self) -> runvil::Step
@@ -714,9 +715,11 @@ pub runvil::SourceLoc::start_line: core::num::nonzero::NonZeroU32
 pub runvil::Step::Done { .. }
 pub runvil::Step::Done::events: alloc::vec::Vec<runvil::event::Event>
 pub runvil::Step::Done::result: core::result::Result<alloc::string::String, runvil::Error>
+pub runvil::Step::Done::unread: alloc::vec::Vec<alloc::string::String>
 pub runvil::Step::Pending { .. }
 pub runvil::Step::Pending::effects: alloc::vec::Vec<runvil::effect::IssuedEffect>
 pub runvil::Step::Pending::events: alloc::vec::Vec<runvil::event::Event>
+pub runvil::Step::Pending::waiting_for_input: bool
 pub runvil::Step::Pending::withdrawn: alloc::vec::Vec<runvil::effect::EffectId>
 pub runvil::ToolInfo::describes_tools: bool
 pub runvil::ToolInfo::description: alloc::string::String
@@ -789,6 +792,10 @@ pub runvil::event::Event::AssistantToolCalls::provenance: runvil::ids::Provenanc
 pub runvil::event::Event::AssistantToolCalls::round: runvil::ids::RoundId
 pub runvil::event::Event::AssistantToolCalls::section: alloc::string::String
 pub runvil::event::Event::AssistantToolCalls::turn: u32
+pub runvil::event::Event::InboxMessage { .. }
+pub runvil::event::Event::InboxMessage::provenance: runvil::ids::Provenance
+pub runvil::event::Event::InboxMessage::section: alloc::string::String
+pub runvil::event::Event::InboxMessage::text: alloc::string::String
 pub runvil::event::Event::Lua { .. }
 pub runvil::event::Event::Lua::message: alloc::string::String
 pub runvil::event::Event::Lua::provenance: runvil::ids::Provenance

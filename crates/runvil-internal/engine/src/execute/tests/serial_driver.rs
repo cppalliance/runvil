@@ -122,7 +122,7 @@ fn a_three_arm_fanout_fed_its_answers_in_reverse_order_packs_results_in_collecti
         run.resume(issued.id, echo_chat(&issued.effect));
     }
     let (result, events) = match run.step() {
-        Step::Done { result, events } => (result, events),
+        Step::Done { result, events, .. } => (result, events),
         other @ Step::Pending { .. } => {
             panic!("every arm is answered, so the fanout completes: {other:?}")
         }
