@@ -131,6 +131,7 @@ pub(crate) fn render_envelope(
         Answer::Infer(text)
         | Answer::Call(text)
         | Answer::Receive(text)
+        | Answer::Reply(text)
         | Answer::ToolCallResult(ToolCallOutcome::Plain(text)) => {
             vec![Value::String(lua.create_string(&text)?)]
         }

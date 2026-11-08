@@ -1,18 +1,19 @@
 //! The task-operation request parsers: `spawn` and its seeds, the wait
 //! shims' internal `timer` and its author-supplied seconds, the `join_any`
 //! set, the single-task `ready`, `status`, and `cancel`, the `note` text,
-//! the `send` task and text, and the `concurrency` limit. The shims
-//! resolve a `Task` handle to its bare id before yielding, so every task
-//! field arrives as a path string; an id that does not parse is the
-//! author's argument error, raised at the call site.
+//! the `send` task and text, the `reply` value, and the `concurrency`
+//! limit. The shims resolve a `Task` handle to its bare id before
+//! yielding, so every task field arrives as a path string; an id that does
+//! not parse is the author's argument error, raised at the call site.
 
 use std::num::NonZeroU64;
 use std::time::Duration;
 
-use mlua::{Lua, LuaSerdeExt, Value};
+use mlua::{Lua, LuaSerdeExt, MultiValue, Value};
 use runvil_types::ids::TaskId;
 
 use crate::protocol::{NonEmpty, Request};
+use crate::section::scalar_return;
 
 use super::{FieldFailure, call_error, call_optional_string, call_string, call_target, shim_var};
 
@@ -177,6 +178,21 @@ pub(super) fn parse_send(table: &mlua::Table) -> std::result::Result<Request, Fi
         task: call_task(table)?,
         text: call_string(table, "text")?,
     })
+}
+
+/// Parses a `reply` request: the author-supplied `value`, taking the
+/// scalar-return rule a block's return takes, so nil reads as `""` and a
+/// value with no text form, a table among them, is the call's error.
+pub(super) fn parse_reply(table: &mlua::Table) -> std::result::Result<Request, FieldFailure> {
+    let Ok(value) = table.raw_get::<Value>("value") else {
+        return Err(FieldFailure::Malformed);
+    };
+    match scalar_return(MultiValue::from_vec(vec![value])) {
+        Ok(text) => Ok(Request::Reply {
+            text: text.unwrap_or_default(),
+        }),
+        Err(error) => Err(FieldFailure::Argument(error)),
+    }
 }
 
 /// Parses a `concurrency` request: the optional `limit`. The shim has

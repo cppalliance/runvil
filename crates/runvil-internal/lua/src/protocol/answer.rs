@@ -130,23 +130,24 @@ pub struct ChatResult {
 
 impl mlua::UserData for ChatResult {}
 
-/// One task's delivery to a `join_any` waiter: which member ended and how.
+/// One task's delivery to a `join_any` waiter: which member has a result
+/// and what it is.
 ///
-/// `outcome` is the task's final text, or its failure as the error value
-/// the shim hands back (`ok = false`): the task chain's own error, or the
-/// `canceled` value for a task its owner canceled (an abandoned task is
-/// never delivered, since its owner has ended). The delivery itself
-/// succeeded; a wait that fails outright (a task the caller does not own,
-/// a result already delivered) fails the request instead, with no
-/// [`Answer::JoinAny`]. A delivered failure is also the envelope's
-/// retained typed error, so a shim that re-raises the member's failure at
-/// once (the `fanout` shim's fatal-arm path) hands the driver the member's
-/// own typed error rather than its rendering.
+/// `outcome` is the task's latest reply or final text, or its failure as
+/// the error value the shim hands back (`ok = false`): the task chain's
+/// own error, or the `canceled` value for a task its owner canceled (an
+/// abandoned task is never delivered, since its owner has ended). The
+/// delivery itself succeeded; a wait that fails outright (a task the
+/// caller does not own, a result already delivered) fails the request
+/// instead, with no [`Answer::JoinAny`]. A delivered failure is also the
+/// envelope's retained typed error, so a shim that re-raises the member's
+/// failure at once (the `fanout` shim's fatal-arm path) hands the driver
+/// the member's own typed error rather than its rendering.
 #[derive(Debug)]
 pub struct TaskDelivery {
-    /// The member that ended.
+    /// The member delivered.
     pub task: TaskId,
-    /// The member's final text or failure.
+    /// The member's latest reply, final text, or failure.
     pub outcome: std::result::Result<String, runvil_types::error::Error>,
 }
 
@@ -273,7 +274,8 @@ pub enum Answer {
     Timer(TaskId),
     /// The member delivered for a `join_any` request.
     JoinAny(TaskDelivery),
-    /// Whether the task has ended, for a `ready` request.
+    /// Whether the task has ended, or holds a reply no wait has taken, for
+    /// a `ready` request.
     Ready(bool),
     /// The task's status table for a `status` request. Boxed so the
     /// field-heavy [`TaskStatus`] does not size every answer.
@@ -293,6 +295,9 @@ pub enum Answer {
     /// Whether a `send` request queued its text: false
     /// once the task has ended.
     Send(bool),
+    /// The owner's next message, which resumes a
+    /// `reply` request, as sent.
+    Reply(String),
     /// The messages taken from the chain's inbox, oldest first, as sent:
     /// every one queued, possibly none, for an `arrivals` request; and, for
     /// a `chat` request, the ones that reached the inbox before its round

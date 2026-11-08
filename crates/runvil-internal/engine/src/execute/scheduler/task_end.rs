@@ -1,15 +1,22 @@
-//! How tasks end: a task chain's own end, and the chain-end rules that
-//! end every task an ending chain owns.
+//! How tasks end: a task chain's own end, the idle cap's close, and the
+//! chain-end rules that end every task an ending chain owns.
 //!
 //! The chain-end rules: a task ends with its owner. When a chain ends,
 //! every live task it owns is abandoned - its entry moves to `Abandoned`,
 //! its terminal observation names how the owner ended, and its backing
-//! chain aborts with everything it owns in turn. A task left live is the
-//! author's bug, so the owner's own outcome becomes `make_tasks_live_error` naming the
-//! leaked ids. Tasks survive a section's fall-through and a `jump` - those
-//! move the walk within one chain - and end with the chain itself: the root
-//! walk, a `call` child, or another task (a fanout arm among them). The H1
-//! hand-off reassigns the pass's tasks to the walk (see the `h1` module).
+//! chain aborts with everything it owns in turn. A task left running is
+//! the author's bug, so the owner's own outcome becomes `make_tasks_live_error` naming
+//! the leaked ids; an idle task already handed its owner a reply, so it
+//! ends without counting as leaked. Tasks survive a section's fall-through
+//! and a `jump` - those move the walk within one chain - and end with the
+//! chain itself: the root walk, a `call` child, or another task (a fanout
+//! arm among them). The H1 hand-off reassigns the pass's tasks to the walk
+//! (see the `h1` module).
+//!
+//! The idle cap bounds the tasks a run holds idle, each keeping its Lua VM:
+//! a reply past [`RunLimits::max_idle_tasks`](crate::execute::RunLimits::max_idle_tasks)
+//! closes the task idle longest, which ends as if it had returned its
+//! latest reply.
 
 use std::sync::Arc;
 
@@ -20,12 +27,12 @@ use runvil_vfs::Access;
 
 use crate::{Result, error};
 
-use super::tasks::{Stop, TaskBacking};
+use super::tasks::{Stop, TaskBacking, TaskEntry};
 use super::{ChainIndex, Scheduler};
 
 impl Scheduler {
     /// Applies a task chain's end to its entry: the outcome lands in the
-    /// entry, the entry moves to `Done`, the task's terminal observation
+    /// entry, the entry moves to `Ended`, the task's terminal observation
     /// fires under its target section, and an owner parked on a set
     /// containing the task is woken with it delivered. Otherwise the entry
     /// holds the outcome until a wait takes it.
@@ -66,14 +73,45 @@ impl Scheduler {
         self.wake_waiter(owner, &task)
     }
 
+    /// Holds the run to its idle cap once `replied` went idle: when more
+    /// tasks are idle than the cap allows, the one idle longest other than
+    /// `replied` closes. Its entry ends with its latest reply as its result,
+    /// as if it had returned it, its backing chain aborts with everything
+    /// it owns, and `TaskSucceeded` fires under its target. No owner waits
+    /// on the closed task, since a wait on an idle task takes its reply at
+    /// once or refuses it as consumed. The events do not name the cap as
+    /// the reason, so a debug trace line does.
+    pub(super) fn close_past_idle_cap(&mut self, replied: &TaskId) {
+        let cap = self.ctx.limits().max_idle_tasks;
+        let Some(task) = self.tasks.idle_longest_past(cap, replied) else {
+            return;
+        };
+        let Some((backing, target)) = self.tasks.close(&task) else {
+            return;
+        };
+        tracing::debug!(
+            closed = %task,
+            %replied,
+            max_idle_tasks = cap.get(),
+            "idle cap closed the task idle longest, its latest reply its result"
+        );
+        self.end_backing(backing, &target, move |section, provenance| {
+            Event::TaskSucceeded {
+                section,
+                provenance,
+                task,
+            }
+        });
+    }
+
     /// Applies the chain-end rules for tasks to `owner`'s `outcome`: every
     /// live task the chain owns is abandoned (the reason names how the
     /// owner ended: the section ended, the tool loop was exhausted, or the
     /// owner failed some other way), and an `Ok` outcome that leaked
-    /// tasks becomes a `TasksLive` failure naming them in
-    /// spawn order, placed on the line that spawned the first of them. A
-    /// failing chain keeps its own error - the leak is the lesser fault -
-    /// but its tasks end all the same.
+    /// running tasks becomes a `TasksLive` failure naming them in
+    /// spawn order, placed on the line that spawned the first of them; an
+    /// idle task is no leak. A failing chain keeps its own error - the leak
+    /// is the lesser fault - but its tasks end all the same.
     pub(super) fn settle_owned_tasks(
         &mut self,
         owner: ChainIndex,
@@ -137,10 +175,11 @@ impl Scheduler {
     /// observation is the reason's record, since no wait can reach an
     /// abandoned entry once its owner is gone. An internal timer's entry ends
     /// the same way but reports nothing and never counts as leaked: it is
-    /// the wait's detail, not a task the author started. Returns the
-    /// abandoned ids in spawn order, for the owner's `make_tasks_live_error` outcome;
-    /// the caller discards them for an owner that is itself being aborted,
-    /// whose outcome no one receives.
+    /// the wait's detail, not a task the author started, and an idle task
+    /// ends the same way but never counts as leaked either: it already
+    /// replied. Returns the abandoned running ids in spawn order, for the
+    /// owner's `make_tasks_live_error` outcome; the caller discards them for an owner
+    /// that is itself being aborted, whose outcome no one receives.
     pub(super) fn abandon_owned_tasks(
         &mut self,
         owner: ChainIndex,
@@ -148,6 +187,7 @@ impl Scheduler {
     ) -> Vec<TaskId> {
         let mut leaked = Vec::new();
         for task in self.tasks.live_all(owner) {
+            let idle = self.tasks.owned(owner, &task).is_ok_and(TaskEntry::is_idle);
             let Some((backing, target)) = self.tasks.stop(&task, Stop::Abandoned) else {
                 continue;
             };
@@ -159,7 +199,7 @@ impl Scheduler {
                     reason,
                 }
             });
-            if chain_backed {
+            if chain_backed && !idle {
                 leaked.push(task);
             }
         }

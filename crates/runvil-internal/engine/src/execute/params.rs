@@ -322,6 +322,11 @@ pub struct RunLimits {
     /// nest: a fanout started inside one arm of another fanout runs within
     /// that arm's remaining share.
     pub max_concurrency: NonZeroUsize,
+    /// The most tasks the run holds idle after a
+    /// reply. One more reply closes the task idle
+    /// longest, its latest reply its result.
+    /// Defaults to 8.
+    pub max_idle_tasks: NonZeroUsize,
     /// The memory ceiling for each Lua virtual machine, in bytes.
     pub lua_memory_bytes: NonZeroUsize,
     /// The maximum number of `log` events that a prompt's Lua code can
@@ -334,13 +339,14 @@ pub struct RunLimits {
 
 impl Default for RunLimits {
     /// Returns limits with the default values: 24 tool iterations under a
-    /// ceiling of 1000, 8 concurrent tasks, 64 MiB of Lua memory, and 1024
-    /// Lua log events.
+    /// ceiling of 1000, 8 concurrent tasks, 8 idle tasks, 64 MiB of Lua
+    /// memory, and 1024 Lua log events.
     fn default() -> RunLimits {
         RunLimits {
             max_tool_iterations: const { NonZero::new(24).unwrap() },
             tool_iterations_ceiling: const { NonZero::new(MAX_TOOL_ITERATIONS).unwrap() },
             max_concurrency: const { NonZero::new(8).unwrap() },
+            max_idle_tasks: const { NonZero::new(8).unwrap() },
             lua_memory_bytes: const { NonZero::new(64 * 1024 * 1024).unwrap() },
             lua_log_events: const { NonZero::new(1024).unwrap() },
         }
@@ -352,7 +358,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn run_limits_pins_all_five_defaults() {
+    fn run_limits_pins_all_six_defaults() {
         let defaults = RunLimits::default();
         assert_eq!(defaults.max_tool_iterations.get(), 24);
         assert_eq!(defaults.tool_iterations_ceiling.get(), 1000);
@@ -362,6 +368,7 @@ mod tests {
             "the default ceiling is the most a prompt may declare"
         );
         assert_eq!(defaults.max_concurrency.get(), 8);
+        assert_eq!(defaults.max_idle_tasks.get(), 8);
         assert_eq!(defaults.lua_memory_bytes.get(), 64 * 1024 * 1024);
         assert_eq!(defaults.lua_log_events.get(), 1024);
     }

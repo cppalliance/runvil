@@ -5,24 +5,31 @@
 //! the child waits in the admission queue, holding no Lua VM, until the
 //! run's concurrency limits admit it.
 //!
-//! The entry outlives the chain. When the chain ends, its outcome lands in
-//! the entry and the entry moves to `Done`; the owner later takes the
-//! result through a wait, which moves it to `Delivered`. Cancellation and
-//! abandonment (the owner ending first) are the two other terminal states,
-//! kept apart because the log and `tasks.status` must tell "stopped on
-//! purpose" from "lost its owner". A terminal entry is never removed: the
-//! arena is append-only as the chain arena is, so a late `status` can
-//! still report how a task ended.
+//! The entry outlives the chain, and it holds two things apart: the
+//! task's state, whether its backing chain is live and how it ended, and
+//! its outcome, the result the owner's waits take. When the chain ends,
+//! its outcome lands in the entry and the entry moves to `Ended`. A live
+//! task publishes a result through `tasks.reply`, and idles on its inbox
+//! until its owner's next message runs it again. The owner takes each
+//! result once, through a wait, which marks the outcome delivered.
+//! Cancellation and abandonment (the owner ending first) are the two other
+//! ways a task ends, kept apart because the log and `tasks.status` must
+//! tell "stopped on purpose" from "lost its owner". An ended entry is never
+//! removed: the arena is append-only as the chain arena is, so a late
+//! `status` can still report how a task ended.
 //!
-//! The [`TaskArena`] owns every entry and enforces the lifecycle: a task
-//! moves only from `Running` to `Done`, `Canceled`, or `Abandoned`, and
-//! from `Done` to `Delivered`. It checks ownership, and a chain's view of
-//! the task it runs inside, and it lists an owner's tasks in spawn order
-//! two ways: the author-visible tasks, and every live task with the
-//! internal timers included.
+//! The [`TaskArena`] owns every entry and enforces the lifecycle: a live
+//! task moves between `Running` and `Idle`, and from either to `Canceled`
+//! or `Abandoned`; a running task ends on its own, and an idle one when the
+//! idle cap closes it, both to `Ended`. Its outcome moves from unpublished
+//! or delivered to waiting as the task publishes a result, and from
+//! waiting to delivered as a wait takes it. The arena checks ownership,
+//! and a chain's view of the task it runs inside, and it lists an owner's
+//! tasks in spawn order two ways: the author-visible tasks, and every live
+//! task with the internal timers included.
 
 use std::collections::BTreeMap;
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 
@@ -56,18 +63,22 @@ pub(super) enum TaskBacking {
     Effect(EffectId),
 }
 
-/// One task's lifecycle state as its entry holds it, the outcome included.
-#[derive(Debug)]
+/// One task's lifecycle state as its entry holds it: whether its backing
+/// chain or request is live, and how it ended once it has. The result a
+/// wait takes is the entry's [`Outcome`], held apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum EntryState {
-    /// The backing chain or request is live.
+    /// The backing chain or request is live and running.
     Running,
-    /// The backing chain or request ended, and its outcome waits here: the
-    /// backing chain's final text or failure, or an empty text for a fired
-    /// timer, held from its end until the owner takes it.
-    Done(Result<String>),
-    /// The owner took the outcome through a wait. `ok` is the outcome's,
-    /// kept so `status` still reports it after the wait took it.
-    Delivered { ok: bool },
+    /// The backing chain is live and idle: it replied through
+    /// `tasks.reply` and waits on the task's inbox for its owner's next
+    /// message. `since` orders the run's idle tasks by when each went
+    /// idle, so the idle cap closes the one idle longest.
+    Idle { since: u64 },
+    /// The backing chain or request ended and left its outcome: the chain
+    /// returned or failed, a timer fired, or the idle cap closed an idle
+    /// task, whose latest reply stays its result.
+    Ended,
     /// The owner canceled the task.
     Canceled,
     /// The owner ended while the task was live, so the Engine ended it.
@@ -75,35 +86,40 @@ pub(super) enum EntryState {
 }
 
 impl EntryState {
-    /// True while the task's backing chain or request is still running:
-    /// the one state a chain end must act on.
+    /// True while the task's backing chain or request is still live,
+    /// running or idle: the states a chain end must act on.
     pub(super) fn is_live(&self) -> bool {
-        matches!(self, EntryState::Running)
-    }
-
-    /// The state without its outcome, as `status` and the suites read it.
-    pub(super) fn view(&self) -> TaskState {
-        match self {
-            EntryState::Running => TaskState::Running,
-            EntryState::Done(outcome) => TaskState::Done {
-                ok: outcome.is_ok(),
-            },
-            EntryState::Delivered { ok } => TaskState::Delivered { ok: *ok },
-            EntryState::Canceled => TaskState::Canceled,
-            EntryState::Abandoned => TaskState::Abandoned,
-        }
+        matches!(self, EntryState::Running | EntryState::Idle { .. })
     }
 }
 
+/// The result a task leaves for its owner's waits, held apart from whether
+/// the task still runs.
+#[derive(Debug)]
+pub(super) enum Outcome {
+    /// The task has published no result: it has neither replied nor
+    /// ended.
+    Unpublished,
+    /// A result no wait has taken: the task's latest reply, its backing
+    /// chain's final text or failure, or an empty text for a fired timer.
+    Waiting(Result<String>),
+    /// A wait took the task's latest result. `ok` is the result's, kept so
+    /// `status` still reports it after the wait took it.
+    Delivered { ok: bool },
+}
+
 /// One task's lifecycle state, with whether it ended well once it has
-/// ended: the `Copy` view of an entry's [`EntryState`].
+/// ended: the `Copy` view of an entry's [`EntryState`] and [`Outcome`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TaskState {
-    /// The backing chain or request is live.
+    /// The backing chain or request is live and running.
     Running,
+    /// The backing chain is live and idle after a reply, waiting on its
+    /// inbox.
+    Idle,
     /// The backing chain or request ended; its outcome waits in the entry.
     /// `ok` is whether it returned rather than failed, always `true` for a
-    /// fired timer.
+    /// fired timer and for a task the idle cap closed.
     Done { ok: bool },
     /// The owner took the outcome through a wait. Whether the task ended
     /// well, carried so `status` can report it after the outcome is gone.
@@ -129,8 +145,10 @@ pub(super) struct TaskEntry {
     /// terminal observations report under; the placeholder `timer` for an
     /// internal timer, which reports none.
     pub(super) target: String,
-    /// The task's lifecycle state, holding its outcome once it ends.
+    /// The task's lifecycle state.
     pub(super) state: EntryState,
+    /// The result the task left for its owner's waits.
+    pub(super) outcome: Outcome,
     /// The latest progress note published through `tasks.note` from inside
     /// the task, reported by `tasks.status`.
     pub(super) note: Option<String>,
@@ -148,6 +166,37 @@ impl TaskEntry {
     /// count as leaked.
     fn is_internal(&self) -> bool {
         matches!(self.backing, TaskBacking::Effect(_))
+    }
+
+    /// True while the task is idle after a reply.
+    pub(super) fn is_idle(&self) -> bool {
+        matches!(self.state, EntryState::Idle { .. })
+    }
+
+    /// What `tasks.ready` reports: true once the task has ended, delivered
+    /// or not, and while a result it published waits undelivered, so a
+    /// wait would return at once.
+    pub(super) fn is_ready(&self) -> bool {
+        !self.state.is_live() || matches!(self.outcome, Outcome::Waiting(_))
+    }
+
+    /// The state with whether the task ended well, as `status` and the
+    /// suites read it.
+    pub(super) fn view(&self) -> TaskState {
+        match self.state {
+            EntryState::Running => TaskState::Running,
+            EntryState::Idle { .. } => TaskState::Idle,
+            EntryState::Canceled => TaskState::Canceled,
+            EntryState::Abandoned => TaskState::Abandoned,
+            EntryState::Ended => match &self.outcome {
+                Outcome::Waiting(outcome) => TaskState::Done {
+                    ok: outcome.is_ok(),
+                },
+                Outcome::Delivered { ok } => TaskState::Delivered { ok: *ok },
+                // Every path to `Ended` leaves the task an outcome.
+                Outcome::Unpublished => TaskState::Done { ok: false },
+            },
+        }
     }
 }
 
@@ -168,6 +217,8 @@ pub(super) struct TaskArena {
     /// Ids order as paths, and one owner's tasks are its direct children,
     /// so one owner's entries iterate in spawn order.
     entries: BTreeMap<TaskId, TaskEntry>,
+    /// The `since` stamp the next task to go idle takes.
+    next_idle: u64,
 }
 
 impl TaskArena {
@@ -186,6 +237,7 @@ impl TaskArena {
             owner,
             target,
             state: EntryState::Running,
+            outcome: Outcome::Unpublished,
             note: None,
             spawn_line,
         };
@@ -240,34 +292,36 @@ impl TaskArena {
             .filter(move |(_, entry)| entry.owner == owner && entry.state.is_live())
     }
 
-    /// Validates a wait set and returns its first terminal member in set
-    /// order, or `None` when every member is still running. Every member
-    /// must be a task `caller` owns, and none may be delivered already. An
-    /// `Abandoned` member cannot pass the ownership check (its owner has
-    /// ended), so the terminal arm only ever sees `Done` and `Canceled`.
-    pub(super) fn first_terminal(
+    /// Validates a wait set and returns its first member in set order that
+    /// a wait takes at once, or `None` when no member has a result for it
+    /// yet. Every member must be a task `caller` owns, and none may be
+    /// consumed: a wait took its latest result, and it has ended or idles
+    /// with no message since, so no other result will come. A member is
+    /// taken at once when a result it published waits undelivered, or when
+    /// it was canceled. An `Abandoned` member cannot pass the ownership
+    /// check, since its owner has ended.
+    pub(super) fn first_deliverable(
         &self,
         caller: ChainIndex,
         tasks: &[TaskId],
     ) -> Result<Option<TaskId>> {
         let mut first = None;
         for task in tasks {
-            match self.owned(caller, task)?.state {
-                EntryState::Delivered { .. } => {
+            let entry = self.owned(caller, task)?;
+            match (entry.state, &entry.outcome) {
+                (EntryState::Ended | EntryState::Idle { .. }, Outcome::Delivered { .. }) => {
                     return Err(error::make_task_consumed_error(task));
                 }
-                EntryState::Running => {}
-                EntryState::Done(_) | EntryState::Canceled | EntryState::Abandoned => {
-                    if first.is_none() {
-                        first = Some(task.clone());
-                    }
+                (EntryState::Canceled, _) | (_, Outcome::Waiting(_)) if first.is_none() => {
+                    first = Some(task.clone());
                 }
+                _ => {}
             }
         }
         Ok(first)
     }
 
-    /// Moves a running task to `Done`, holding `outcome`, and returns its
+    /// Moves a live task to `Ended`, holding `outcome`, and returns its
     /// entry. A task that isn't live, or has no entry, is left as it is and
     /// yields `None`.
     pub(super) fn complete(
@@ -279,41 +333,120 @@ impl TaskArena {
         if !entry.state.is_live() {
             return None;
         }
-        entry.state = EntryState::Done(outcome);
+        entry.state = EntryState::Ended;
+        entry.outcome = Outcome::Waiting(outcome);
         Some(entry)
     }
 
-    /// Takes a terminal task's outcome as its delivery: a `Done` entry's
-    /// outcome moves out and the entry to `Delivered`, so it is taken once.
-    /// A canceled entry yields the `canceled` error value and stays,
-    /// having no result to consume. An abandoned entry has no live owner to
-    /// wait on it, so its delivery is a scheduler bug.
+    /// Publishes `text` as a running task's latest result, in place of one
+    /// no wait took, and returns its entry. A task that isn't running, or
+    /// has no entry, is left as it is and yields `None`.
+    pub(super) fn reply(&mut self, task: &TaskId, text: String) -> Option<&TaskEntry> {
+        let entry = self.entries.get_mut(task)?;
+        if entry.state != EntryState::Running {
+            return None;
+        }
+        entry.outcome = Outcome::Waiting(Ok(text));
+        Some(entry)
+    }
+
+    /// Moves a running task to `Idle`, idle since after every task that
+    /// went idle before it. Any other task is left as it is.
+    pub(super) fn idle(&mut self, task: &TaskId) {
+        let Some(entry) = self.entries.get_mut(task) else {
+            return;
+        };
+        if entry.state == EntryState::Running {
+            entry.state = EntryState::Idle {
+                since: self.next_idle,
+            };
+            self.next_idle += 1;
+        }
+    }
+
+    /// Moves an idle task back to `Running`, as its owner's message
+    /// resumes its reply, and reports whether it was idle. Any other task
+    /// is left as it is.
+    pub(super) fn wake(&mut self, task: &TaskId) -> bool {
+        match self.entries.get_mut(task) {
+            Some(entry) if entry.is_idle() => {
+                entry.state = EntryState::Running;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// The task idle longest other than `except`, once more than `cap`
+    /// tasks are idle: the task the idle cap closes. `None` while the run
+    /// is within the cap.
+    pub(super) fn idle_longest_past(&self, cap: NonZeroUsize, except: &TaskId) -> Option<TaskId> {
+        let idle: Vec<(u64, &TaskId)> = self
+            .entries
+            .iter()
+            .filter_map(|(task, entry)| match entry.state {
+                EntryState::Idle { since } => Some((since, task)),
+                _ => None,
+            })
+            .collect();
+        if idle.len() <= cap.get() {
+            return None;
+        }
+        idle.into_iter()
+            .filter(|(_, task)| *task != except)
+            .min_by_key(|(since, _)| *since)
+            .map(|(_, task)| task.clone())
+    }
+
+    /// Closes an idle task for the idle cap: its entry moves to `Ended`
+    /// with its outcome as it is, so its latest reply is its result as if
+    /// it had returned it, and its backing and target come back for the
+    /// scheduler to end. A task that isn't idle, or has no entry, is left
+    /// as it is and yields `None`.
+    pub(super) fn close(&mut self, task: &TaskId) -> Option<(TaskBacking, String)> {
+        let entry = self.entries.get_mut(task)?;
+        if !entry.is_idle() {
+            return None;
+        }
+        entry.state = EntryState::Ended;
+        Some((entry.backing, entry.target.clone()))
+    }
+
+    /// Takes a task's waiting outcome as its delivery: the outcome moves out
+    /// and is marked delivered, so each result is taken once, and the
+    /// task's state stays as it is, so a live task stays live. A canceled
+    /// entry yields the `canceled` error value and stays, having no result
+    /// to consume. An abandoned entry has no live owner to wait on it, so
+    /// its delivery is a scheduler bug.
     pub(super) fn take_delivery(&mut self, task: &TaskId) -> Result<String> {
         let Some(entry) = self.entries.get_mut(task) else {
             return Err(error::make_internal_error("a delivered task has an entry"));
         };
-        match &mut entry.state {
-            EntryState::Done(outcome) => {
-                let outcome = std::mem::replace(outcome, Ok(String::new()));
-                entry.state = EntryState::Delivered {
-                    ok: outcome.is_ok(),
-                };
-                outcome
+        match entry.state {
+            EntryState::Canceled => return Err(error::make_task_canceled_error(task)),
+            EntryState::Abandoned => {
+                return Err(error::make_internal_error(
+                    "an abandoned task's owner ended, so no wait can deliver it",
+                ));
             }
-            EntryState::Canceled => Err(error::make_task_canceled_error(task)),
-            EntryState::Abandoned => Err(error::make_internal_error(
-                "an abandoned task's owner ended, so no wait can deliver it",
-            )),
-            EntryState::Running | EntryState::Delivered { .. } => Err(error::make_internal_error(
-                "only a terminal, undelivered entry is delivered",
-            )),
+            EntryState::Running | EntryState::Idle { .. } | EntryState::Ended => {}
         }
+        let Outcome::Waiting(outcome) = &mut entry.outcome else {
+            return Err(error::make_internal_error(
+                "only a published, undelivered outcome is delivered",
+            ));
+        };
+        let outcome = std::mem::replace(outcome, Ok(String::new()));
+        entry.outcome = Outcome::Delivered {
+            ok: outcome.is_ok(),
+        };
+        outcome
     }
 
-    /// Stops a running task: its entry moves to `Canceled` or `Abandoned`,
-    /// and its backing and target come back for the scheduler to end. A
-    /// task that isn't live, or has no entry, is left as it is and yields
-    /// `None`.
+    /// Stops a live task: its entry moves to `Canceled` or `Abandoned`, a
+    /// result it published is dropped, and its backing and target come
+    /// back for the scheduler to end. A task that isn't live, or has no
+    /// entry, is left as it is and yields `None`.
     pub(super) fn stop(&mut self, task: &TaskId, stop: Stop) -> Option<(TaskBacking, String)> {
         let entry = self.entries.get_mut(task)?;
         if !entry.state.is_live() {
@@ -323,6 +456,7 @@ impl TaskArena {
             Stop::Canceled => EntryState::Canceled,
             Stop::Abandoned => EntryState::Abandoned,
         };
+        entry.outcome = Outcome::Unpublished;
         Some((entry.backing, entry.target.clone()))
     }
 
@@ -396,7 +530,7 @@ impl TaskArena {
     /// `task`'s state, or `None` when no task with that id was started.
     #[cfg(test)]
     pub(super) fn state_of(&self, task: &TaskId) -> Option<TaskState> {
-        self.entries.get(task).map(|entry| entry.state.view())
+        self.entries.get(task).map(TaskEntry::view)
     }
 }
 
@@ -547,10 +681,15 @@ impl Scheduler {
 #[cfg(test)]
 mod tests {
     //! Tests for the task arena alone, one rule each: a stop ends only a live
-    //! task, a completed task's outcome is delivered once, entries are never
-    //! removed, `owned` admits only the owner, `visible` adds the chain
-    //! running inside the task, and `live_author_tasks` lists an owner's live
-    //! tasks in spawn order without internal timers.
+    //! task, a completed task's outcome is delivered once, a reply's outcome
+    //! is delivered once while its task stays live, a wait on an idle task
+    //! whose reply was taken is refused, the idle cap names the task idle
+    //! longest, a close keeps an idle task's reply as its result, entries
+    //! are never removed, `owned` admits only the owner, `visible` adds the
+    //! chain running inside the task, and `live_author_tasks` lists an
+    //! owner's live tasks in spawn order without internal timers.
+
+    use std::num::NonZeroUsize;
 
     use runvil_types::error::ErrorCode;
     use runvil_types::ids::{ChainId, TaskId};
@@ -653,6 +792,128 @@ mod tests {
             arena.state_of(&task),
             Some(TaskState::Delivered { ok: true })
         );
+    }
+
+    #[test]
+    fn a_reply_is_delivered_once_and_its_task_stays_live() {
+        let mut arena = TaskArena::default();
+        let (task, _) = spawn(&mut arena, chain(0), 0);
+        assert_eq!(
+            arena
+                .first_deliverable(chain(0), std::slice::from_ref(&task))
+                .ok(),
+            Some(None)
+        );
+        let replied = arena
+            .reply(&task, "draft".to_owned())
+            .expect("a running task replies");
+        assert_eq!(replied.owner, chain(0));
+        assert!(replied.is_ready(), "the reply waits undelivered");
+        assert_eq!(
+            arena
+                .first_deliverable(chain(0), std::slice::from_ref(&task))
+                .ok(),
+            Some(Some(task.clone()))
+        );
+        assert_eq!(arena.take_delivery(&task).expect("the reply"), "draft");
+        assert_eq!(arena.state_of(&task), Some(TaskState::Running));
+        assert_eq!(
+            arena
+                .first_deliverable(chain(0), std::slice::from_ref(&task))
+                .ok(),
+            Some(None),
+            "a running task whose reply was taken has its next result to come"
+        );
+        assert!(arena.complete(&task, Ok("final".to_owned())).is_some());
+        assert_eq!(arena.take_delivery(&task).expect("the final text"), "final");
+    }
+
+    #[test]
+    fn a_wait_on_an_idle_task_whose_reply_was_taken_is_consumed_until_it_wakes() {
+        let mut arena = TaskArena::default();
+        let (task, _) = spawn(&mut arena, chain(0), 0);
+        assert!(arena.reply(&task, "draft".to_owned()).is_some());
+        arena.idle(&task);
+        assert_eq!(arena.state_of(&task), Some(TaskState::Idle));
+        assert!(
+            arena.reply(&task, "again".to_owned()).is_none(),
+            "an idle task cannot reply"
+        );
+        assert_eq!(arena.take_delivery(&task).expect("the reply"), "draft");
+        assert!(matches!(
+            arena.first_deliverable(chain(0), std::slice::from_ref(&task)),
+            Err(refused) if refused.code == ErrorCode::TaskConsumed
+        ));
+        assert!(arena.wake(&task), "the owner's message wakes it");
+        assert!(!arena.wake(&task), "a running task is not idle");
+        assert_eq!(arena.state_of(&task), Some(TaskState::Running));
+        assert_eq!(arena.first_deliverable(chain(0), &[task]).ok(), Some(None));
+    }
+
+    #[test]
+    fn the_idle_cap_names_the_task_idle_longest_other_than_the_one_replying() {
+        let mut arena = TaskArena::default();
+        let (first, _) = spawn(&mut arena, chain(0), 0);
+        let (second, _) = spawn(&mut arena, chain(0), 1);
+        let (third, _) = spawn(&mut arena, chain(0), 2);
+        for task in [&second, &first, &third] {
+            assert!(arena.reply(task, "reply".to_owned()).is_some());
+            arena.idle(task);
+        }
+        let cap = |n| NonZeroUsize::new(n).expect("the cap is non-zero");
+        assert_eq!(
+            arena.idle_longest_past(cap(3), &third),
+            None,
+            "within the cap"
+        );
+        assert_eq!(
+            arena.idle_longest_past(cap(2), &third),
+            Some(second.clone()),
+            "the second went idle first"
+        );
+        assert_eq!(
+            arena.idle_longest_past(cap(2), &second),
+            Some(first),
+            "the one replying is never the one closed"
+        );
+    }
+
+    #[test]
+    fn closing_an_idle_task_ends_it_with_its_reply_as_its_result() {
+        let mut arena = TaskArena::default();
+        let (task, backing) = spawn(&mut arena, chain(0), 0);
+        assert_eq!(arena.close(&task), None, "a running task is not idle");
+        assert!(arena.reply(&task, "draft".to_owned()).is_some());
+        arena.idle(&task);
+        assert_eq!(arena.close(&task), Some((backing, "worker 0".to_owned())));
+        assert_eq!(arena.state_of(&task), Some(TaskState::Done { ok: true }));
+        assert!(
+            arena.stop(&task, Stop::Canceled).is_none(),
+            "the closed task has ended"
+        );
+        assert_eq!(arena.take_delivery(&task).expect("the reply"), "draft");
+        assert_eq!(
+            arena.state_of(&task),
+            Some(TaskState::Delivered { ok: true })
+        );
+        assert!(matches!(
+            arena.first_deliverable(chain(0), &[task]),
+            Err(refused) if refused.code == ErrorCode::TaskConsumed
+        ));
+    }
+
+    #[test]
+    fn stopping_an_idle_task_drops_its_reply() {
+        let mut arena = TaskArena::default();
+        let (task, _) = spawn(&mut arena, chain(0), 0);
+        assert!(arena.reply(&task, "draft".to_owned()).is_some());
+        arena.idle(&task);
+        assert!(arena.stop(&task, Stop::Canceled).is_some());
+        assert_eq!(arena.state_of(&task), Some(TaskState::Canceled));
+        assert!(matches!(
+            arena.take_delivery(&task),
+            Err(error) if error.code == ErrorCode::TaskCanceled
+        ));
     }
 
     #[test]

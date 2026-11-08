@@ -1,6 +1,6 @@
 -- The `tasks` namespace shims for a section VM: spawn, the
 -- waits, the non-blocking checks, the progress note, the inbox read and
--- send, cancel, and the admission limit.
+-- send, the reply, cancel, and the admission limit.
 --
 -- The Engine installs this after the coroutine prelude (`__impl_coro.lua`)
 -- and installs the returned table as the `tasks` global. The chunk
@@ -122,11 +122,12 @@ local function wait_round(ids, timer)
 end
 
 -- tasks.join_any(set, opts?) -> Task, ok, result: park until the first
--- member of `set` ends (or return at once when one already has) and
--- return which one, whether it succeeded, and its final text or error
--- value. The one scheduler wait primitive; the error value is returned,
--- never raised, so the caller decides. A member the caller does not own
--- raises task_not_owned; a member already delivered raises task_consumed.
+-- member of `set` ends or replies (or return at once when one already
+-- has) and return which one, whether it succeeded, and its final text,
+-- reply, or error value. The one scheduler wait primitive; the error value
+-- is returned, never raised, so the caller decides. A member the caller
+-- does not own raises task_not_owned; a member already delivered raises
+-- task_consumed.
 -- The delivery is a join: everything the returned task did happens
 -- before the caller's next step, so its store writes are visible from
 -- the very next operation. `opts.timeout` (seconds) returns nil when
@@ -193,7 +194,8 @@ local function tasks_join(set, opts)
   return results, timed_out
 end
 
--- tasks.ready(task) -> boolean: whether the task has ended, without waiting.
+-- tasks.ready(task) -> boolean: whether the task has ended, or holds a
+-- reply no wait has taken, without waiting.
 local function tasks_ready(task)
   local ok, result = yield({ op = "ready", task = task_id(task, "tasks.ready") })
   if not ok then fail(result) end
@@ -264,6 +266,16 @@ local function tasks_send(task, text)
   return result
 end
 
+-- tasks.reply(value) -> text: hand `value` to the task's owner as its
+-- latest result, as a section's return value would be, with nil handed
+-- over as "", then wait for the next inbox message and return its text.
+-- A `call` child replies for its caller's task. Raises on the main chain.
+local function tasks_reply(value)
+  local ok, result = yield({ op = "reply", value = value })
+  if not ok then fail(result) end
+  return result
+end
+
 -- tasks.concurrency(limit?): set the chain's admission limit for the
 -- tasks it spawns from here on (clamped to the parent chain's limit, or
 -- the run's concurrency ceiling for the main walk), or read the effective limit
@@ -300,6 +312,7 @@ return {
   note = tasks_note,
   receive = tasks_receive,
   send = tasks_send,
+  reply = tasks_reply,
   cancel = tasks_cancel,
   concurrency = tasks_concurrency,
 }

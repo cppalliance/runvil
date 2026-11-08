@@ -287,8 +287,10 @@ events! {
             /// The spawner's `var` snapshot the chain seeds from.
             var: serde_json::Value,
         },
-        /// A task's chain ended with a result, which ends the task. The
-        /// event is reported under the task's target section.
+        /// A task's chain ended with a result, which ends the task, or the
+        /// run closed a task idle after `tasks.reply` to keep to its idle
+        /// cap, keeping the task's latest reply as its result. The event is
+        /// reported under the task's target section.
         TaskSucceeded {
             /// The task's id.
             task: TaskId,

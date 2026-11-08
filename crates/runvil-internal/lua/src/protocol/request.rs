@@ -81,15 +81,17 @@ pub enum Request {
         duration: Duration,
     },
     /// `tasks.join_any(set)`: park the chain until the first task in `set`
-    /// ends, or resume at once when one already has. The one scheduler
-    /// wait primitive: `tasks.join` is Lua over it.
+    /// ends or replies, or resume at once when one already has. The one
+    /// scheduler wait primitive: `tasks.join` is Lua over it.
     JoinAny {
-        /// The tasks to wait on, in the author's order: the first terminal
-        /// member in this order is the one delivered when several are.
+        /// The tasks to wait on, in the author's order: the first member
+        /// in this order with a result waiting, or canceled, is the one
+        /// delivered when several are.
         tasks: NonEmpty<TaskId>,
     },
     /// `tasks.ready(task)`: the non-blocking check whether `task` has
-    /// ended (in any terminal state, delivered or not).
+    /// ended (in any terminal state, delivered or not), or holds a reply no
+    /// wait has taken.
     Ready {
         /// The task to inspect.
         task: TaskId,
@@ -126,6 +128,16 @@ pub enum Request {
         /// The task to send to.
         task: TaskId,
         /// The author-supplied message text.
+        text: String,
+    },
+    /// `tasks.reply(value)`: publish `text` as the
+    /// calling task's latest result, idle the task,
+    /// and park it on its inbox until its owner's next
+    /// message. A `call` chain replies for its
+    /// caller's task.
+    Reply {
+        /// The reply, converted as a section's return
+        /// value is, `""` for nil.
         text: String,
     },
     /// The `models.loop` step's last read of its chain's inbox before the

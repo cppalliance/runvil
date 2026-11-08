@@ -2,7 +2,8 @@
 //! snapshot; the `timer` leaf request's author-supplied `seconds`, its
 //! domain checks, and the `Duration` it parses into; `pending`'s refusal
 //! of any argument; `receive` and `arrivals`, which have no fields; `send`'s
-//! task and text; and `concurrency`'s optional shim-validated limit.
+//! task and text; `reply`'s value, converted as a section's return value
+//! is; and `concurrency`'s optional shim-validated limit.
 
 use super::*;
 
@@ -203,6 +204,44 @@ fn a_send_naming_no_task_id_is_the_calls_error() {
             assert!(message.starts_with("`0.x` is not a task id"), "{message}");
         }
         other => panic!("expected the task id call error, got {other:?}"),
+    }
+}
+
+#[test]
+fn reply_parses_its_value_as_text_as_a_section_return_converts_it() {
+    let lua = Lua::new();
+    for (value, text) in [
+        ("'summary'", "summary"),
+        ("42", "42"),
+        ("1.5", "1.5"),
+        ("true", "true"),
+        ("nil", ""),
+    ] {
+        let table = lua_table(&lua, &format!("{{ op = 'reply', value = {value} }}"));
+        let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
+        let Request::Reply { text: parsed } = request else {
+            panic!("a reply request, got {request:?}");
+        };
+        assert_eq!(parsed, text, "the value {value}");
+    }
+}
+
+#[test]
+fn a_reply_whose_value_has_no_text_form_is_the_calls_error() {
+    let lua = Lua::new();
+    let table = lua_table(&lua, "{ op = 'reply', value = { done = true } }");
+    match Request::from_yield(&lua, &Value::Table(table)) {
+        YieldParse::Refused(Error {
+            code: ErrorCode::LuaRuntime,
+            message,
+            ..
+        }) => {
+            assert!(
+                message.contains("cannot return a table as a result"),
+                "{message}"
+            );
+        }
+        other => panic!("expected the scalar-return call error, got {other:?}"),
     }
 }
 

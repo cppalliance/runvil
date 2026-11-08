@@ -18,8 +18,8 @@ use runvil_model_client::model::ModelBinding;
 use chat::parse_chat;
 use store::parse_store;
 use tasks::{
-    parse_cancel, parse_concurrency, parse_join_any, parse_note, parse_ready, parse_send,
-    parse_spawn, parse_status, parse_timer,
+    parse_cancel, parse_concurrency, parse_join_any, parse_note, parse_ready, parse_reply,
+    parse_send, parse_spawn, parse_status, parse_timer,
 };
 use tools::{parse_adhoc_tool_done, parse_tool_call, parse_tool_calls};
 
@@ -203,6 +203,7 @@ impl Request {
             "note" => classify(parse_note(table)),
             "receive" => YieldParse::Request(Request::Receive),
             "send" => classify(parse_send(table)),
+            "reply" => classify(parse_reply(table)),
             "arrivals" => YieldParse::Request(Request::Arrivals),
             "concurrency" => classify(parse_concurrency(table)),
             "cancel" => classify(parse_cancel(table)),

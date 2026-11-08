@@ -13,8 +13,8 @@
 //! `spawn` arm, `tool_call` the `tool_call`, `tool_calls`, and
 //! `adhoc_tool_done` arms, `timer` the `timer` arm, `waits` the task
 //! wait, inspection, note, concurrency, and cancel arms, and `inbox` the
-//! `receive`, `send`, and `arrivals` arms and the inbox check a `chat`
-//! request passes before the `chat` arm sends its round.
+//! `receive`, `send`, `reply`, and `arrivals` arms and the inbox check a
+//! `chat` request passes before the `chat` arm sends its round.
 
 use std::sync::Arc;
 
@@ -50,7 +50,7 @@ fn parked_on(request: &Request) -> Option<Parked> {
         Request::Infer { .. } | Request::Chat { .. } => Some(Parked::Chat),
         Request::Call { .. } => Some(Parked::Call),
         Request::JoinAny { .. } => Some(Parked::Tasks(Vec::new())),
-        Request::Receive => Some(Parked::Inbox { waiting: false }),
+        Request::Receive | Request::Reply { .. } => Some(Parked::Inbox { waiting: false }),
         Request::ToolCall { .. } => Some(Parked::ToolCall),
         Request::ToolCalls { .. } => Some(Parked::Batch(Vec::new())),
         Request::Store { .. } => Some(Parked::Store),
@@ -101,6 +101,7 @@ impl Scheduler {
             Request::Note { text } => self.dispatch_note(id, text),
             Request::Receive => self.dispatch_receive(id),
             Request::Send { task, text } => self.dispatch_send(id, &task, text),
+            Request::Reply { text } => self.dispatch_reply(id, text),
             Request::Arrivals => self.dispatch_arrivals(id),
             Request::Cancel { task } => self.dispatch_cancel(id, &task),
             Request::ToolCall { alias, args, model } => {

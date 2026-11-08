@@ -1,6 +1,6 @@
 //! The inboxes, the delivery rules, and the arms that read and fill them:
-//! `receive`, `send`, `arrivals`, and the inbox check before a `chat`
-//! round. An inbox is a queue of text messages, oldest first. The main
+//! `receive`, `send`, `reply`, `arrivals`, and the inbox check before a
+//! `chat` round. An inbox is a queue of text messages, oldest first. The main
 //! chain and each task have one, keyed by task id, and a `call` child reads
 //! its caller's, since it runs inside its caller's task. The H1 pass and
 //! the walk after it are both the main chain, task `0`, so they read one
@@ -22,6 +22,10 @@
 //! it in. The loop's next `chat` request takes every queued message
 //! before its round goes out, and the loop reads the inbox once more
 //! before it returns.
+//!
+//! A `tasks.reply` publishes the task's latest result for its owner, then
+//! reads the inbox as `tasks.receive()` does, and a task that parks there
+//! is idle until its owner's next message runs it again.
 //!
 //! A chain that finds its inbox empty parks on it, reports `InboxWaiting`,
 //! and gives back its admission slots as a task wait does, and the wake
@@ -141,10 +145,11 @@ impl Scheduler {
     }
 
     /// Applies one message to `task`'s inbox by the delivery rules: a chain
-    /// of the task waiting in `tasks.receive()` resumes with it; a chain of
-    /// the task whose `models.loop` round has no answer yet has that round
-    /// withdrawn and resumes with the message, for the loop to append
-    /// before it sends again; and otherwise the message waits in the
+    /// of the task waiting in `tasks.receive()` resumes with it, and so
+    /// does one waiting in `tasks.reply`, whose idle task runs again; a
+    /// chain of the task whose `models.loop` round has no answer yet has
+    /// that round withdrawn and resumes with the message, for the loop to
+    /// append before it sends again; and otherwise the message waits in the
     /// inbox. A chain waits only on an empty inbox, so the message a reader
     /// takes is the oldest. A step applies its answers before its
     /// messages, so a round whose answer arrived is not withdrawn, and a
@@ -156,7 +161,12 @@ impl Scheduler {
     fn deliver_to(&mut self, task: &TaskId, text: String) -> Result<()> {
         if let Some(reader) = self.chains.inbox_reader(task) {
             self.chains[reader].end_inbox_wait();
-            return self.wake_from_wait(reader, Ok(Answer::Receive(text)));
+            let answer = if self.tasks.wake(task) {
+                Answer::Reply(text)
+            } else {
+                Answer::Receive(text)
+            };
+            return self.wake_from_wait(reader, Ok(answer));
         }
         let round = self
             .chains
@@ -180,6 +190,51 @@ impl Scheduler {
         if let Some(text) = self.inboxes.pop(&self.chains[id].task) {
             return self.answer_inline(id, Ok(Answer::Receive(text)));
         }
+        self.park_on_inbox(id);
+        Ok(())
+    }
+
+    /// Dispatches a `reply` request: `text` becomes the latest result of
+    /// the task the chain runs inside, a `call` child's caller's task
+    /// included, and an owner waiting on the task takes it at once. Then
+    /// the oldest message in the task's inbox answers the reply at once, or,
+    /// with the inbox empty, the task idles: the chain parks on the inbox as
+    /// a `receive` does, and a reply past the run's idle cap closes the
+    /// task idle longest. The main chain has no owner to reply to, so its
+    /// reply is refused with a `lua` error.
+    ///
+    /// # Errors
+    /// Returns an `Internal` failure when the chain's task has no running
+    /// entry, or when the woken owner has no suspended block.
+    pub(super) fn dispatch_reply(&mut self, id: ChainIndex, text: String) -> Result<()> {
+        let task = self.chains[id].task.clone();
+        if task == main_task() {
+            return self.answer_inline(
+                id,
+                Err(error::make_lua_runtime_error(
+                    "tasks.reply has no owner to reply to on the main chain",
+                )),
+            );
+        }
+        let Some(owner) = self.tasks.reply(&task, text).map(|entry| entry.owner) else {
+            return Err(error::make_internal_error(
+                "a replying chain's task is running",
+            ));
+        };
+        self.wake_waiter(owner, &task)?;
+        if let Some(text) = self.inboxes.pop(&task) {
+            return self.answer_inline(id, Ok(Answer::Reply(text)));
+        }
+        self.tasks.idle(&task);
+        self.park_on_inbox(id);
+        self.close_past_idle_cap(&task);
+        Ok(())
+    }
+
+    /// Parks the chain on the empty inbox of its task until a message
+    /// arrives: it reports `InboxWaiting` and gives back its admission
+    /// slots, as a task wait does.
+    fn park_on_inbox(&mut self, id: ChainIndex) {
         let chain = &mut self.chains[id];
         chain.parked = Some(Parked::Inbox { waiting: true });
         chain
@@ -196,7 +251,6 @@ impl Scheduler {
             tasks: &self.tasks,
         };
         self.admission.park(id, &tree, true);
-        Ok(())
     }
 
     /// Dispatches a `send` request: `text` enters the inbox of a live task

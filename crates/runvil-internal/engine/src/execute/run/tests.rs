@@ -25,6 +25,8 @@ use crate::test_support::scenario::{TEST_SEED, only_effect, round_trip, test_bin
 mod drops;
 #[path = "tests-inbox.rs"]
 mod inbox;
+#[path = "tests-reply.rs"]
+mod reply;
 #[path = "tests-send.rs"]
 mod send;
 #[path = "tests-start.rs"]

@@ -17,6 +17,7 @@ regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 mlua.workspace = true
+tracing.workspace = true
 
 [features]
 # The Engine's own test driver, for `benches/models_loop.rs` alone, which

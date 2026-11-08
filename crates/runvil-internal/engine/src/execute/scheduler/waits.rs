@@ -1,17 +1,19 @@
 //! The wait, inspection, note, concurrency, and cancel arms over the task arena.
 //!
 //! `join_any` is the one scheduler wait primitive: a chain names a set of
-//! tasks it owns and is resumed with the first member that ends - at once
-//! when one already has, otherwise when a member's chain end delivers it.
-//! Delivery moves a `Done` entry to `Delivered` (its outcome is taken by
-//! exactly one wait; a second wait raises `make_task_consumed_error`), and it joins
-//! the task: everything the task did happens before the owner's next
-//! step, so its store writes are visible from the very next operation. A
-//! `Canceled` entry delivers `ok = false` with the `canceled` error
-//! value and stays as it is, since it holds no result to consume - but
-//! its delivery still joins its partial writes. An `Abandoned` entry is
-//! never delivered: a task is abandoned because its owner ended, and only
-//! the owner may wait on it, so no wait can reach the entry.
+//! tasks it owns and is resumed with the first member that has a result
+//! for it - at once when one already has, otherwise when a member's chain
+//! end or reply delivers it. Delivery takes the member's waiting outcome
+//! (each result is taken by exactly one wait; a wait on a task whose
+//! latest result was taken, and that has ended or idles with no message
+//! since, raises `make_task_consumed_error`), and it joins the task:
+//! everything the task did happens before the owner's next step, so its
+//! store writes are visible from the very next operation. A `Canceled`
+//! entry delivers `ok = false` with the `canceled` error value and stays
+//! as it is, since it holds no result to consume - but its delivery still
+//! joins its partial writes. An `Abandoned` entry is never delivered: a
+//! task is abandoned because its owner ended, and only the owner may wait
+//! on it, so no wait can reach the entry.
 //!
 //! Ownership is the rule for every arm: only the chain that owns a task -
 //! its spawner, or the root walk for a task the H1 pass spawned - may
@@ -39,14 +41,15 @@ use crate::lua::{Answer, NonEmpty, TaskDelivery, TaskPhase, TaskStatus};
 
 use super::admission::ChainTree;
 use super::chain_record::Parked;
-use super::tasks::{Stop, TaskBacking, TaskState};
+use super::tasks::{Stop, TaskBacking, TaskEntry, TaskState};
 use super::{ChainIndex, Scheduler};
 
 /// The phase `tasks.status` reports: a delivered task reads `done`, since
-/// delivery is the owner's bookkeeping, not a lifecycle change.
+/// delivery is the owner's bookkeeping, not a lifecycle change, and an
+/// idle task reads `running`, since it is live.
 fn task_phase(state: TaskState) -> TaskPhase {
     match state {
-        TaskState::Running => TaskPhase::Running {
+        TaskState::Running | TaskState::Idle => TaskPhase::Running {
             section: None,
             blocked: None,
         },
@@ -58,17 +61,17 @@ fn task_phase(state: TaskState) -> TaskPhase {
 
 impl Scheduler {
     /// Dispatches a `join_any` request: every member must be a task the
-    /// chain owns and none may be delivered already; the first terminal
-    /// member in set order is delivered at once, otherwise the chain parks
-    /// on the set until a member's chain end wakes it. Parking on a set
-    /// with real members gives the chain's admission slots back, so its
-    /// own tasks can run under its limit.
+    /// chain owns and none may be consumed; the first member in set order
+    /// with a result waiting, or canceled, is delivered at once, otherwise
+    /// the chain parks on the set until a member's chain end or reply wakes
+    /// it. Parking on a set with real members gives the chain's admission
+    /// slots back, so its own tasks can run under its limit.
     pub(super) fn dispatch_join_any(
         &mut self,
         id: ChainIndex,
         tasks: NonEmpty<TaskId>,
     ) -> Result<()> {
-        match self.tasks.first_terminal(id, &tasks) {
+        match self.tasks.first_deliverable(id, &tasks) {
             Ok(Some(task)) => {
                 let delivery = self.deliver(&task);
                 self.answer_inline(id, Ok(Answer::JoinAny(delivery)))
@@ -88,8 +91,8 @@ impl Scheduler {
         }
     }
 
-    /// Delivers a terminal task to its owner: the join first, then the
-    /// arena's [`take_delivery`](super::tasks::TaskArena::take_delivery).
+    /// Delivers a task's waiting result to its owner: the join first, then
+    /// the arena's [`take_delivery`](super::tasks::TaskArena::take_delivery).
     /// The delivery is the join: everything the task did happens before the
     /// owner's next step, so its store writes - a canceled task's partial
     /// writes included - are visible from the very next operation.
@@ -115,12 +118,9 @@ impl Scheduler {
     }
 
     /// Dispatches a `ready` request: whether a task the chain owns has
-    /// ended, delivered or not.
+    /// ended, delivered or not, or holds a result no wait has taken.
     pub(super) fn dispatch_ready(&mut self, id: ChainIndex, task: &TaskId) -> Result<()> {
-        let answer = self
-            .tasks
-            .owned(id, task)
-            .map(|entry| !entry.state.is_live());
+        let answer = self.tasks.owned(id, task).map(TaskEntry::is_ready);
         self.answer_inline(id, answer.map(Answer::Ready))
     }
 
@@ -134,12 +134,14 @@ impl Scheduler {
     /// Reads one task's status: the entry's facts and note, plus the backing
     /// chain's position while it is live (its section and what it is
     /// parked on) and the chain's counters, which the append-only arena
-    /// keeps after the chain ends.
+    /// keeps after the chain ends. An idle task's position is its inbox
+    /// reader's, a `call` child of the backing chain when the reply came
+    /// from one.
     fn task_status(&self, id: ChainIndex, task: &TaskId) -> Result<TaskStatus> {
         let entry = self.tasks.visible(id, &self.chains[id].task, task)?;
         let mut status = TaskStatus {
             target: entry.target.clone(),
-            state: task_phase(entry.state.view()),
+            state: task_phase(entry.view()),
             turns: 0,
             tasks: Vec::new(),
             depth: 0,
@@ -150,13 +152,19 @@ impl Scheduler {
             status.turns = chain.ctx.turns().load(Ordering::Relaxed);
             status.depth = u32::try_from(chain.call_depth.get()).unwrap_or(u32::MAX);
             if entry.state.is_live() {
-                let section = chain
+                let reader = if entry.is_idle() {
+                    self.chains.inbox_reader(task)
+                } else {
+                    None
+                };
+                let position = &self.chains[reader.unwrap_or(backing)];
+                let section = position
                     .entered
                     .is_some()
-                    .then(|| chain.section_name().to_owned());
+                    .then(|| position.section_name().to_owned());
                 status.state = TaskPhase::Running {
                     section,
-                    blocked: chain.blocked(),
+                    blocked: position.blocked(),
                 };
                 status.tasks = self.tasks.live_author_tasks(backing);
             }

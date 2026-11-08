@@ -48,6 +48,21 @@ fn an_ok_receive_answer_resumes_the_message_text() {
 }
 
 #[test]
+fn an_ok_reply_answer_resumes_the_owners_message_text() {
+    let lua = Lua::new();
+    let (envelope, retained) =
+        answer_envelope(&lua, Ok(Answer::Reply("now shorten it".to_owned())))
+            .expect("the envelope renders");
+    assert!(retained.is_none());
+    let (ok, result) = echo_through_lua(&lua, envelope);
+    assert!(ok);
+    let Value::String(text) = result else {
+        panic!("expected a string result, got {result:?}");
+    };
+    assert_eq!(text.to_str().expect("the text is UTF-8"), "now shorten it");
+}
+
+#[test]
 fn an_ok_send_answer_resumes_whether_the_text_was_queued() {
     let lua = Lua::new();
     for queued in [true, false] {

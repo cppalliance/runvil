@@ -368,6 +368,7 @@ impl ChainOps<'_> {
                 | Answer::Note
                 | Answer::Receive(_)
                 | Answer::Send(_)
+                | Answer::Reply(_)
                 | Answer::Arrivals(_)
                 | Answer::Cancel
                 | Answer::Chat(_)

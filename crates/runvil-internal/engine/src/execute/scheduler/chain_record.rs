@@ -219,7 +219,8 @@ pub(super) enum Parked {
     /// A concurrency slot: a fresh spawn before admission, or a wake that
     /// takes back the slots its wait gave up.
     Queued,
-    /// The inbox of the chain's task, read by `tasks.receive()`.
+    /// The inbox of the chain's task, read by `tasks.receive()`, or by
+    /// `tasks.reply` once it published its result.
     Inbox {
         /// Whether the chain waits for a message: false from dispatch
         /// until the arm parks on an empty inbox, and again once a
@@ -521,8 +522,8 @@ impl Chain {
         }
     }
 
-    /// Whether the chain waits in `tasks.receive()` for a message that has
-    /// not arrived.
+    /// Whether the chain waits in `tasks.receive()` or `tasks.reply` for a
+    /// message that has not arrived.
     pub(super) fn waits_on_inbox(&self) -> bool {
         matches!(self.parked, Some(Parked::Inbox { waiting: true }))
     }
@@ -541,9 +542,9 @@ impl Chain {
 
     /// Takes back the messages an inbox answer holds for the chain's
     /// suspended block, which has not resumed with it, so the chain never
-    /// read them: the one a `tasks.receive()` took, or the ones a
-    /// `models.loop` took. Empty when the block holds any other answer,
-    /// or none.
+    /// read them: the one a `tasks.receive()` or a `tasks.reply` took, or
+    /// the ones a `models.loop` took. Empty when the block holds any other
+    /// answer, or none.
     pub(super) fn take_unread_messages(&mut self) -> Vec<String> {
         let Some(running) = self
             .entered
@@ -553,7 +554,7 @@ impl Chain {
             return Vec::new();
         };
         match running.answer.take() {
-            Some(Ok(Answer::Receive(text))) => vec![text],
+            Some(Ok(Answer::Receive(text) | Answer::Reply(text))) => vec![text],
             Some(Ok(Answer::Arrivals(texts))) => texts,
             other => {
                 running.answer = other;
@@ -792,17 +793,17 @@ impl ChainArena {
             .map(|(child, _)| child)
     }
 
-    /// The chain of `task` waiting in `tasks.receive()` for a message that
-    /// has not arrived, if one is: at most one does, since a `call` child
-    /// blocks its caller.
+    /// The chain of `task` waiting in `tasks.receive()` or `tasks.reply`
+    /// for a message that has not arrived, if one is: at most one does,
+    /// since a `call` child blocks its caller.
     pub(in crate::execute::scheduler) fn inbox_reader(&self, task: &TaskId) -> Option<ChainIndex> {
         self.iter()
             .find(|(_, chain)| &chain.task == task && chain.waits_on_inbox())
             .map(|(id, _)| id)
     }
 
-    /// The tasks with a chain waiting in `tasks.receive()` for a message
-    /// that has not arrived, in id order.
+    /// The tasks with a chain waiting in `tasks.receive()` or `tasks.reply`
+    /// for a message that has not arrived, in id order.
     pub(in crate::execute::scheduler) fn inbox_waiters(&self) -> Vec<TaskId> {
         let mut tasks: Vec<TaskId> = self
             .iter()

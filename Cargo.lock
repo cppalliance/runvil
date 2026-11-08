@@ -4746,6 +4746,7 @@ dependencies = [
  "runvil-vfs",
  "serde",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]

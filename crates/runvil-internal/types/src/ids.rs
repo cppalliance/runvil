@@ -242,8 +242,9 @@ impl RoundId {
 #[non_exhaustive]
 pub enum AbandonReason {
     /// The owner ended normally, by returning a scalar or finishing its
-    /// walk, and left the task running. The owner's outcome becomes the
-    /// `make_tasks_live_error` error.
+    /// walk, and left the task live. The owner's outcome becomes the
+    /// `make_tasks_live_error` error unless the task was idle after a
+    /// `tasks.reply`.
     OwnerReturned,
     /// The owner failed.
     OwnerFailed,
