@@ -1,5 +1,5 @@
-//! The Pack object and the `construct` that builds it: one ask tool,
-//! named under the Pack id `construct` receives.
+//! The Pack object and the factory that makes it: one ask tool, named
+//! under the Pack id the factory receives.
 
 use std::sync::Arc;
 
@@ -16,24 +16,10 @@ struct UserInput {
     tools: Vec<ToolInfo>,
 }
 
-/// Builds the Pack under `name`. It takes no configuration and reads
-/// no Host-wide service; the broker arrives with each run.
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "the PackInfo construct signature fixes the argument types"
-)]
-pub(crate) fn construct(
-    name: &PackId,
-    config: Value,
-    _services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
-    if !(config.is_null() || config == json!({})) {
-        return Err(make_tool_error(
-            ErrorCode::ToolOther,
-            "user-input takes no configuration",
-        ));
-    }
-    let id = ToolId::parse(&format!("{name}/{ASK}")).map_err(|e| {
+/// Makes one `runvil/user-input` instance named `id`. Ignores `run`; the
+/// ask call still looks up the run's input broker on each call.
+pub(crate) fn new_pack(id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+    let id = ToolId::parse(&format!("{id}/{ASK}")).map_err(|e| {
         make_tool_error(
             ErrorCode::ToolBackend,
             "user-input could not name its ask tool",

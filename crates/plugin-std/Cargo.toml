@@ -10,7 +10,8 @@ publish = false
 # The Plugin contract: `PackInfo`, the Pack trait, the context a
 # call is lent, and the tool, error, and service vocabulary.
 runvil-plugin.workspace = true
-# Each tool's definition is embedded JSON, read into a spec at construct.
+# Each tool's definition is embedded JSON, read into a spec when the Pack
+# is made.
 serde.workspace = true
 serde_json.workspace = true
 # Grep compiles its pattern with Rust regex syntax.

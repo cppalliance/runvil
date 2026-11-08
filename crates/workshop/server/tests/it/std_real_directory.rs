@@ -14,7 +14,7 @@ use std::task::{Context, Poll, Waker};
 use runvil::effect::{ToolCallOrigin, ToolCaller};
 use runvil::vfs::{Access, Origin, RealBackend, VfsRef};
 use runvil_plugin::{
-    HostServices, OutputTrust, Pack, PackId, PackRegistry, ToolContext, ToolId, ToolOutput,
+    HostServices, OutputTrust, Pack, PackRegistry, ToolContext, ToolId, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -71,20 +71,24 @@ fn seeded_directory() -> tempfile::TempDir {
     directory
 }
 
-/// The Pack `plugin_std::install` inserts, built under the Pack id `std`.
+/// The Pack the factory `plugin_std::install` inserts makes under the Pack
+/// id `std`.
 #[expect(
     clippy::expect_used,
     reason = "test helpers fail by panicking with the invariant named"
 )]
 fn std_pack() -> std::sync::Arc<dyn Pack> {
     let mut packs = PackRegistry::new();
-    plugin_std::install(&mut packs, Value::Null).expect("a fresh registry takes the Pack");
-    let (info, _id, config) = packs
+    plugin_std::install(&mut packs, Value::Null, &HostServices::new())
+        .expect("a fresh registry takes the Pack");
+    let (_info, id, factory) = packs
         .into_entries()
         .find(|(info, _, _)| info.fqn == "runvil/std")
         .expect("install inserts the std Pack");
-    let name = PackId::parse("std").expect("a one-segment Pack id parses");
-    (info.construct)(&name, config, &HostServices::new()).expect("the Pack is built")
+    factory
+        .expect("install inserts std usable with no configuration")
+        .new_pack(&id, &HostServices::new())
+        .expect("the Pack is made")
 }
 
 /// Drives a future to its output, polling again after each `Pending`.

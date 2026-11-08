@@ -14,7 +14,7 @@ const NEEDS: &[ServiceId] = &[GREETING.id()];
 
 /// The fixture Pack `greeter`: one tool, `greeter/greet`, answering
 /// with the run's greeting.
-const GREETER: PackInfo = PackInfo::new("tests/greeter", construct_greeter).needs(NEEDS);
+const GREETER: (PackInfo, Make) = (PackInfo::new("tests/greeter").needs(NEEDS), new_greeter);
 
 /// A prompt declaring the greeter Pack and returning its greeting.
 const GREETS: &str = "---\nname: greets\ndescription: d\nrunvil: 0\n\
@@ -27,13 +27,9 @@ struct Greeter {
 
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the PackInfo construct signature fixes the return type"
+    reason = "the PackFactory signature fixes the return type"
 )]
-fn construct_greeter(
-    name: &PackId,
-    _config: Value,
-    _services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
+fn new_greeter(name: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     let greet = ToolInfo::new(
         ToolId::parse(&format!("{name}/greet")).unwrap(),
         "Answer with the run's greeting.",

@@ -1,14 +1,14 @@
-//! Tests for the `web` Pack's `PackInfo`, `install`, and `construct`: the
-//! Pack `install` inserts with its config, the tools `construct` names under
-//! the Pack id it receives, the configuration it accepts, the Host-wide
-//! services it reads, the custom fetch policy, and how a call dispatches:
-//! to the tool its last segment names, or failing on a tool it lacks.
+//! Tests for the `web` Pack's `PackInfo`, `install`, and factory: the
+//! Pack `install` inserts, the configuration it accepts and the Host-wide
+//! services it reads, the tools the factory names under the Pack id it
+//! receives, the custom fetch policy, and how a call dispatches: to the
+//! tool its last segment names, or failing on a tool it lacks.
 
 use std::sync::Arc;
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    Error, ErrorCode, ErrorFact, HostServices, Pack, PackId, PackRegistry, ServiceKey,
+    Error, ErrorCode, ErrorFact, HostServices, Pack, PackFactory, PackId, PackRegistry, ServiceKey,
     TOKIO_RUNTIME, ToolId,
 };
 use serde_json::{Value, json};
@@ -56,9 +56,39 @@ fn name(text: &str) -> PackId {
     PackId::parse(text).expect("a one-segment Pack id parses")
 }
 
-/// The Pack built under the Pack id `id` with `config` and both services.
-fn construct(id: &str, config: Value) -> Result<Arc<dyn Pack>, Error> {
-    (WEB.construct)(&name(id), config, &services_with(true, true))
+/// A factory or the reason its Pack was inserted unavailable.
+type Inserted = Result<Arc<dyn PackFactory>, Error>;
+
+/// Each Pack `install` inserts into a fresh registry with `config` and the
+/// Host-wide `services`, beside its Pack id and its factory or the reason
+/// it was inserted unavailable.
+fn inserted(config: Value, services: &HostServices) -> Vec<(&'static str, PackId, Inserted)> {
+    let mut packs = PackRegistry::new();
+    install(&mut packs, config, services).expect("a registry without web takes it");
+    packs
+        .into_entries()
+        .filter(|(info, _, _)| info.fqn != "runvil/subagents")
+        .map(|(info, id, factory)| (info.fqn, id, factory))
+        .collect()
+}
+
+/// The reason `install` with `config` and `services` inserts the Pack
+/// unavailable, or `None` when it inserts it usable.
+fn reason(config: Value, services: &HostServices) -> Option<String> {
+    let mut inserted = inserted(config, services);
+    let (_fqn, _id, factory) = inserted.pop().expect("install inserts one Pack");
+    factory.err().map(|error| error.to_string())
+}
+
+/// The Pack made under the Pack id `id` by the factory `install` inserts
+/// with both services.
+fn made(id: &str) -> Arc<dyn Pack> {
+    let mut inserted = inserted(Value::Null, &services_with(true, true));
+    let (_fqn, _id, factory) = inserted.pop().expect("install inserts one Pack");
+    factory
+        .expect("install inserts web usable with both services")
+        .new_pack(&name(id), &HostServices::new())
+        .expect("the factory makes the Pack")
 }
 
 #[test]
@@ -68,33 +98,51 @@ fn the_pack_is_runvil_web_with_no_prelude_and_no_per_run_needs() {
     assert!(WEB.needs.is_empty());
 }
 
-#[test]
-fn install_adds_the_web_pack_with_the_config_under_its_pack_id() {
-    for (config, expected) in [
-        (json!({ "web": {}, "mcp": { "docs": {} } }), json!({})),
-        (json!({ "mcp": {} }), Value::Null),
-        (Value::Null, Value::Null),
+#[tokio::test]
+async fn install_adds_the_web_pack_usable_when_its_config_is_null_or_an_empty_object() {
+    for config in [
+        json!({ "web": {}, "mcp": { "docs": {} } }),
+        json!({ "mcp": {} }),
+        Value::Null,
     ] {
-        let mut packs = PackRegistry::new();
-        install(&mut packs, config.clone()).expect("a registry without web takes it");
-        let inserted: Vec<(&str, PackId, Value)> = packs
-            .into_entries()
-            .filter(|(info, _, _)| info.fqn != "runvil/subagents")
-            .map(|(info, id, config)| (info.fqn, id, config))
+        let read: Vec<(&str, PackId, bool)> = inserted(config.clone(), &services_with(true, true))
+            .into_iter()
+            .map(|(fqn, id, factory)| (fqn, id, factory.is_ok()))
             .collect();
+        assert_eq!(read, [("runvil/web", name("web"), true)], "{config}");
+    }
+}
+
+#[tokio::test]
+async fn install_adds_the_web_pack_unavailable_for_any_other_configuration() {
+    for config in [json!({ "max_chars": 10 }), json!([]), json!("web")] {
         assert_eq!(
-            inserted,
-            [("runvil/web", name("web"), expected)],
+            reason(json!({ "web": config }), &services_with(true, true)),
+            Some("web takes no configuration".to_owned()),
             "{config}"
         );
     }
 }
 
-#[test]
-fn install_returns_the_registrys_refusal() {
+#[tokio::test]
+async fn install_without_a_host_wide_service_adds_the_web_pack_unavailable_naming_it() {
+    assert_eq!(
+        reason(Value::Null, &services_with(false, true)),
+        Some("web needs runvil/search-provider, and this host provides none".to_owned())
+    );
+    assert_eq!(
+        reason(Value::Null, &services_with(true, false)),
+        Some("web needs runvil/tokio-runtime, and this host provides none".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn install_returns_the_registrys_refusal() {
     let mut packs = PackRegistry::new();
-    install(&mut packs, Value::Null).expect("the first install inserts web");
-    let error = install(&mut packs, Value::Null).expect_err("a second install is refused");
+    let services = services_with(true, true);
+    install(&mut packs, Value::Null, &services).expect("the first install inserts web");
+    let error =
+        install(&mut packs, Value::Null, &services).expect_err("a second install is refused");
     assert_eq!(error.code, ErrorCode::InvalidValue);
     assert_eq!(
         error.facts.get(&ErrorFact::Reason),
@@ -107,43 +155,11 @@ fn install_returns_the_registrys_refusal() {
 }
 
 #[tokio::test]
-async fn construct_names_both_tools_under_the_pack_id_it_receives() {
-    let tools = construct("browse", Value::Null)
-        .expect("construct succeeds with both services")
-        .tools();
+async fn the_factory_names_both_tools_under_the_pack_id_it_receives() {
+    let tools = made("browse").tools();
     let ids: Vec<String> = tools.iter().map(|tool| tool.id.to_string()).collect();
     assert_eq!(ids, ["browse/fetch", "browse/search"]);
     assert!(tools.iter().all(|tool| !tool.survives_stop));
-}
-
-#[tokio::test]
-async fn construct_accepts_null_or_an_empty_object_and_refuses_any_other_configuration() {
-    assert!(construct("web", json!({})).is_ok());
-    for config in [json!({ "max_chars": 10 }), json!([]), json!("web")] {
-        let Err(error) = construct("web", config.clone()) else {
-            panic!("{config} is refused");
-        };
-        assert_eq!(error.to_string(), "web takes no configuration");
-    }
-}
-
-#[tokio::test]
-async fn construct_fails_naming_whichever_host_wide_service_is_missing() {
-    let missing = |provider, runtime| {
-        let services = services_with(provider, runtime);
-        match (WEB.construct)(&name("web"), Value::Null, &services) {
-            Ok(_) => panic!("construct fails without both services"),
-            Err(error) => error.to_string(),
-        }
-    };
-    assert_eq!(
-        missing(false, true),
-        "web needs runvil/search-provider, and this host provides none"
-    );
-    assert_eq!(
-        missing(true, false),
-        "web needs runvil/tokio-runtime, and this host provides none"
-    );
 }
 
 #[tokio::test]
@@ -175,7 +191,7 @@ async fn a_custom_fetch_policy_reaches_the_fetch_tools_schema() {
 
 #[tokio::test]
 async fn a_call_to_a_tool_web_does_not_offer_fails_naming_it() {
-    let pack = construct("web", Value::Null).expect("construct succeeds");
+    let pack = made("web");
     let call = TestCall::new(ToolId::parse("web/browse").expect("the id parses"));
     let error = pack
         .call(call.context(), json!({}))
@@ -186,7 +202,7 @@ async fn a_call_to_a_tool_web_does_not_offer_fails_naming_it() {
 
 #[tokio::test]
 async fn a_call_reaches_the_tool_its_last_segment_names() {
-    let pack = construct("browse", Value::Null).expect("construct succeeds");
+    let pack = made("browse");
 
     let search = TestCall::new(ToolId::parse("browse/search").expect("the id parses"));
     let output = pack

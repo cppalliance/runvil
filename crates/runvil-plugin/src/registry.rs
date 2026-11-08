@@ -1,5 +1,5 @@
 //! The Packs a Host builds: [`PackRegistry`], holding the built-ins
-//! from the start and each Pack a Plugin inserts with its config, and the
+//! from the start and each Pack a Plugin inserts with its factory, and the
 //! [`PackOrigin`] that says which a Pack is.
 
 use std::collections::BTreeMap;
@@ -11,23 +11,25 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolInfo, ToolOutput, make_tool_error};
 use serde_json::Value;
 
-use crate::{HostServices, Pack, PackFuture, PackInfo, ToolContext};
+use crate::{HostServices, Pack, PackFactory, PackFuture, PackInfo, ToolContext};
 
 #[cfg(test)]
 #[path = "registry-tests.rs"]
 mod tests;
 
 /// Every Pack a Host's Plugins insert, by fully qualified name, each
-/// with its Pack id and config.
+/// with its Pack id and its factory, or the reason it was inserted
+/// unavailable.
 ///
 /// The Host owns the registry; a Plugin only inserts its Packs into it,
-/// by calling [`insert`](PackRegistry::insert) from its `install`
-/// function. The Host makes the registry with
+/// by calling [`insert`](PackRegistry::insert) or
+/// [`insert_unavailable`](PackRegistry::insert_unavailable) from its
+/// `install` function. The Host makes the registry with
 /// [`new`](PackRegistry::new), which holds the built-ins such as
 /// `runvil/subagents` from the start, and calls each Plugin it links. Then
 /// it hands the registry to `Packs::new`, which reads it through
 /// [`into_entries`](PackRegistry::into_entries) and calls each Pack's
-/// `construct` once, at startup, to make the one Pack object every run
+/// factory once, at startup, to make the one Pack object every run
 /// shares.
 pub struct PackRegistry {
     entries: BTreeMap<&'static str, Registered>,
@@ -38,7 +40,8 @@ struct Registered {
     info: PackInfo,
     origin: PackOrigin,
     id: PackId,
-    config: Value,
+    /// The Pack's factory, or the reason it was inserted unavailable.
+    factory: Result<Arc<dyn PackFactory>, Error>,
 }
 
 /// Where a Pack comes from.
@@ -63,7 +66,7 @@ impl Default for PackRegistry {
                     info,
                     origin: PackOrigin::Builtin,
                     id,
-                    config: Value::Null,
+                    factory: Ok(Arc::new(builtin)),
                 };
                 Some((info.fqn, registered))
             })
@@ -79,8 +82,7 @@ impl PackRegistry {
         PackRegistry::default()
     }
 
-    /// Inserts `info` as a linked Pack with `config`, which its `construct`
-    /// receives when the Host builds it.
+    /// Adds the Pack `info` names as a linked Pack, made by `factory`.
     ///
     /// The Pack id is the FQN's second segment, so `runvil/web` is `web`,
     /// and the registry may hold Packs of different vendors with the same
@@ -99,9 +101,34 @@ impl PackRegistry {
     ///   [reserved](PackId::is_reserved), such as `adhoc`;
     /// - `reserved_name` when the Pack id is a built-in's.
     ///
-    /// A Pack whose `construct` fails is not refused here; the Host builds
-    /// it as unavailable instead.
-    pub fn insert(&mut self, info: PackInfo, config: Value) -> Result<(), Error> {
+    /// A Pack whose factory refuses to make it is not refused here; the
+    /// Host builds it as unavailable instead.
+    pub fn insert(
+        &mut self,
+        info: PackInfo,
+        factory: impl PackFactory + 'static,
+    ) -> Result<(), Error> {
+        self.add(info, Ok(Arc::new(factory)))
+    }
+
+    /// Adds the Pack `info` names as a linked Pack that is unavailable for
+    /// `reason`, such as bad config or a missing Host-wide service.
+    /// `Host::parse` refuses a prompt that declares it, naming `reason`.
+    ///
+    /// # Errors
+    /// Refuses what [`insert`](PackRegistry::insert) refuses, with the
+    /// same errors.
+    pub fn insert_unavailable(&mut self, info: PackInfo, reason: Error) -> Result<(), Error> {
+        self.add(info, Err(reason))
+    }
+
+    /// Adds `info` as a linked Pack with `factory`, or refuses it as
+    /// [`insert`](PackRegistry::insert) documents.
+    fn add(
+        &mut self,
+        info: PackInfo,
+        factory: Result<Arc<dyn PackFactory>, Error>,
+    ) -> Result<(), Error> {
         let fqn = info.fqn;
         let id = pack_id(fqn).ok_or_else(|| {
             make_refusal_error(
@@ -140,7 +167,7 @@ impl PackRegistry {
                 info,
                 origin: PackOrigin::Linked,
                 id,
-                config,
+                factory,
             },
         );
         Ok(())
@@ -155,11 +182,14 @@ impl PackRegistry {
     }
 
     /// Every Pack the registry holds, built-ins included, with its Pack
-    /// id and its config, in FQN order: what a Host builds its Packs from.
-    pub fn into_entries(self) -> impl Iterator<Item = (PackInfo, PackId, Value)> {
+    /// id and its factory, or the reason it was inserted unavailable, in
+    /// FQN order: what a Host builds its Packs from.
+    pub fn into_entries(
+        self,
+    ) -> impl Iterator<Item = (PackInfo, PackId, Result<Arc<dyn PackFactory>, Error>)> {
         self.entries
             .into_values()
-            .map(|registered| (registered.info, registered.id, registered.config))
+            .map(|registered| (registered.info, registered.id, registered.factory))
     }
 
     /// Whether `id` is a built-in's Pack id, which no other Pack may
@@ -172,8 +202,7 @@ impl PackRegistry {
 }
 
 impl fmt::Debug for PackRegistry {
-    /// Shows each Pack's FQN, origin, and Pack id, and never its config,
-    /// which may hold a credential such as a bearer token.
+    /// Shows each Pack's FQN, origin, and Pack id.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let entries: Vec<(&str, PackOrigin, &PackId)> = self
             .entries
@@ -207,20 +236,17 @@ fn make_refusal_error(reason: &'static str, message: String, fqn: &str) -> Error
 /// one. A built-in never takes a [reserved](PackId::is_reserved) Pack id:
 /// the Harness puts every `runvil` Pack no `uses:` entry replaces into
 /// every run's roster, so a reserved one would refuse every run.
-const BUILTIN: [PackInfo; 1] = [PackInfo::new("runvil/subagents", builtin).description(
+const BUILTIN: [PackInfo; 1] = [PackInfo::new("runvil/subagents").description(
     "Reserves the subagents name for the Engine's subagent tools, which are not built yet",
 )];
 
-/// Builds a built-in's [`Builtin`] object; see [`BUILTIN`].
+/// The factory of every built-in: makes its [`Builtin`] object; see
+/// [`BUILTIN`].
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the PackInfo construct signature fixes the return type"
+    reason = "the PackFactory signature fixes the return type"
 )]
-fn builtin(
-    _name: &PackId,
-    _config: Value,
-    _services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
+fn builtin(_id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     Ok(Arc::new(Builtin))
 }
 

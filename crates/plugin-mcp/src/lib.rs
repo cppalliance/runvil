@@ -3,14 +3,14 @@
 //! and calls through two static tools.
 //!
 //! The crate's Plugin, [`install`], inserts the Pack `runvil/mcp`, whose
-//! Pack id is `mcp`, with the sub-object of its config under `mcp`. A Host
-//! passes the `mcpServers` object of an `mcp.json` file there: each
-//! server's entry under the server's name. A `null` configuration means
-//! no servers, and any other value that is not an object leaves the Pack
-//! unavailable. The Pack has no prelude, so declaring it, as in
-//! `uses: [mcp]`, only makes it required.
+//! Pack id is `mcp`, configured by the sub-object of its config under
+//! `mcp`. A Host passes the `mcpServers` object of an `mcp.json` file
+//! there: each server's entry under the server's name. A `null`
+//! configuration means no servers, and any other value that is not an
+//! object leaves the Pack unavailable. The Pack has no prelude, so
+//! declaring it, as in `uses: [mcp]`, only makes it required.
 //!
-//! The Pack offers exactly two tools under the Pack id `construct`
+//! The Pack offers exactly two tools under the Pack id its factory
 //! receives, such as `mcp/get_dynamic_tools` under `mcp`, modeled on
 //! Cursor's `GetDynamicTools` and `CallDynamicTool`:
 //!
@@ -52,11 +52,13 @@
 //! form passes through unchanged. `headers` may not set `accept`,
 //! `Mcp-Session-Id`, or `Last-Event-Id`, which the client owns.
 //!
-//! Building the Pack does no I/O. It reads the Host's runtime from the
-//! Plugin contract's [`runvil_plugin::TOKIO_RUNTIME`] service, even with
-//! no servers, and starts one background task per parsed entry on it, which
-//! connects, runs the handshake, and lists every page of tools within two
-//! minutes. The Pack's `ready` resolves at once, so a run can see the two
+//! Installing the Pack does no I/O. `install` reads the Host's runtime
+//! from the Plugin contract's [`runvil_plugin::TOKIO_RUNTIME`] service,
+//! even with no servers, and starts one background task per parsed entry
+//! on it, which connects, runs the handshake, and lists every page of
+//! tools within two minutes. Every instance the Pack's factory makes
+//! shares those servers, so every run sees the same server states. The
+//! Pack's `ready` resolves at once, so a run can see the two
 //! tools while servers are still connecting, and the listing shows each
 //! such server as `loading`. A server that fails to start shows as
 //! `error` with the reason, and its task keeps trying in the background,
@@ -92,8 +94,8 @@
 //! - No reason, log line, `Debug` output, or error names an `env` or
 //!   `headers` value. They may name keys.
 //! - It runs on the Host's runtime, read through the contract's
-//!   `TOKIO_RUNTIME` service, and `construct` does no I/O.
-//! - It starts no process: each local entry is refused at `construct`, on
+//!   `TOKIO_RUNTIME` service, and `install` does no I/O.
+//! - It starts no process: each local entry is refused at `install`, on
 //!   its own.
 //! - Dropping a call tells the server to drop the request.
 
@@ -107,7 +109,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use runvil_plugin::{
-    Error, ErrorCode, HostServices, Pack, PackId, PackInfo, PackRegistry, ServiceKey,
+    Error, ErrorCode, HostServices, Pack, PackFactory, PackId, PackInfo, PackRegistry, ServiceKey,
     TOKIO_RUNTIME, make_tool_error,
 };
 use serde_json::{Map, Value};
@@ -121,14 +123,19 @@ use crate::server::{Server, State};
 /// The Pack's `PackInfo`.
 ///
 /// Its FQN is `runvil/mcp`, so its Pack id is `mcp`. Its config is the
-/// `mcpServers` object of an `mcp.json` file, and its `construct` reads
+/// `mcpServers` object of an `mcp.json` file, and its `install` reads
 /// the Plugin contract's [`runvil_plugin::TOKIO_RUNTIME`] service. It has
 /// no prelude and needs no per-run service.
 const MCP: PackInfo =
-    PackInfo::new("runvil/mcp", construct).description("Tools from every configured MCP server");
+    PackInfo::new("runvil/mcp").description("Tools from every configured MCP server");
 
-/// The Plugin: inserts the `mcp` Pack into `packs` with `config["mcp"]`, which
-/// is `null`, meaning no servers, when `config` has no `mcp` key.
+/// The Plugin: inserts the `mcp` Pack into `packs`. It parses
+/// `config["mcp"]`, which is `null`, meaning no servers, when `config`
+/// has no `mcp` key, reads the Tokio runtime from `services`, and starts
+/// one connection task per good server entry, into servers every
+/// instance shares. Config that is not `null` or an object, or a missing
+/// runtime, inserts the Pack unavailable, naming the problem. A bad entry
+/// is refused alone, as a namespace with status `error`.
 ///
 /// # Errors
 /// Returns the registry's refusal, such as an
@@ -138,63 +145,88 @@ const MCP: PackInfo =
     clippy::needless_pass_by_value,
     reason = "the Plugin signature fixes the argument types"
 )]
-pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), Error> {
-    packs.insert(MCP, config["mcp"].clone())
-}
-
-/// The key `construct` reads the Host's runtime through.
-const RUNTIME: ServiceKey<Handle> = ServiceKey::new(TOKIO_RUNTIME);
-
-/// Reads the runtime, parses each server's entry on its own, and starts
-/// one connection task per parsed entry. It does no I/O itself.
-fn construct(
-    name: &PackId,
+pub fn install(
+    packs: &mut PackRegistry,
     config: Value,
     services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
-    let entries = match config {
-        Value::Null => Map::new(),
-        Value::Object(entries) => entries,
-        _ => {
-            return Err(make_tool_error(
-                ErrorCode::ToolOther,
-                "the MCP configuration must be a JSON object of servers by name, as the \
-                 `mcpServers` object of an mcp.json file is",
-            ));
-        }
-    };
-    let runtime = services.get(&RUNTIME).ok_or_else(|| {
-        make_tool_error(
-            ErrorCode::ToolOther,
-            "MCP needs runvil/tokio-runtime, and this host provides none",
-        )
-    })?;
-    let env = |key: &str| std::env::var(key).ok();
-    let home = std::env::home_dir().map(|dir| dir.to_string_lossy().into_owned());
-    let vars = Vars { env: &env, home };
-    let mut namespaces = BTreeMap::new();
-    for (server, config) in entries {
-        let namespace = match entry::parse(&config, &vars) {
-            Ok(entry) => {
-                let (state, watching) = watch::channel(State::Starting);
-                let connection = runtime.spawn(connect::run(
-                    server.clone(),
-                    entry,
-                    connect::STARTUP_DEADLINE,
-                    state,
+) -> Result<(), Error> {
+    match Servers::start(config["mcp"].clone(), services) {
+        Ok(servers) => packs.insert(MCP, servers),
+        Err(reason) => packs.insert_unavailable(MCP, reason),
+    }
+}
+
+/// The key `install` reads the Host's runtime through.
+const RUNTIME: ServiceKey<Handle> = ServiceKey::new(TOKIO_RUNTIME);
+
+/// The Pack's factory: every configured server under its name, which
+/// every instance shares, and the Host's runtime its calls are spawned
+/// on. The servers' connection tasks stop when the last of them drops.
+struct Servers {
+    namespaces: Arc<BTreeMap<String, Namespace>>,
+    runtime: Handle,
+}
+
+impl Servers {
+    /// Reads the runtime, parses each server's entry in `config` on its
+    /// own, and starts one connection task per parsed entry. It does no
+    /// I/O itself.
+    fn start(config: Value, services: &HostServices) -> Result<Servers, Error> {
+        let entries = match config {
+            Value::Null => Map::new(),
+            Value::Object(entries) => entries,
+            _ => {
+                return Err(make_tool_error(
+                    ErrorCode::ToolOther,
+                    "the MCP configuration must be a JSON object of servers by name, as the \
+                     `mcpServers` object of an mcp.json file is",
                 ));
-                Namespace::Server(Server::new(watching, connection))
-            }
-            Err(refused) => {
-                tracing::warn!(%server, reason = %refused, "the MCP server's entry was refused");
-                Namespace::Refused(refused.to_string())
             }
         };
-        namespaces.insert(server, namespace);
+        let runtime = services.get(&RUNTIME).ok_or_else(|| {
+            make_tool_error(
+                ErrorCode::ToolOther,
+                "MCP needs runvil/tokio-runtime, and this host provides none",
+            )
+        })?;
+        let env = |key: &str| std::env::var(key).ok();
+        let home = std::env::home_dir().map(|dir| dir.to_string_lossy().into_owned());
+        let vars = Vars { env: &env, home };
+        let mut namespaces = BTreeMap::new();
+        for (server, config) in entries {
+            let namespace = match entry::parse(&config, &vars) {
+                Ok(entry) => {
+                    let (state, watching) = watch::channel(State::Starting);
+                    let connection = runtime.spawn(connect::run(
+                        server.clone(),
+                        entry,
+                        connect::STARTUP_DEADLINE,
+                        state,
+                    ));
+                    Namespace::Server(Server::new(watching, connection))
+                }
+                Err(refused) => {
+                    tracing::warn!(%server, reason = %refused, "the MCP server's entry was refused");
+                    Namespace::Refused(refused.to_string())
+                }
+            };
+            namespaces.insert(server, namespace);
+        }
+        Ok(Servers {
+            namespaces: Arc::new(namespaces),
+            runtime: Handle::clone(&runtime),
+        })
     }
-    Ok(Arc::new(Mcp::new(
-        name,
-        namespaces,
-        Handle::clone(&runtime),
-    )?))
+}
+
+impl PackFactory for Servers {
+    /// Makes one MCP Pack instance named `id` over the shared servers.
+    fn new_pack(&self, id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+        let mcp = Mcp::new(
+            id,
+            Arc::clone(&self.namespaces),
+            Handle::clone(&self.runtime),
+        )?;
+        Ok(Arc::new(mcp))
+    }
 }

@@ -12,13 +12,12 @@
 
 use super::*;
 
-use std::collections::BTreeMap;
 use std::sync::OnceLock;
 use std::time::Duration;
 
 use futures_util::FutureExt as _;
 use harness_runner::RunControl;
-use runvil_plugin::ServiceKey;
+use runvil_plugin::PackFactory;
 use tokio::sync::{Notify, watch};
 
 /// How long a test waits for a run before it fails.
@@ -42,10 +41,6 @@ struct Startup {
 /// One [`Starting`] Pack's sender that moves its startup, beside the
 /// startup it shares.
 type StartupHandle = (watch::Sender<Phase>, Arc<Startup>);
-
-/// Each [`Starting`] Pack's startup by its Pack id, shared with the
-/// Packs as a Host-wide service.
-const STARTUPS: ServiceKey<BTreeMap<String, Arc<Startup>>> = ServiceKey::new("tests/startups");
 
 /// The fixture Pack `slow`: the echo tool, offered once its startup
 /// leaves [`Phase::Starting`], ready or failed, so only the Harness keeps
@@ -79,24 +74,15 @@ struct Starting {
     startup: Arc<Startup>,
 }
 
-fn construct_starting(
-    name: &PackId,
-    config: Value,
-    services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
-    let startup = services
-        .get(&STARTUPS)
-        .and_then(|startups| startups.get(&name.to_string()).cloned())
-        .ok_or_else(|| {
-            make_tool_error(
-                ErrorCode::ToolOther,
-                format!("{name} needs its startup in tests/startups, and this host provides none"),
-            )
-        })?;
-    Ok(Arc::new(Starting {
-        echo: construct_echo(name, config, services)?,
-        startup,
-    }))
+/// The factory of a [`Starting`] Pack over `startup`, which the test
+/// drives.
+fn starting(startup: Arc<Startup>) -> impl PackFactory {
+    move |name: &PackId, run: &HostServices| -> Result<Arc<dyn Pack>, Error> {
+        Ok(Arc::new(Starting {
+            echo: new_echo(name, run)?,
+            startup: Arc::clone(&startup),
+        }))
+    }
 }
 
 impl Pack for Starting {
@@ -140,23 +126,20 @@ impl Pack for Starting {
 /// every startup standing at `phase`, beside each Pack's handle in `fqns`
 /// order.
 fn starting_host(fqns: &[&'static str], phase: Phase) -> (Packs, Vec<StartupHandle>) {
-    let mut startups = BTreeMap::new();
+    let mut packs = registry(&[]);
     let mut handles = Vec::new();
-    let mut infos = Vec::new();
-    for fqn in fqns {
+    for &fqn in fqns {
         let (moves, watched) = watch::channel(phase);
         let startup = Arc::new(Startup {
             phase: watched,
             asked: Notify::new(),
         });
-        let (_vendor, id) = fqn.split_once('/').unwrap();
-        startups.insert(id.to_owned(), Arc::clone(&startup));
+        packs
+            .insert(PackInfo::new(fqn), starting(Arc::clone(&startup)))
+            .unwrap();
         handles.push((moves, startup));
-        infos.push(PackInfo::new(fqn, construct_starting));
     }
-    let mut wide = HostServices::new();
-    wide.provide(&STARTUPS, Arc::new(startups)).unwrap();
-    (Packs::new(registry(&infos), wide), handles)
+    (Packs::new(packs), handles)
 }
 
 /// A Host that built [`SLOW`], whose startup stands at `phase`, beside
@@ -287,17 +270,16 @@ async fn an_undeclared_pack_whose_ready_fails_raises_its_reason_when_the_prompt_
 
 #[tokio::test]
 async fn an_undeclared_third_party_pack_that_never_gets_ready_holds_no_run_up() {
-    let mut startups = BTreeMap::new();
     let (_moves, watched) = watch::channel(Phase::Starting);
     let startup = Arc::new(Startup {
         phase: watched,
         asked: Notify::new(),
     });
-    startups.insert("stuck".to_owned(), startup);
-    let mut wide = HostServices::new();
-    wide.provide(&STARTUPS, Arc::new(startups)).unwrap();
-    let stuck = PackInfo::new("tests/stuck", construct_starting);
-    let host = Packs::new(registry(&[stuck]), wide);
+    let mut packs = registry(&[]);
+    packs
+        .insert(PackInfo::new("tests/stuck"), starting(startup))
+        .unwrap();
+    let host = Packs::new(packs);
     let result = tokio::time::timeout(PATIENCE, drive_over(COUNTS_OFFERED, host))
         .await
         .expect("no run waits on a Pack it does not hold");
@@ -311,7 +293,7 @@ async fn an_undeclared_builtin_with_no_tools_has_an_object_the_prompt_can_offer(
         local stub = tools.packs.get('subagents')\n\
         tools.offer('subagents')\n\
         return stub.name .. ':' .. #stub.tools\n```\n";
-    let host = Packs::new(registry(&[]), HostServices::new());
+    let host = Packs::new(registry(&[]));
     assert_eq!(
         completed(drive_over(reads_stub, host).await),
         "subagents:0",
@@ -404,12 +386,7 @@ async fn a_cancel_that_lands_while_a_refusal_is_recorded_leaves_the_report_holdi
 
 #[tokio::test]
 async fn a_pack_that_keeps_the_default_ready_is_ready_at_once_and_serves_the_run() {
-    let echo = construct_echo(
-        &PackId::parse("tools").unwrap(),
-        Value::Null,
-        &HostServices::new(),
-    )
-    .unwrap();
+    let echo = new_echo(&PackId::parse("tools").unwrap(), &HostServices::new()).unwrap();
     assert!(
         matches!(echo.ready().now_or_never(), Some(Ok(()))),
         "the default ready resolves Ok on its first poll"

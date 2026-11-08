@@ -1,5 +1,5 @@
 //! Integration tests for `plugin-std`: the Pack `install` inserts, the
-//! tools `construct` names under the Pack id it receives, and what a call
+//! tools its factory names under the Pack id it receives, and what a call
 //! answers with arguments that match or miss the schema.
 #![expect(
     clippy::expect_used,

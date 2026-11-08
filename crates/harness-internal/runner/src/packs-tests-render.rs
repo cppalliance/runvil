@@ -31,11 +31,11 @@ struct Rendering {
     renders: Arc<Mutex<Vec<Rendered>>>,
 }
 
-/// Builds a [`Rendering`] Pack from a [`listed`] configuration, failing
+/// Makes a [`Rendering`] Pack from a [`listed`] configuration, refusing
 /// when the Host provides no [`RENDERS`].
 fn rendering(
     name: &PackId,
-    config: Value,
+    config: &Value,
     services: &HostServices,
 ) -> Result<Arc<dyn Pack>, Error> {
     let renders = services
@@ -118,16 +118,17 @@ async fn a_render_asks_each_usable_pack_once_per_set_it_was_offered_into_and_ans
     let renders = Arc::new(Mutex::new(Vec::new()));
     let mut wide = HostServices::new();
     wide.provide(&RENDERS, Arc::clone(&renders)).unwrap();
-    let needy = PackInfo::new("runvil/needy", rendering).needs(NEEDS_SESSION);
+    let needy = PackInfo::new("runvil/needy").needs(NEEDS_SESSION);
     let host = host_with(
-        wide,
+        &wide,
         &[
             (
-                PackInfo::new("runvil/one", rendering),
+                PackInfo::new("runvil/one"),
+                rendering,
                 offering(&["one/a", "one/b"]),
             ),
-            (PackInfo::new("runvil/two", rendering), offering(&["two/a"])),
-            (needy, offering(&["needy/a"])),
+            (PackInfo::new("runvil/two"), rendering, offering(&["two/a"])),
+            (needy, rendering, offering(&["needy/a"])),
         ],
     );
     let run = begin(&host, HostServices::new(), BTreeMap::new(), &prompt(""));

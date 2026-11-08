@@ -3,6 +3,7 @@
 //! routes to one server's tool.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use rmcp::model::JsonObject;
 use rmcp::service::{Peer, RoleClient};
@@ -61,13 +62,14 @@ impl Namespace {
     }
 }
 
-/// The Pack: its two tools, every configured server under its name, and
-/// the Host's runtime its calls are spawned on.
+/// The Pack: its two tools, every configured server under its name, which
+/// every instance shares, and the Host's runtime its calls are spawned
+/// on.
 #[derive(Debug)]
 pub(crate) struct Mcp {
     get: ToolInfo,
     call: ToolInfo,
-    namespaces: BTreeMap<String, Namespace>,
+    namespaces: Arc<BTreeMap<String, Namespace>>,
     runtime: Handle,
 }
 
@@ -133,10 +135,12 @@ fn namespace_entry(name: &str, status: Status<'_>, schemas: bool) -> Value {
 }
 
 impl Mcp {
-    /// The Pack over `namespaces`, with its two tools under `name`.
+    /// Makes one MCP Pack instance named `name` over the servers in
+    /// `namespaces`, which every instance shares, with its two tools under
+    /// `name`. Fails when `name` yields no valid tool ids.
     pub(crate) fn new(
         name: &PackId,
-        namespaces: BTreeMap<String, Namespace>,
+        namespaces: Arc<BTreeMap<String, Namespace>>,
         runtime: Handle,
     ) -> Result<Mcp, Error> {
         let id = |tool: &str| {

@@ -27,7 +27,7 @@ use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunRecorder};
 use harness_runner::{Harness, Packs, RunControl, RunReport, RunSetup};
 use runvil::vfs::VfsRef;
 use runvil::{Error, ErrorCode};
-use runvil_plugin::{HostServices, PackRegistry};
+use runvil_plugin::PackRegistry;
 use serde_json::{Value, json};
 
 use crate::scripted::{Kept, MODEL, ScriptedBroker};
@@ -69,9 +69,9 @@ pub(crate) fn launch(
     Harness::new(host_over(packs, timer), parsed(source), setup)
 }
 
-/// A Host's Packs with none but the built-in and no Host services.
+/// A Host's Packs with none but the built-in.
 pub(crate) fn no_packs() -> Packs {
-    Packs::new(PackRegistry::new(), HostServices::new())
+    Packs::new(PackRegistry::new())
 }
 
 /// A Harness running `source` over `recorder` and `broker` with no Packs,

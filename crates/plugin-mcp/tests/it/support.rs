@@ -1,14 +1,14 @@
-//! What the topics share: the runtime service, the Pack `install` inserts,
-//! built over a map of servers, calls of its two tools, waits on a
-//! server's status, and a server that never answers.
+//! What the topics share: the runtime service, the Pack `install` inserts
+//! for a map of servers and the instances its factory makes, calls of its
+//! two tools, waits on a server's status, and a server that never answers.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    Error, HostServices, OutputTrust, Pack, PackId, PackInfo, PackRegistry, ServiceKey,
-    TOKIO_RUNTIME, ToolCaller, ToolId, ToolOutput,
+    Error, HostServices, OutputTrust, Pack, PackFactory, PackId, PackInfo, PackRegistry,
+    ServiceKey, TOKIO_RUNTIME, ToolCaller, ToolId, ToolOutput,
 };
 use serde_json::{Map, Value, json};
 use tokio::net::TcpListener;
@@ -31,29 +31,45 @@ pub(crate) fn runtime_services() -> HostServices {
     services
 }
 
-/// Each Pack `install` inserts into a fresh registry with `config`, beside
-/// the Pack id and config the registry holds it with.
-pub(crate) fn inserted(config: Value) -> Vec<(PackInfo, PackId, Value)> {
+/// A factory or the reason its Pack was inserted unavailable.
+pub(crate) type Inserted = Result<Arc<dyn PackFactory>, Error>;
+
+/// Each Pack `install` inserts into a fresh registry with `config` and the
+/// Host-wide `services`, beside its Pack id and its factory or the reason
+/// it was inserted unavailable.
+pub(crate) fn inserted(
+    config: Value,
+    services: &HostServices,
+) -> Vec<(PackInfo, PackId, Inserted)> {
     let mut packs = PackRegistry::new();
-    plugin_mcp::install(&mut packs, config).expect("a fresh registry takes the Pack");
+    plugin_mcp::install(&mut packs, config, services).expect("a fresh registry takes the Pack");
     packs
         .into_entries()
         .filter(|(info, _, _)| info.fqn != "runvil/subagents")
         .collect()
 }
 
-/// Builds the Pack `install` inserts, under the Pack id and with the config
-/// the registry holds it with, from the server map `servers`.
-pub(crate) fn construct(servers: Value, services: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+/// The factory `install` inserts for the server map `servers` with the
+/// Host-wide `services`, or the reason it inserted the Pack unavailable.
+pub(crate) fn factory(servers: Value, services: &HostServices) -> Inserted {
     let config = Map::from_iter([("mcp".to_owned(), servers)]);
-    let mut inserted = inserted(Value::Object(config));
-    let (info, id, config) = inserted.pop().expect("install inserts one Pack");
-    (info.construct)(&id, config, services)
+    let mut inserted = inserted(Value::Object(config), services);
+    let (_info, _id, factory) = inserted.pop().expect("install inserts one Pack");
+    factory
+}
+
+/// One Pack instance `factory` makes under the Pack id `mcp`.
+pub(crate) fn instance(factory: &Arc<dyn PackFactory>) -> Arc<dyn Pack> {
+    let id = PackId::parse("mcp").expect("a one-segment Pack id parses");
+    factory
+        .new_pack(&id, &HostServices::new())
+        .expect("the factory makes the Pack")
 }
 
 /// The Pack over the server map `servers`, on the test's runtime.
 pub(crate) fn pack_over(servers: Value) -> Arc<dyn Pack> {
-    construct(servers, &runtime_services()).expect("a server map constructs")
+    let factory = factory(servers, &runtime_services()).expect("a server map inserts the Pack");
+    instance(&factory)
 }
 
 /// A remote entry for `fixture` with these extra headers.

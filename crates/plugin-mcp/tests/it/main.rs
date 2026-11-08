@@ -1,9 +1,9 @@
 //! Integration tests for `plugin-mcp`, through `install` and `TestCall`
 //! only, against a hand-written Streamable HTTP server: the Pack
-//! `install` inserts, its construct over a map of servers, and the
-//! connection each server keeps here, the listing `get_dynamic_tools`
-//! answers in `listing`, and the calls `call_dynamic_tool` makes in
-//! `calls`.
+//! `install` inserts over a map of servers, the instances its factory
+//! makes, and the connection each server keeps here, the listing
+//! `get_dynamic_tools` answers in `listing`, and the calls
+//! `call_dynamic_tool` makes in `calls`.
 #![expect(
     clippy::expect_used,
     reason = "test helpers panic on setup failure, which is the desired behavior"
@@ -20,46 +20,48 @@ use fixture::Fixture;
 use runvil_plugin::HostServices;
 use serde_json::{Value, json};
 use support::{
-    SECRET, call, construct, inserted, list, pack_over, ready, remote, runtime_services, settled,
+    SECRET, call, factory, inserted, instance, list, pack_over, ready, remote, runtime_services,
+    settled,
 };
 
-#[test]
-fn install_adds_runvil_mcp_with_no_prelude_and_no_needs() {
-    let inserted = inserted(Value::Null);
-    let [(info, id, config)] = inserted.as_slice() else {
-        panic!("install inserts one Pack: {inserted:?}");
+#[tokio::test]
+async fn install_adds_runvil_mcp_with_no_prelude_and_no_needs() {
+    let inserted = inserted(Value::Null, &runtime_services());
+    let [(info, id, factory)] = inserted.as_slice() else {
+        panic!("install inserts one Pack");
     };
     assert_eq!(info.fqn, "runvil/mcp");
     assert_eq!(id.to_string(), "mcp");
-    assert_eq!(*config, Value::Null);
+    assert!(factory.is_ok(), "no servers is a usable Pack");
     assert!(info.prelude.is_none());
     assert!(info.needs.is_empty());
 }
 
-#[test]
-fn install_adds_the_pack_with_the_server_map_under_its_pack_id() {
+#[tokio::test(flavor = "multi_thread")]
+async fn install_reads_the_server_map_under_its_pack_id() {
     let servers = json!({ "docs": { "url": "http://127.0.0.1:1/mcp" } });
     for (config, expected) in [
-        (json!({ "mcp": servers, "web": {} }), servers.clone()),
-        (json!({ "web": {} }), Value::Null),
+        (json!({ "mcp": servers, "web": {} }), vec!["docs"]),
+        (json!({ "web": {} }), vec![]),
     ] {
-        let inserted = inserted(config.clone());
-        let read: Vec<(&str, String, &Value)> = inserted
+        let mut inserted = inserted(config.clone(), &runtime_services());
+        let (_info, _id, factory) = inserted.pop().expect("install inserts one Pack");
+        let pack = instance(&factory.expect("a server map inserts the Pack"));
+        let listing = list(&pack, json!({})).await;
+        let namespaces: Vec<&str> = listing["namespaces"]
+            .as_array()
+            .expect("the listing holds the namespaces")
             .iter()
-            .map(|(info, id, config)| (info.fqn, id.to_string(), config))
+            .map(|entry| entry["namespace"].as_str().expect("a namespace is named"))
             .collect();
-        assert_eq!(
-            read,
-            [("runvil/mcp", "mcp".to_owned(), &expected)],
-            "{config}"
-        );
+        assert_eq!(namespaces, expected, "{config}");
     }
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_config_that_is_not_an_object_refuses_the_construct() {
+async fn a_config_that_is_not_an_object_inserts_the_pack_unavailable() {
     for config in [json!([]), json!("servers"), json!(1)] {
-        let error = construct(config.clone(), &runtime_services())
+        let error = factory(config.clone(), &runtime_services())
             .err()
             .expect("only an object or null is a server map");
         assert!(
@@ -70,12 +72,12 @@ async fn a_config_that_is_not_an_object_refuses_the_construct() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_missing_runtime_service_fails_construct_naming_it_even_with_no_servers() {
+async fn a_missing_runtime_service_inserts_the_pack_unavailable_naming_it_even_with_no_servers() {
     for config in [
         Value::Null,
         json!({ "docs": { "url": "http://127.0.0.1:1/mcp" } }),
     ] {
-        let error = construct(config.clone(), &HostServices::new())
+        let error = factory(config.clone(), &HostServices::new())
             .err()
             .expect("no runtime is a failure");
         assert!(
@@ -83,6 +85,33 @@ async fn a_missing_runtime_service_fails_construct_naming_it_even_with_no_server
             "{config}: {error}"
         );
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn two_instances_from_one_install_report_the_same_server_status() {
+    let fixture = Fixture::start().await;
+    let factory = factory(
+        json!({ "remote": remote(&fixture, &json!({})) }),
+        &runtime_services(),
+    )
+    .expect("a server map inserts the Pack");
+    let first = instance(&factory);
+    let second = instance(&factory);
+
+    let entry = ready(&first, "remote").await;
+    assert_eq!(
+        list(&second, json!({ "namespace": "remote" })).await,
+        entry,
+        "the second instance sees the server the first one waited on"
+    );
+    let initializes = fixture
+        .shared
+        .recorded
+        .lock()
+        .expect("lock")
+        .initializes
+        .len();
+    assert_eq!(initializes, 1, "one install connects each server once");
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use harness::pack::{HostServices, PackRegistry, Packs};
+use harness::pack::{PackRegistry, Packs};
 use harness::{BoxFuture, Harness, Host, InferenceBroker, RunSetup, Timer};
 use runvil::effect::Round;
 use runvil::model::{
@@ -49,7 +49,7 @@ impl Timer for Clock {
 
 /// A Host's Packs with none but the built-in.
 pub(crate) fn no_packs() -> Packs {
-    Packs::new(PackRegistry::new(), HostServices::new())
+    Packs::new(PackRegistry::new())
 }
 
 /// A Harness running `source` with `setup` on a Host over `packs` that

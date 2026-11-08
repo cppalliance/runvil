@@ -1,17 +1,17 @@
 //! The crate's Plugin, [`install`], the `web` Pack's `PackInfo`, the
-//! `construct` that builds its one shared object, and the keys of the two
-//! Host-wide services that `construct` reads.
+//! factory that holds the HTTP clients every instance shares, and the
+//! keys of the two Host-wide services that `install` reads.
 //!
-//! The fetch client is built once, when the Host builds its Packs, with
-//! the default fetch policy and bound to the Host's runtime handle; the
-//! search tool is built over the Host's search provider. The prompt never
-//! sees either.
+//! The fetch client is built once, when the Plugin installs the Pack,
+//! with the default fetch policy and bound to the Host's runtime handle;
+//! the search tool is built over the Host's search provider. The prompt
+//! never sees either.
 
 use std::sync::Arc;
 
 use runvil_plugin::{
-    Error, ErrorCode, HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceKey,
-    ToolContext, ToolId, ToolInfo, ToolOutput, make_tool_error,
+    Error, ErrorCode, HostServices, Pack, PackFactory, PackFuture, PackId, PackInfo, PackRegistry,
+    ServiceKey, ToolContext, ToolId, ToolInfo, ToolOutput, make_tool_error,
 };
 use serde_json::{Value, json};
 use tokio::runtime::Handle;
@@ -23,15 +23,18 @@ use crate::search::WebSearch;
 /// The Pack's `PackInfo`.
 ///
 /// Its FQN is `runvil/web`, so its Pack id is `web`. It has no prelude
-/// and needs no per-run service; its `construct` reads
-/// [`SEARCH_PROVIDER`] and the Plugin contract's
-/// [`runvil_plugin::TOKIO_RUNTIME`] service from the Host-wide services
-/// and takes no configuration but `null` or `{}`.
-const WEB: PackInfo =
-    PackInfo::new("runvil/web", construct).description("Search the web and fetch pages");
+/// and needs no per-run service; its `install` reads [`SEARCH_PROVIDER`]
+/// and the Plugin contract's [`runvil_plugin::TOKIO_RUNTIME`] service
+/// from the Host-wide services and takes no configuration but `null` or
+/// `{}`.
+const WEB: PackInfo = PackInfo::new("runvil/web").description("Search the web and fetch pages");
 
-/// The Plugin: inserts the `web` Pack into `packs` with `config["web"]`, which
-/// is `null` when `config` has no `web` key.
+/// The Plugin: inserts the `web` Pack into `packs` with a factory holding
+/// the HTTP clients every instance shares, built from the search provider
+/// and the Tokio runtime in `services`. A missing one inserts the Pack
+/// unavailable, naming it. Its config, `config["web"]`, which is `null`
+/// when `config` has no `web` key, must be `null` or `{}`; anything else
+/// inserts the Pack unavailable with "web takes no configuration".
 ///
 /// # Errors
 /// Returns the registry's refusal, such as an
@@ -41,8 +44,15 @@ const WEB: PackInfo =
     clippy::needless_pass_by_value,
     reason = "the Plugin signature fixes the argument types"
 )]
-pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), Error> {
-    packs.insert(WEB, config["web"].clone())
+pub fn install(
+    packs: &mut PackRegistry,
+    config: Value,
+    services: &HostServices,
+) -> Result<(), Error> {
+    match Clients::new(&config["web"], services) {
+        Ok(clients) => packs.insert(WEB, clients),
+        Err(reason) => packs.insert_unavailable(WEB, reason),
+    }
 }
 
 /// The service key for the Host's search provider.
@@ -52,9 +62,55 @@ pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), Error> {
 pub const SEARCH_PROVIDER: ServiceKey<dyn SearchProvider> =
     ServiceKey::new("runvil/search-provider");
 
-/// The key `construct` reads the Host's runtime through. Every fetch is
+/// The key `install` reads the Host's runtime through. Every fetch is
 /// spawned onto it.
 const TOKIO_RUNTIME: ServiceKey<Handle> = ServiceKey::new(runvil_plugin::TOKIO_RUNTIME);
+
+/// The Pack's factory: the two tools every instance shares, built once at
+/// `install`.
+struct Clients {
+    fetch: WebFetch,
+    search: WebSearch,
+}
+
+impl Clients {
+    /// The clients over the two Host-wide services: refuses any
+    /// configuration but `null` or `{}`, and fails naming a missing
+    /// service.
+    fn new(config: &Value, services: &HostServices) -> Result<Clients, Error> {
+        if !(config.is_null() || *config == json!({})) {
+            return Err(make_tool_error(
+                ErrorCode::ToolOther,
+                "web takes no configuration",
+            ));
+        }
+        let provider = services.get(&SEARCH_PROVIDER).ok_or_else(|| {
+            make_tool_error(
+                ErrorCode::ToolOther,
+                "web needs runvil/search-provider, and this host provides none",
+            )
+        })?;
+        let runtime = services.get(&TOKIO_RUNTIME).ok_or_else(|| {
+            make_tool_error(
+                ErrorCode::ToolOther,
+                "web needs runvil/tokio-runtime, and this host provides none",
+            )
+        })?;
+        Ok(Clients {
+            fetch: FetchClient::new().tool(Handle::clone(&runtime)),
+            search: WebSearch::new(provider),
+        })
+    }
+}
+
+impl PackFactory for Clients {
+    /// Makes the Pack under the Pack id `id` over clones of the shared
+    /// clients, naming the tools `<id>/fetch` and `<id>/search`.
+    fn new_pack(&self, id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+        let web = Web::new(id, self.fetch.clone(), self.search.clone())?;
+        Ok(Arc::new(web))
+    }
+}
 
 /// The one object every run shares: its two-tool list and the two tools.
 #[derive(Debug)]
@@ -62,45 +118,6 @@ struct Web {
     tools: Vec<ToolInfo>,
     fetch: WebFetch,
     search: WebSearch,
-}
-
-/// Builds the Pack under the Pack id `name`: refuses any configuration
-/// but `null` or `{}`, reads the two Host-wide services or fails naming
-/// the missing one, and names the tools `<name>/fetch` and
-/// `<name>/search`.
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "the PackInfo construct signature fixes the argument types"
-)]
-fn construct(
-    name: &PackId,
-    config: Value,
-    services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
-    if !(config.is_null() || config == json!({})) {
-        return Err(make_tool_error(
-            ErrorCode::ToolOther,
-            "web takes no configuration",
-        ));
-    }
-    let provider = services.get(&SEARCH_PROVIDER).ok_or_else(|| {
-        make_tool_error(
-            ErrorCode::ToolOther,
-            "web needs runvil/search-provider, and this host provides none",
-        )
-    })?;
-    let runtime = services.get(&TOKIO_RUNTIME).ok_or_else(|| {
-        make_tool_error(
-            ErrorCode::ToolOther,
-            "web needs runvil/tokio-runtime, and this host provides none",
-        )
-    })?;
-    let web = Web::new(
-        name,
-        FetchClient::new().tool(Handle::clone(&runtime)),
-        WebSearch::new(provider),
-    )?;
-    Ok(Arc::new(web))
 }
 
 impl Web {

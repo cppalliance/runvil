@@ -16,7 +16,7 @@ use runvil_plugin::{
 use serde_json::{Value, json};
 
 /// The `PackInfo`, whose Pack id is `user-input`.
-const ASKER: PackInfo = PackInfo::new("tests/user-input", construct)
+const ASKER: PackInfo = PackInfo::new("tests/user-input")
     .prelude(PRELUDE)
     .needs(NEEDS);
 
@@ -44,10 +44,10 @@ pub(crate) trait AskBroker: Send + Sync {
 /// A Host's Packs: the fixture, built as `user-input`.
 pub(crate) fn asker_packs() -> Packs {
     let mut packs = PackRegistry::new();
-    if let Err(error) = packs.insert(ASKER, Value::Null) {
+    if let Err(error) = packs.insert(ASKER, new_asker) {
         panic!("a new registry takes the fixture: {error}");
     }
-    Packs::new(packs, HostServices::new())
+    Packs::new(packs)
 }
 
 /// Run services holding `broker` as the run's input broker.
@@ -63,11 +63,7 @@ struct Asker {
     tools: Vec<ToolInfo>,
 }
 
-fn construct(
-    name: &PackId,
-    _config: Value,
-    _services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
+fn new_asker(name: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     let id = ToolId::parse(&format!("{name}/ask")).map_err(|e| {
         make_tool_error(
             ErrorCode::ToolBackend,

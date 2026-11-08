@@ -4,8 +4,8 @@
 //! A Pack names the per-run services its calls read as [`ServiceId`]s,
 //! and reads a service through a [`ServiceKey`], which binds an id
 //! literal to the provider's Rust type. The Host fills two
-//! [`HostServices`] maps: the Host-wide one a Pack's `construct` reads,
-//! and each run's own, which its calls read.
+//! [`HostServices`] maps: the Host-wide one a Plugin's `install` reads,
+//! and each run's own, which a Pack's calls read.
 //!
 //! An id literal is a [`GlobalName`] with exactly one `/`, as in
 //! `namespace/name`. [`HostServices::provide`] refuses any other literal.

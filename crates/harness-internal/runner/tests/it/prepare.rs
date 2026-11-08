@@ -35,7 +35,7 @@ use serde_json::{Value, json};
 
 use crate::harness::launch;
 use crate::scripted::{MODEL, ScriptedBroker};
-use crate::support::{Unused, registry};
+use crate::support::{Make, Unused, registry};
 
 #[path = "prepare-files.rs"]
 mod files;
@@ -81,12 +81,13 @@ fn assert_no_records(recorder: &MemoryRecorder, run_id: RunId) {
 
 /// A Host's Packs with none but the built-in.
 pub(crate) fn bare() -> Packs {
-    Packs::new(registry(&[]), HostServices::new())
+    Packs::new(registry(&[]))
 }
 
-/// A Host's Packs: `info` beside the built-in.
-pub(crate) fn building(info: PackInfo) -> Packs {
-    Packs::new(registry(&[info]), HostServices::new())
+/// A Host's Packs: `pack`, an info beside its factory, beside the
+/// built-in.
+pub(crate) fn building(pack: (PackInfo, Make)) -> Packs {
+    Packs::new(registry(&[pack]))
 }
 
 /// The setup of a run recorded through `recorder` and served by the
@@ -119,15 +120,20 @@ pub(crate) fn run_of(error: &Error) -> RunId {
 
 /// The fixture Pack `tools`: one tool, `tools/echo`, echoing its
 /// `value` argument as trusted text.
-const TOOLS: PackInfo = echo_pack("tests/tools", None);
+const TOOLS: (PackInfo, Make) = echo_pack("tests/tools", None);
 
-/// A Pack with the FQN `fqn` that offers `<name>/echo`, with `prelude`.
-pub(crate) const fn echo_pack(fqn: &'static str, prelude: Option<&'static str>) -> PackInfo {
-    let info = PackInfo::new(fqn, construct_echo);
-    match prelude {
+/// A Pack with the FQN `fqn` that offers `<name>/echo`, with `prelude`,
+/// beside its factory.
+pub(crate) const fn echo_pack(
+    fqn: &'static str,
+    prelude: Option<&'static str>,
+) -> (PackInfo, Make) {
+    let info = PackInfo::new(fqn);
+    let info = match prelude {
         Some(prelude) => info.prelude(prelude),
         None => info,
-    }
+    };
+    (info, new_echo)
 }
 
 /// A Pack offering the one echo tool.
@@ -137,13 +143,9 @@ struct Echo {
 
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the PackInfo construct signature fixes the return type"
+    reason = "the PackFactory signature fixes the return type"
 )]
-fn construct_echo(
-    name: &PackId,
-    _config: Value,
-    _services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
+fn new_echo(name: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     let echo = ToolInfo::new(
         ToolId::parse(&format!("{name}/echo")).unwrap(),
         "Echo the value argument.",
@@ -449,7 +451,7 @@ async fn the_packs_split_by_declaration_and_a_script_calls_an_extras_tool_object
         return tostring(declared.required) .. ':' .. declared.tools[1].id .. '|' .. \
           extras[1].name .. ':' .. extra.id .. '|' .. tools.call(extra, { value = 'hi' })\n```\n";
     let extra = echo_pack("runvil/extra", None);
-    let host = Packs::new(registry(&[TOOLS, extra]), HostServices::new());
+    let host = Packs::new(registry(&[TOOLS, extra]));
     assert_eq!(
         completed(drive_over(offering, host).await),
         "true:tools/echo|extra:extra/echo|hi",

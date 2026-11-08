@@ -154,7 +154,7 @@ async fn a_prompt_declaring_web_prepares_on_the_servers_built_packs() {
     assert_eq!(
         run_prompt(host, requiring("web")).await,
         Ok(Ok("browsed".to_owned())),
-        "the server adds web and provides both services its construct reads"
+        "the server adds web and provides both services its install reads"
     );
 }
 
@@ -174,7 +174,7 @@ async fn a_host_without_the_search_provider_refuses_a_prompt_requiring_web() {
     runtime_only
         .provide(&RUNTIME, Arc::new(tokio::runtime::Handle::current()))
         .expect("an empty map takes the runtime");
-    let (host, _ask) = with_plugins(runtime_only, json!({}));
+    let (host, _ask) = with_plugins(&runtime_only, json!({}));
 
     let result = run_prompt(host, requiring("web")).await;
     let Err(message) = result else {
@@ -237,15 +237,15 @@ async fn a_prompt_declaring_mcp_prepares_on_the_runtime_the_server_provides() {
     assert_eq!(
         run_prompt(host, requiring("mcp")).await,
         Ok(Ok("browsed".to_owned())),
-        "the server adds mcp once, and its construct finds the server's runtime"
+        "the server adds mcp once, and its install finds the server's runtime"
     );
 }
 
 #[tokio::test]
 async fn the_servers_value_is_the_mcp_packs_configuration() {
     // A value that is neither null nor an object is the one configuration
-    // the construct refuses, so only that value reaching it fails the run.
-    let (host, _ask) = with_plugins(services(&Registry::new()), json!([]));
+    // the install refuses, so only that value reaching it fails the run.
+    let (host, _ask) = with_plugins(&services(&Registry::new()), json!([]));
 
     let result = run_prompt(host, requiring("mcp")).await;
     let Err(message) = result else {

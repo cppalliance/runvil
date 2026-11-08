@@ -1,5 +1,5 @@
 //! Tests for the Host's Packs and each run's snapshot: `new` builds every
-//! registered Pack, the built-in included, and stores a construct failure
+//! registered Pack, the built-in included, and stores a factory's refusal
 //! as unavailable; and the snapshot's roster, catalog, preludes, and
 //! calls. The pick of each run's Packs and the ready wait
 //! over them sit in the `pick` child module, and the snapshot's renders
@@ -17,8 +17,8 @@ use runvil::vfs::{Origin, VfsRef};
 use runvil::{Error, ErrorCode};
 use runvil::{Prompt, Run, RunParams, RunSeed, Step};
 use runvil_plugin::{
-    HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceId, ServiceKey,
-    ToolContext, ToolId, ToolInfo, ToolOutput,
+    HostServices, Pack, PackFactory, PackFuture, PackId, PackInfo, PackRegistry, ServiceId,
+    ServiceKey, ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -30,11 +30,11 @@ mod pick;
 #[path = "packs-tests-render.rs"]
 mod render;
 
-/// A Host-wide service a fixture's `construct` reads.
+/// A Host-wide service a fixture's factory reads.
 const BACKEND: ServiceKey<str> = ServiceKey::new("tests/backend");
 
-/// A Host-wide service each [`listed`] construct records its Pack id in,
-/// so a test sees which Packs were built.
+/// A Host-wide service each [`listed`] Pack records its Pack id in as it
+/// is made, so a test sees which Packs were built.
 const BUILT: ServiceKey<Mutex<Vec<String>>> = ServiceKey::new("tests/built");
 
 /// A per-run service a fixture's calls read.
@@ -77,15 +77,27 @@ impl Pack for Listed {
     }
 }
 
-/// Builds a [`Listed`] from a configuration whose `tools` is a list of
+/// How a fixture factory makes its Pack: from the Pack id, the config a
+/// test gives it, and the Host-wide services it holds.
+type Make = fn(&PackId, &Value, &HostServices) -> Result<Arc<dyn Pack>, Error>;
+
+/// A factory that makes its Pack with `make` from `config` and the
+/// Host-wide `services`, which it holds as a Plugin's factory holds what
+/// its `install` read.
+fn factory(make: Make, config: Value, services: HostServices) -> impl PackFactory {
+    move |id: &PackId, _run: &HostServices| -> Result<Arc<dyn Pack>, Error> {
+        make(id, &config, &services)
+    }
+}
+
+/// Makes a [`Listed`] from a configuration whose `tools` is a list of
 /// `{ id }` tool entries, taking each id as given, and records the Pack
 /// id in [`BUILT`] when the Host provides it.
 #[expect(
-    clippy::needless_pass_by_value,
     clippy::unnecessary_wraps,
-    reason = "the PackInfo construct signature fixes the argument and return types"
+    reason = "the Make signature fixes the return type"
 )]
-fn listed(name: &PackId, config: Value, services: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+fn listed(name: &PackId, config: &Value, services: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     if let Some(built) = services.get(&BUILT) {
         built.lock().unwrap().push(name.to_string());
     }
@@ -111,9 +123,9 @@ fn listed_tool(id: &str) -> ToolInfo {
     )
 }
 
-/// Builds a [`Listed`] with one `<name>/use` tool, failing when the Host
+/// Makes a [`Listed`] with one `<name>/use` tool, refusing when the Host
 /// provides no [`BACKEND`].
-fn backed(name: &PackId, _config: Value, services: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+fn backed(name: &PackId, _config: &Value, services: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     if services.get(&BACKEND).is_none() {
         return Err(make_tool_error(
             ErrorCode::ToolOther,
@@ -122,14 +134,15 @@ fn backed(name: &PackId, _config: Value, services: &HostServices) -> Result<Arc<
     }
     listed(
         name,
-        json!({ "tools": [tool(&format!("{name}/use"))] }),
+        &json!({ "tools": [tool(&format!("{name}/use"))] }),
         services,
     )
 }
 
-/// A Pack with the FQN `fqn` that offers the configured tools.
+/// A Pack with the FQN `fqn`, which [`host`] makes as a [`Listed`] Pack
+/// that offers the configured tools.
 const fn info(fqn: &'static str) -> PackInfo {
-    PackInfo::new(fqn, listed)
+    PackInfo::new(fqn)
 }
 
 /// One tool entry of a [`listed`] configuration.
@@ -148,19 +161,25 @@ fn name(text: &str) -> PackId {
 }
 
 /// A Host with no Host-wide services over a registry holding each of
-/// `packs` with its config.
+/// `packs` as a [`Listed`] Pack made from its config.
 fn host(packs: &[(PackInfo, Value)]) -> Packs {
-    host_with(HostServices::new(), packs)
+    let packs: Vec<(PackInfo, Make, Value)> = packs
+        .iter()
+        .map(|(info, config)| (*info, listed as Make, config.clone()))
+        .collect();
+    host_with(&HostServices::new(), &packs)
 }
 
-/// A Host over the Host-wide `services` and a registry holding each of
-/// `packs` with its config.
-fn host_with(services: HostServices, packs: &[(PackInfo, Value)]) -> Packs {
+/// A Host over a registry holding each of `packs`, whose factory makes it
+/// with its `Make` from its config and the Host-wide `services`.
+fn host_with(services: &HostServices, packs: &[(PackInfo, Make, Value)]) -> Packs {
     let mut registry = PackRegistry::new();
-    for (info, config) in packs {
-        registry.insert(*info, config.clone()).unwrap();
+    for (info, make, config) in packs {
+        registry
+            .insert(*info, factory(*make, config.clone(), services.clone()))
+            .unwrap();
     }
-    Packs::new(registry, services)
+    Packs::new(registry)
 }
 
 /// A prompt with the given `uses:` and `tools:` frontmatter lines.
@@ -263,11 +282,11 @@ fn new_builds_every_registered_pack_once_with_its_config_the_builtin_included() 
     let mut wide = HostServices::new();
     wide.provide(&BUILT, Arc::clone(&built)).unwrap();
     let host = host_with(
-        wide,
+        &wide,
         &[
-            (info("runvil/kit"), offering(&["kit/a"])),
-            (info("acme/kit"), offering(&["kit/b"])),
-            (info("acme/poop"), Value::Null),
+            (info("runvil/kit"), listed, offering(&["kit/a"])),
+            (info("acme/kit"), listed, offering(&["kit/b"])),
+            (info("acme/poop"), listed, Value::Null),
         ],
     );
     assert_eq!(
@@ -282,7 +301,7 @@ fn new_builds_every_registered_pack_once_with_its_config_the_builtin_included() 
     assert_eq!(
         catalog_ids(&host, HostServices::new(), &prompt("uses:\n  - acme/kit\n")),
         ["kit/b"],
-        "the stored config reached the declared Pack's construct"
+        "the declared Pack's factory made it from its own config"
     );
 }
 
@@ -294,9 +313,9 @@ fn a_run_over_a_fresh_registry_holds_a_usable_subagents_pack_with_no_tools() {
 }
 
 #[test]
-fn a_construct_failure_is_stored_and_reported_as_unavailable_with_its_reason() {
-    let backed_info = PackInfo::new("acme/backed", backed);
-    let bare = host(&[(backed_info, Value::Null)]);
+fn a_factory_refusal_is_stored_and_reported_as_unavailable_with_its_reason() {
+    let backed_pack = (PackInfo::new("acme/backed"), backed as Make, Value::Null);
+    let bare = host_with(&HostServices::new(), std::slice::from_ref(&backed_pack));
     let declares = prompt("uses:\n  - acme/backed\n");
     let run = begin(&bare, HostServices::new(), BTreeMap::new(), &declares);
     assert_eq!(
@@ -315,12 +334,12 @@ fn a_construct_failure_is_stored_and_reported_as_unavailable_with_its_reason() {
 
     let mut wide = HostServices::new();
     wide.provide(&BACKEND, Arc::from("up")).unwrap();
-    let provided = host_with(wide, &[(backed_info, Value::Null)]);
+    let provided = host_with(&wide, &[backed_pack]);
     let run = begin(&provided, HostServices::new(), BTreeMap::new(), &declares);
     assert_eq!(
         run.roster().get(&name("backed")),
         Some(&usable_from("acme")),
-        "construct reads the Host-wide services"
+        "the factory reads the Host-wide services it holds"
     );
 }
 

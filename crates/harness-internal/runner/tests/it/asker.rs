@@ -14,10 +14,15 @@ use runvil_plugin::{
 };
 use serde_json::{Value, json};
 
-/// The `PackInfo`, whose Pack id is `user-input`.
-pub(crate) const ASKER: PackInfo = PackInfo::new("tests/user-input", construct)
-    .prelude(PRELUDE)
-    .needs(NEEDS);
+use crate::support::Make;
+
+/// The `PackInfo`, whose Pack id is `user-input`, beside its factory.
+pub(crate) const ASKER: (PackInfo, Make) = (
+    PackInfo::new("tests/user-input")
+        .prelude(PRELUDE)
+        .needs(NEEDS),
+    new_asker,
+);
 
 /// The key the run's broker is provided under.
 pub(crate) const BROKER: ServiceKey<dyn AskBroker> = ServiceKey::new("tests/input-broker");
@@ -53,13 +58,9 @@ struct Asker {
 
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the PackInfo construct signature fixes the return type"
+    reason = "the PackFactory signature fixes the return type"
 )]
-fn construct(
-    name: &PackId,
-    _config: Value,
-    _services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
+fn new_asker(name: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     let ask = ToolInfo::new(
         ToolId::parse(&format!("{name}/ask")).unwrap(),
         "Wait for the operator's next message.",

@@ -1,6 +1,6 @@
 //! The crate's Plugin, [`install`], the `std` Pack's `PackInfo`, the
-//! `construct` that builds its one shared object, and the stub that every
-//! tool but Read, ListDir, and Grep still answers with in this build.
+//! factory that makes its object, and the stub that every tool but Read,
+//! ListDir, and Grep still answers with in this build.
 
 use std::sync::Arc;
 
@@ -32,10 +32,13 @@ pub const NOT_IMPLEMENTED: &str = "The <name> tool is not implemented in this bu
 /// needs no per-run service, and takes no configuration but `null` or
 /// `{}`.
 const STD: PackInfo =
-    PackInfo::new("runvil/std", construct).description("Read, write, search, and delete files");
+    PackInfo::new("runvil/std").description("Read, write, search, and delete files");
 
-/// The Plugin: inserts the `std` Pack into `packs` with `config["std"]`,
-/// which is `null` when `config` has no `std` key.
+/// The Plugin: inserts the `std` Pack into `packs`. Its config,
+/// `config["std"]`, which is `null` when `config` has no `std` key, must
+/// be `null` or `{}`; anything else inserts the Pack unavailable with
+/// "std takes no configuration". It reads none of the Host-wide
+/// `services`.
 ///
 /// # Errors
 /// Returns the registry's refusal, such as an
@@ -45,8 +48,19 @@ const STD: PackInfo =
     clippy::needless_pass_by_value,
     reason = "the Plugin signature fixes the argument types"
 )]
-pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), Error> {
-    packs.insert(STD, config["std"].clone())
+pub fn install(
+    packs: &mut PackRegistry,
+    config: Value,
+    _services: &HostServices,
+) -> Result<(), Error> {
+    let config = &config["std"];
+    if !(config.is_null() || *config == json!({})) {
+        return packs.insert_unavailable(
+            STD,
+            make_tool_error(ErrorCode::ToolOther, "std takes no configuration"),
+        );
+    }
+    packs.insert(STD, new_pack)
 }
 
 /// The one object every run shares: its tool list.
@@ -55,23 +69,9 @@ struct Std {
     tools: Vec<ToolInfo>,
 }
 
-/// Builds the Pack under the Pack id `name`: refuses any configuration but
-/// `null` or `{}` and names each tool `<name>/<segment>`.
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "the PackInfo construct signature fixes the argument types"
-)]
-fn construct(
-    name: &PackId,
-    config: Value,
-    _services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
-    if !(config.is_null() || config == json!({})) {
-        return Err(make_tool_error(
-            ErrorCode::ToolOther,
-            "std takes no configuration",
-        ));
-    }
+/// The Pack's factory: makes the Pack under the Pack id `name`, naming
+/// each tool `<name>/<segment>`.
+fn new_pack(name: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     let tools = spec::all()?
         .iter()
         .map(|definition| {

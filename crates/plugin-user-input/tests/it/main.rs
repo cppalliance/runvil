@@ -1,5 +1,5 @@
 //! Integration tests for `plugin-user-input`: the Pack `install` inserts,
-//! the ask tool `construct` names under the Pack id it receives, the
+//! the ask tool its factory names under the Pack id it receives, the
 //! answers a call returns from the run's broker, and the prelude.
 #![expect(
     clippy::expect_used,

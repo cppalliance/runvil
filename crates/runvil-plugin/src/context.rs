@@ -23,8 +23,8 @@ use crate::{HostServices, ServiceKey};
 /// or keep it past the call.
 ///
 /// The services are the run's, such as its input broker. The Host-wide
-/// services never reach a call; a Pack keeps any it needs from its
-/// [`PackInfo::construct`](crate::PackInfo::construct).
+/// services never reach a call; a Plugin's `install` keeps any its Pack
+/// needs in the Pack's [`PackFactory`](crate::PackFactory).
 #[derive(Debug)]
 pub struct ToolContext<'a> {
     tool: &'a ToolId,

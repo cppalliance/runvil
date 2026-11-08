@@ -2,11 +2,12 @@
 //! Pack a [`PackRegistry`] holds and shared by every run, the pick of
 //! each run's Packs, and the snapshot each run takes of them.
 //!
-//! The Host's Plugins insert Packs into the registry, and building the
-//! Packs calls each Pack's `construct` once, with the config its Plugin
-//! inserted it with, to build the one Pack object every run shares. A
-//! construct failure is not an error: the Pack is stored as unavailable
-//! with the failure as its reason, and every run that needs it is refused
+//! The Host's Plugins insert Packs into the registry, each with its
+//! factory or unavailable for a reason, and building the Packs calls each
+//! factory once, with an empty run map, to make the one Pack object every
+//! run shares. A factory's refusal is not an error: the Pack is stored as
+//! unavailable with the refusal as its reason, as a Pack inserted
+//! unavailable is with its own, and every run that needs it is refused
 //! naming that reason.
 //!
 //! A run's Packs are the Packs its prompt declares under `uses:`, plus
@@ -80,31 +81,39 @@ pub(crate) struct Picked {
 }
 
 impl Packs {
-    /// Builds every Pack `packs` holds, the built-ins included, handing
-    /// each `construct` its Pack id, its stored config, and the Host-wide
-    /// `services`. A failed construct leaves that Pack unavailable, with
-    /// the failure as its reason.
+    /// Takes every Pack `packs` holds, the built-ins included. In this
+    /// build it calls each factory once with its Pack id and an empty run
+    /// map, and warns once per Pack inserted unavailable or refused by its
+    /// factory, each of which is stored as unavailable with its reason.
     ///
-    /// `services` are Host-wide, such as a search provider. They reach
-    /// only `construct`; a tool call reads the run's own services instead.
+    /// The Host-wide services reached each Plugin's `install`; a tool
+    /// call reads the run's own services instead.
     #[must_use]
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "the public signature takes the Host-wide services by value"
-    )]
-    pub fn new(packs: PackRegistry, services: HostServices) -> Packs {
+    pub fn new(packs: PackRegistry) -> Packs {
+        let run = HostServices::new();
         let built = packs
             .into_entries()
-            .map(|(info, id, config)| {
-                let pack = (info.construct)(&id, config, &services).map_err(|error| {
-                    tracing::warn!(
-                        pack = %id,
-                        fqn = info.fqn,
-                        %error,
-                        "Pack construct failed; it is built as unavailable"
-                    );
-                    error.to_string()
-                });
+            .map(|(info, id, factory)| {
+                let pack = match factory {
+                    Ok(factory) => factory.new_pack(&id, &run).map_err(|error| {
+                        tracing::warn!(
+                            pack = %id,
+                            fqn = info.fqn,
+                            %error,
+                            "Pack factory refused; it is built as unavailable"
+                        );
+                        error.to_string()
+                    }),
+                    Err(error) => {
+                        tracing::warn!(
+                            pack = %id,
+                            fqn = info.fqn,
+                            %error,
+                            "Pack was inserted unavailable"
+                        );
+                        Err(error.to_string())
+                    }
+                };
                 (info.fqn, Built { id, info, pack })
             })
             .collect();
@@ -162,8 +171,8 @@ impl Packs {
     }
 
     /// Why each Pack `prompt` declares can serve no run of this Host: not
-    /// installed, or its construct failed. A bare `uses:` id means
-    /// `runvil/<id>`. Empty when every one built.
+    /// installed, inserted unavailable, or refused by its factory. A bare
+    /// `uses:` id means `runvil/<id>`. Empty when every one built.
     pub(crate) fn refusals(&self, prompt: &Prompt) -> Vec<(PackId, String)> {
         prompt
             .frontmatter()
@@ -279,8 +288,7 @@ impl Packs {
 }
 
 impl fmt::Debug for Packs {
-    /// Shows each built Pack's FQN and Pack id with whether it built, and
-    /// never a Pack's config.
+    /// Shows each built Pack's FQN and Pack id with whether it built.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let built: Vec<(&str, &PackId, bool)> = self
             .built
@@ -304,8 +312,9 @@ pub(crate) struct RunPacks {
 enum PackState {
     /// It can serve; its validated tools are in the run's catalog.
     Usable { info: PackInfo, pack: Arc<dyn Pack> },
-    /// The pick could not resolve it, or its `construct` failed, or its
-    /// `ready` did before this run, for this reason.
+    /// The pick could not resolve it, or it was inserted unavailable, or
+    /// its factory refused, or its `ready` failed before this run, for
+    /// this reason.
     Unavailable(String),
     /// The run lacks these services from the Pack's needs.
     NeedsUnmet(Vec<ServiceId>),

@@ -1,8 +1,8 @@
-//! A fixture Plugin crate's whole Pack side: a `GREETER` constant, a
-//! `construct` that reads a Host-wide service and names its tool under the
-//! Pack id it receives, and an `impl Pack` whose `call` reads a per-run
-//! service through the context it is lent and whose `render` is the
-//! default.
+//! A fixture Plugin crate's whole Pack side: a `GREETER` constant, an
+//! `install` that reads a Host-wide service into the Pack's factory, a
+//! factory that names its tool under the Pack id it receives, and an
+//! `impl Pack` whose `call` reads a per-run service through the context
+//! it is lent and whose `render` is the default.
 
 use std::future::Future;
 use std::num::NonZeroU32;
@@ -12,13 +12,13 @@ use std::task::{Context, Poll, Waker};
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    Error, ErrorCode, HostServices, ModelId, ModelInfo, OutputTrust, Pack, PackFuture, PackId,
-    PackInfo, RenderContext, ServiceId, ServiceKey, ThinkingMode, ToolContext, ToolId, ToolInfo,
-    ToolOutput, make_tool_error,
+    Error, ErrorCode, HostServices, ModelId, ModelInfo, OutputTrust, Pack, PackFactory, PackFuture,
+    PackId, PackInfo, PackRegistry, RenderContext, ServiceId, ServiceKey, ThinkingMode,
+    ToolContext, ToolId, ToolInfo, ToolOutput, make_tool_error,
 };
 use serde_json::{Value, json};
 
-/// The Host-wide service `construct` reads.
+/// The Host-wide service `install` reads.
 const GREETING: ServiceKey<str> = ServiceKey::new("acme/greeting");
 
 /// The per-run service a call reads.
@@ -26,46 +26,63 @@ const VISITOR: ServiceKey<str> = ServiceKey::new("acme/visitor");
 
 const NEEDS: &[ServiceId] = &[VISITOR.id()];
 
-const GREETER: PackInfo = PackInfo::new("acme/greeter", construct)
+const GREETER: PackInfo = PackInfo::new("acme/greeter")
     .prelude("local pack = ...\n")
     .needs(NEEDS);
+
+/// The fixture's Plugin: inserts `GREETER` with a factory over the
+/// Host-wide greeting, or unavailable when its config is set or the
+/// greeting is missing.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the Plugin signature fixes the argument types"
+)]
+fn install(packs: &mut PackRegistry, config: Value, services: &HostServices) -> Result<(), Error> {
+    if !config["greeter"].is_null() {
+        return packs.insert_unavailable(
+            GREETER,
+            make_tool_error(ErrorCode::ToolOther, "greeter takes no configuration"),
+        );
+    }
+    match services.get(&GREETING) {
+        Some(greeting) => packs.insert(GREETER, Greetings { greeting }),
+        None => packs.insert_unavailable(
+            GREETER,
+            make_tool_error(
+                ErrorCode::ToolOther,
+                "greeter needs acme/greeting, and this Host provides none",
+            ),
+        ),
+    }
+}
+
+/// The factory: what every instance shares, the Host-wide greeting.
+struct Greetings {
+    greeting: Arc<str>,
+}
+
+impl PackFactory for Greetings {
+    fn new_pack(&self, id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+        let tool = ToolId::parse(&format!("{id}/greet")).map_err(|e| {
+            make_tool_error(ErrorCode::ToolBackend, "greeter could not name its tool")
+                .with_cause(&e)
+        })?;
+        let tools = vec![ToolInfo::new(
+            tool,
+            "Greets this run's visitor.",
+            json!({"type": "object", "properties": {"mark": {"type": "string"}}}),
+        )];
+        Ok(Arc::new(Greeter {
+            greeting: Arc::clone(&self.greeting),
+            tools,
+        }))
+    }
+}
 
 /// The one object every run shares.
 struct Greeter {
     greeting: Arc<str>,
     tools: Vec<ToolInfo>,
-}
-
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "the PackInfo construct signature fixes the argument types"
-)]
-fn construct(
-    name: &PackId,
-    config: Value,
-    services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
-    if !config.is_null() {
-        return Err(make_tool_error(
-            ErrorCode::ToolOther,
-            "greeter takes no configuration",
-        ));
-    }
-    let greeting = services.get(&GREETING).ok_or_else(|| {
-        make_tool_error(
-            ErrorCode::ToolOther,
-            "greeter needs acme/greeting, and this Host provides none",
-        )
-    })?;
-    let id = ToolId::parse(&format!("{name}/greet")).map_err(|e| {
-        make_tool_error(ErrorCode::ToolBackend, "greeter could not name its tool").with_cause(&e)
-    })?;
-    let tools = vec![ToolInfo::new(
-        id,
-        "Greets this run's visitor.",
-        json!({"type": "object", "properties": {"mark": {"type": "string"}}}),
-    )];
-    Ok(Arc::new(Greeter { greeting, tools }))
 }
 
 impl Pack for Greeter {
@@ -118,31 +135,55 @@ fn host_wide() -> HostServices {
     services
 }
 
+/// The greeter's factory `install` inserts with `config` and the Host-wide
+/// `services`, or the reason it inserted the Pack unavailable.
+fn installed(config: Value, services: &HostServices) -> Result<Arc<dyn PackFactory>, Error> {
+    let mut packs = PackRegistry::new();
+    install(&mut packs, config, services).expect("a fresh registry takes the greeter");
+    let (_info, _id, factory) = packs
+        .into_entries()
+        .find(|(info, _, _)| info.fqn == GREETER.fqn)
+        .expect("install inserts the greeter");
+    factory
+}
+
 fn built_as(name: &str) -> Arc<dyn Pack> {
     let name = PackId::parse(name).expect("a one-segment Pack id parses");
-    let Ok(pack) = (GREETER.construct)(&name, Value::Null, &host_wide()) else {
-        panic!("construct succeeds when its Host-wide service is provided");
+    let Ok(factory) = installed(Value::Null, &host_wide()) else {
+        panic!("install inserts the greeter usable when its Host-wide service is provided");
+    };
+    let Ok(pack) = factory.new_pack(&name, &HostServices::new()) else {
+        panic!("the factory makes the Pack");
     };
     pack
 }
 
 #[test]
-fn construct_names_the_tools_under_the_pack_id_it_receives() {
+fn the_factory_names_the_tools_under_the_pack_id_it_receives() {
     let tools = built_as("hi").tools();
     let ids: Vec<String> = tools.iter().map(|tool| tool.id.to_string()).collect();
     assert_eq!(ids, ["hi/greet"]);
 }
 
 #[test]
-fn construct_fails_with_a_tool_error_when_a_host_wide_service_is_missing() {
-    let name = PackId::parse("greeter").expect("a one-segment Pack id parses");
-    let Err(error) = (GREETER.construct)(&name, Value::Null, &HostServices::new()) else {
-        panic!("construct fails without its Host-wide service");
-    };
-    assert_eq!(
-        error.to_string(),
-        "greeter needs acme/greeting, and this Host provides none"
-    );
+fn install_inserts_the_pack_unavailable_when_its_setup_fails() {
+    for (config, services, reason) in [
+        (
+            Value::Null,
+            HostServices::new(),
+            "greeter needs acme/greeting, and this Host provides none",
+        ),
+        (
+            json!({ "greeter": 1 }),
+            host_wide(),
+            "greeter takes no configuration",
+        ),
+    ] {
+        let Err(error) = installed(config, &services) else {
+            panic!("{reason}: install inserts the greeter unavailable");
+        };
+        assert_eq!(error.to_string(), reason);
+    }
 }
 
 #[test]
@@ -191,29 +232,21 @@ fn a_call_without_the_per_run_service_it_needs_fails() {
 }
 
 #[test]
-fn pack_info_from_new_has_no_prelude_and_no_needs_until_set() {
-    const BARE: PackInfo = PackInfo::new("acme/bare", construct);
-    const FULL: PackInfo = PackInfo::new("acme/full", construct)
+fn pack_info_from_new_has_no_description_prelude_or_needs_until_set() {
+    const BARE: PackInfo = PackInfo::new("acme/bare");
+    const FULL: PackInfo = PackInfo::new("acme/full")
+        .description("Greets the visitor")
         .prelude("local pack = ...\n")
         .needs(NEEDS);
 
     assert_eq!(BARE.fqn, "acme/bare");
+    assert_eq!(BARE.description, "");
     assert_eq!(BARE.prelude, None);
     assert!(BARE.needs.is_empty());
     assert_eq!(FULL.fqn, "acme/full");
+    assert_eq!(FULL.description, "Greets the visitor");
     assert_eq!(FULL.prelude, Some("local pack = ...\n"));
     assert_eq!(FULL.needs, [VISITOR.id()]);
-    let name = PackId::parse("hi").expect("a one-segment Pack id parses");
-    for info in [BARE, FULL] {
-        let Ok(pack) = (info.construct)(&name, Value::Null, &host_wide()) else {
-            panic!(
-                "{}: construct succeeds with its Host-wide service",
-                info.fqn
-            );
-        };
-        let ids: Vec<String> = pack.tools().iter().map(|t| t.id.to_string()).collect();
-        assert_eq!(ids, ["hi/greet"], "{}", info.fqn);
-    }
 }
 
 #[test]

@@ -82,7 +82,7 @@ const RUNTIME: ServiceKey<tokio::runtime::Handle> = ServiceKey::new(runvil_plugi
 /// ask tool's vendor and id. `mcp` is the `[agents] mcp` setting: the mcp
 /// Pack is built over the servers of the file it names.
 fn host_packs(registry: &Registry, mcp: Option<&Path>) -> (Packs, Option<AskTool>) {
-    with_plugins(services(registry), read_mcp_servers(mcp))
+    with_plugins(&services(registry), read_mcp_servers(mcp))
 }
 
 /// The `mcpServers` object of the `mcp.json`-format file at `setting`,
@@ -140,19 +140,19 @@ fn read_mcp_servers(setting: Option<&Path>) -> Value {
     }
 }
 
-/// A Host over the Host-wide `services` after the server calls the
+/// A Host after the server calls, with the Host-wide `services`, the
 /// Plugins of the Packs agents may declare: `web`, `user-input`, so they
 /// can ask the operator, `mcp`, with the `servers` object as its
 /// configuration, and `std`, the file tools. Building the Host builds
 /// those Packs and the built-in `subagents`. The ask tool is the fixed
 /// `user-input/ask` of the `runvil/user-input` Pack, so its vendor is
 /// `runvil`, and `None` only if the user-input Plugin was refused.
-fn with_plugins(services: HostServices, servers: Value) -> (Packs, Option<AskTool>) {
+fn with_plugins(services: &HostServices, servers: Value) -> (Packs, Option<AskTool>) {
     let mut packs = PackRegistry::new();
-    if let Err(error) = plugin_web::install(&mut packs, Value::Null) {
+    if let Err(error) = plugin_web::install(&mut packs, Value::Null, services) {
         tracing::warn!(%error, "the web Plugin inserted no Pack");
     }
-    let ask = match plugin_user_input::install(&mut packs, Value::Null) {
+    let ask = match plugin_user_input::install(&mut packs, Value::Null, services) {
         Ok(()) => ToolId::parse(&format!("user-input/{}", plugin_user_input::ASK))
             .inspect_err(|error| tracing::warn!(%error, "the ask tool's id does not parse"))
             .ok()
@@ -166,21 +166,22 @@ fn with_plugins(services: HostServices, servers: Value) -> (Packs, Option<AskToo
         }
     };
     let mcp = Map::from_iter([("mcp".to_owned(), servers)]);
-    if let Err(error) = plugin_mcp::install(&mut packs, Value::Object(mcp)) {
+    if let Err(error) = plugin_mcp::install(&mut packs, Value::Object(mcp), services) {
         tracing::warn!(%error, "the mcp Plugin inserted no Pack");
     }
-    if let Err(error) = plugin_std::install(&mut packs, Value::Null) {
+    if let Err(error) = plugin_std::install(&mut packs, Value::Null, services) {
         tracing::warn!(%error, "the std Plugin inserted no Pack");
     }
-    (Packs::new(packs, services), ask)
+    (Packs::new(packs), ask)
 }
 
-/// The Host-wide services `web`'s construct reads: the search provider
-/// over the gateway `registry` holds, and the runtime the server runs on,
-/// under the Plugin contract's tokio runtime service. Built outside a
-/// runtime, as a synchronous test does, the runtime is left out, web is
-/// built as unavailable, and a run that requires web is refused. Each
-/// run's input broker is the run's own, so these leave it out.
+/// The Host-wide services the Plugins' `install`s read: the search
+/// provider over the gateway `registry` holds, and the runtime the server
+/// runs on, under the Plugin contract's tokio runtime service. Built
+/// outside a runtime, as a synchronous test does, the runtime is left
+/// out, web and mcp are inserted unavailable, and a run that requires
+/// either is refused. Each run's input broker is the run's own, so these
+/// leave it out.
 fn services(registry: &Registry) -> HostServices {
     let mut services = HostServices::new();
     // Two valid, distinct literals into an empty map, so neither call

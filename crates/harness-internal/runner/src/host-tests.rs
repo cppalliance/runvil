@@ -42,17 +42,13 @@ impl Pack for Idle {
 
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the PackInfo construct signature fixes the return type"
+    reason = "the PackFactory signature fixes the return type"
 )]
-fn builds(
-    _name: &PackId,
-    _config: Value,
-    _services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
+fn builds(_id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     Ok(Arc::new(Idle))
 }
 
-fn fails(_name: &PackId, _config: Value, _services: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+fn fails(_id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     Err(make_tool_error(
         ErrorCode::ToolOther,
         "the broken backend is down",
@@ -68,22 +64,27 @@ impl Timer for Instant {
     }
 }
 
-/// A Host holding `acme/kit`, which builds, and `acme/broken`, whose
-/// construct fails, that finds each prompt in `sources` by its name.
+/// A Host holding `acme/kit`, which builds, `acme/broken`, whose factory
+/// refuses, and `acme/offline`, inserted unavailable, that finds each
+/// prompt in `sources` by its name.
 fn host(sources: &[(&str, String)]) -> Host {
     let mut registry = PackRegistry::new();
+    registry.insert(PackInfo::new("acme/kit"), builds).unwrap();
     registry
-        .insert(PackInfo::new("acme/kit", builds), Value::Null)
+        .insert(PackInfo::new("acme/broken"), fails)
         .unwrap();
     registry
-        .insert(PackInfo::new("acme/broken", fails), Value::Null)
+        .insert_unavailable(
+            PackInfo::new("acme/offline"),
+            make_tool_error(ErrorCode::ToolOther, "offline takes no configuration"),
+        )
         .unwrap();
     let sources: BTreeMap<String, String> = sources
         .iter()
         .map(|(name, source)| ((*name).to_owned(), source.clone()))
         .collect();
     Host {
-        packs: Packs::new(registry, HostServices::new()),
+        packs: Packs::new(registry),
         prompts: Arc::new(move |name: &str| {
             sources
                 .get(name)
@@ -136,7 +137,7 @@ fn a_uses_entry_naming_an_uninstalled_pack_is_refused_naming_it() {
 }
 
 #[test]
-fn a_uses_entry_naming_a_pack_whose_construct_failed_is_refused_with_its_reason() {
+fn a_uses_entry_naming_a_pack_whose_factory_refused_is_refused_with_its_reason() {
     let host = host(&[("research.md", declaring("uses:\n  - acme/broken\n"))]);
     let error = host
         .parse("research.md")
@@ -146,6 +147,20 @@ fn a_uses_entry_naming_a_pack_whose_construct_failed_is_refused_with_its_reason(
         error.message,
         "the environment cannot satisfy this prompt:\n\
          - broken is unavailable: the broken backend is down"
+    );
+}
+
+#[test]
+fn a_uses_entry_naming_a_pack_inserted_unavailable_is_refused_with_its_reason() {
+    let host = host(&[("research.md", declaring("uses:\n  - acme/offline\n"))]);
+    let error = host
+        .parse("research.md")
+        .expect_err("acme/offline was inserted unavailable");
+    assert_eq!(error.code, ErrorCode::RequirementsUnmet, "{error:?}");
+    assert_eq!(
+        error.message,
+        "the environment cannot satisfy this prompt:\n\
+         - offline is unavailable: offline takes no configuration"
     );
 }
 

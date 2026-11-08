@@ -26,7 +26,7 @@ const SPEAKS: &str = "---\nname: speaks\ndescription: d\nrunvil: 0\n\
 
 /// The fixture Pack `speaker`: the echo tool and a prelude that calls
 /// it.
-const SPEAKER: PackInfo = echo_pack("tests/speaker", Some(SPEAKER_PRELUDE));
+const SPEAKER: (PackInfo, Make) = echo_pack("tests/speaker", Some(SPEAKER_PRELUDE));
 
 /// The logged record of the speaker's echo called with `value` from the
 /// entry `entry` of `section` by the section's script.
@@ -70,8 +70,8 @@ async fn a_preludes_tool_calls_are_recorded_as_script_calls_from_the_section_tha
 
 #[tokio::test]
 async fn preludes_run_in_the_prompts_declaration_order_not_the_registry_order() {
-    let infos = ["tests/first", "tests/second"].map(|fqn| echo_pack(fqn, Some("shared = 1\n")));
-    let host = Packs::new(registry(&infos), HostServices::new());
+    let packs = ["tests/first", "tests/second"].map(|fqn| echo_pack(fqn, Some("shared = 1\n")));
+    let host = Packs::new(registry(&packs));
     let declares_second_first = "---\nname: order\ndescription: d\nrunvil: 0\n\
         uses:\n  - tests/second\n  - tests/first\n---\n\n# Title\n\n## Only\n\n```lua\nreturn 'ran'\n```\n";
     let error = drive_over(declares_second_first, host)

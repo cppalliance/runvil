@@ -1,6 +1,6 @@
-//! The `std` Pack through the crate's `install`: the one Pack it inserts
-//! with its config, the seven tools `construct` names under the Pack id it
-//! receives, and what a call answers.
+//! The `std` Pack through the crate's `install`: the one Pack it inserts,
+//! unavailable for any config but `null` or `{}`, the seven tools its
+//! factory names under the Pack id it receives, and what a call answers.
 
 use std::future::Future;
 use std::pin::pin;
@@ -10,8 +10,8 @@ use std::task::{Context, Poll, Waker};
 use plugin_std::{NOT_IMPLEMENTED, install};
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    Error, ErrorCode, ErrorFact, HostServices, OutputTrust, Pack, PackId, PackRegistry, ToolId,
-    ToolOutput,
+    Error, ErrorCode, ErrorFact, HostServices, OutputTrust, Pack, PackFactory, PackId, PackInfo,
+    PackRegistry, ToolId, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -26,41 +26,53 @@ fn block_on<F: Future>(future: F) -> F::Output {
     }
 }
 
-/// The Pack `install` inserts into a fresh registry.
-fn std_pack() -> runvil_plugin::PackInfo {
+/// The Pack `install` inserts into a fresh registry with `config`, and its
+/// factory or the reason it was inserted unavailable.
+fn inserted_with(config: Value) -> (PackInfo, Result<Arc<dyn PackFactory>, Error>) {
     let mut packs = PackRegistry::new();
-    install(&mut packs, Value::Null).expect("a fresh registry takes the Pack");
-    let (info, _id, _config) = packs
+    install(&mut packs, config, &HostServices::new()).expect("a fresh registry takes the Pack");
+    let (info, _id, factory) = packs
         .into_entries()
         .find(|(info, _, _)| info.fqn != "runvil/subagents")
         .expect("install inserts one Pack");
-    info
+    (info, factory)
+}
+
+/// The Pack `install` inserts into a fresh registry.
+fn std_pack() -> PackInfo {
+    inserted_with(Value::Null).0
 }
 
 /// Each Pack `install` inserts into a fresh registry with `config`, beside
-/// the Pack id and config the registry holds it with.
-fn inserted(config: Value) -> Vec<(String, String, Value)> {
+/// its Pack id and the reason it was inserted unavailable, if it was.
+fn inserted(config: Value) -> Vec<(String, String, Option<String>)> {
     let mut packs = PackRegistry::new();
-    install(&mut packs, config).expect("a fresh registry takes the Pack");
+    install(&mut packs, config, &HostServices::new()).expect("a fresh registry takes the Pack");
     packs
         .into_entries()
         .filter(|(info, _, _)| info.fqn != "runvil/subagents")
-        .map(|(info, id, config)| (info.fqn.to_owned(), id.to_string(), config))
+        .map(|(info, id, factory)| {
+            let reason = factory.err().map(|error| error.to_string());
+            (info.fqn.to_owned(), id.to_string(), reason)
+        })
         .collect()
 }
 
-/// The Pack built under the Pack id `name` with `config`.
-fn construct(name: &str, config: Value) -> Result<Arc<dyn Pack>, Error> {
+/// The Pack made under the Pack id `name` by the factory `install` inserts.
+fn made(name: &str) -> Arc<dyn Pack> {
     let name = PackId::parse(name).expect("a one-segment Pack id parses");
-    (std_pack().construct)(&name, config, &HostServices::new())
-}
-
-/// The Pack built under `std`.
-pub(crate) fn built() -> Arc<dyn Pack> {
-    let Ok(pack) = construct("std", Value::Null) else {
-        panic!("construct succeeds with no configuration");
+    let Ok(factory) = inserted_with(Value::Null).1 else {
+        panic!("install inserts std usable with no configuration");
+    };
+    let Ok(pack) = factory.new_pack(&name, &HostServices::new()) else {
+        panic!("the factory makes the Pack");
     };
     pack
+}
+
+/// The Pack made under `std`.
+pub(crate) fn built() -> Arc<dyn Pack> {
+    made("std")
 }
 
 /// The tool id `segment` under the Pack id `std`.
@@ -97,16 +109,37 @@ fn the_pack_is_runvil_std_with_no_prelude_and_no_per_run_needs() {
 }
 
 #[test]
-fn install_adds_the_std_pack_with_the_config_under_its_pack_id() {
-    for (config, expected) in [
-        (json!({ "std": {}, "web": { "x": 1 } }), json!({})),
-        (json!({ "web": {} }), Value::Null),
-        (Value::Null, Value::Null),
+fn install_adds_the_std_pack_usable_when_its_config_is_null_or_an_empty_object() {
+    for config in [
+        json!({ "std": {}, "web": { "x": 1 } }),
+        json!({ "web": {} }),
+        Value::Null,
     ] {
         let read = inserted(config.clone());
         assert_eq!(
             read,
-            [("runvil/std".to_owned(), "std".to_owned(), expected)],
+            [("runvil/std".to_owned(), "std".to_owned(), None)],
+            "{config}"
+        );
+    }
+}
+
+#[test]
+fn install_adds_the_std_pack_unavailable_for_any_other_configuration() {
+    for config in [
+        json!(1),
+        json!({ "max_chars": 10 }),
+        json!([]),
+        json!("std"),
+    ] {
+        let read = inserted(json!({ "std": config }));
+        assert_eq!(
+            read,
+            [(
+                "runvil/std".to_owned(),
+                "std".to_owned(),
+                Some("std takes no configuration".to_owned())
+            )],
             "{config}"
         );
     }
@@ -115,8 +148,10 @@ fn install_adds_the_std_pack_with_the_config_under_its_pack_id() {
 #[test]
 fn install_returns_the_registrys_refusal() {
     let mut packs = PackRegistry::new();
-    install(&mut packs, Value::Null).expect("the first install inserts std");
-    let error = install(&mut packs, Value::Null).expect_err("a second install is refused");
+    let services = HostServices::new();
+    install(&mut packs, Value::Null, &services).expect("the first install inserts std");
+    let error =
+        install(&mut packs, Value::Null, &services).expect_err("a second install is refused");
     assert_eq!(error.code, ErrorCode::InvalidValue);
     assert_eq!(
         error.facts.get(&ErrorFact::Reason),
@@ -129,11 +164,8 @@ fn install_returns_the_registrys_refusal() {
 }
 
 #[test]
-fn construct_names_seven_tools_under_the_pack_id_it_receives() {
-    let Ok(pack) = construct("files", Value::Null) else {
-        panic!("construct succeeds with no configuration");
-    };
-    let ids: Vec<String> = pack
+fn the_factory_names_seven_tools_under_the_pack_id_it_receives() {
+    let ids: Vec<String> = made("files")
         .tools()
         .iter()
         .map(|tool| tool.id.to_string())
@@ -184,17 +216,6 @@ fn no_tool_survives_a_stop_or_reports_structured_output() {
             tool.id, tool.structured_output
         );
         assert!(!tool.describes_tools, "{}", tool.id);
-    }
-}
-
-#[test]
-fn construct_accepts_null_or_an_empty_object_and_refuses_any_other_configuration() {
-    assert!(construct("std", json!({})).is_ok());
-    for config in [json!({ "max_chars": 10 }), json!([]), json!("std")] {
-        let Err(error) = construct("std", config.clone()) else {
-            panic!("{config} is refused");
-        };
-        assert_eq!(error.to_string(), "std takes no configuration");
     }
 }
 

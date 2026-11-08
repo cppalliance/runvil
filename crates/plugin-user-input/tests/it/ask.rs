@@ -1,7 +1,7 @@
 //! The `user-input` Pack through the crate's `install`: the one Pack it
-//! inserts with its config, what `construct` builds under the Pack id it
-//! receives, what the ask tool answers from the run's broker, and the
-//! prelude a declaring prompt runs.
+//! inserts, unavailable for any config but `null` or `{}`, what its
+//! factory makes under the Pack id it receives, what the ask tool answers
+//! from the run's broker, and the prelude a declaring prompt runs.
 
 use std::future::Future;
 use std::pin::pin;
@@ -11,8 +11,8 @@ use std::task::{Context, Poll, Waker};
 use plugin_user_input::{ASK, INPUT_BROKER, InputBroker, install};
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    Error, ErrorCode, HostServices, OutputTrust, Pack, PackId, PackInfo, PackRegistry, ToolId,
-    make_tool_error,
+    Error, ErrorCode, HostServices, OutputTrust, Pack, PackFactory, PackId, PackInfo, PackRegistry,
+    ToolId, make_tool_error,
 };
 use serde_json::{Value, json};
 
@@ -51,33 +51,50 @@ fn block_on<F: Future>(future: F) -> F::Output {
     }
 }
 
+/// A factory or the reason its Pack was inserted unavailable.
+type Inserted = Result<Arc<dyn PackFactory>, Error>;
+
 /// Each Pack `install` inserts into a fresh registry with `config`, beside
-/// the Pack id and config the registry holds it with.
-fn inserted(config: Value) -> Vec<(PackInfo, PackId, Value)> {
+/// its Pack id and its factory or the reason it was inserted unavailable.
+fn inserted(config: Value) -> Vec<(PackInfo, PackId, Inserted)> {
     let mut packs = PackRegistry::new();
-    install(&mut packs, config).expect("a fresh registry takes the Pack");
+    install(&mut packs, config, &HostServices::new()).expect("a fresh registry takes the Pack");
     packs
         .into_entries()
         .filter(|(info, _, _)| info.fqn != "runvil/subagents")
         .collect()
 }
 
+/// The one Pack `install` inserts with `config`, its Pack id, and the
+/// reason it was inserted unavailable, if it was.
+fn read(config: Value) -> Vec<(&'static str, String, Option<String>)> {
+    inserted(config)
+        .into_iter()
+        .map(|(info, id, factory)| {
+            let reason = factory.err().map(|error| error.to_string());
+            (info.fqn, id.to_string(), reason)
+        })
+        .collect()
+}
+
 /// The `PackInfo` `install` inserts.
 fn user_input() -> PackInfo {
     let mut inserted = inserted(Value::Null);
-    let (info, _id, _config) = inserted.pop().expect("install inserts one Pack");
+    let (info, _id, _factory) = inserted.pop().expect("install inserts one Pack");
     info
 }
 
-/// The Pack built under the Pack id `name` with `config`.
-fn construct(name: &str, config: Value) -> Result<Arc<dyn Pack>, Error> {
-    let name = PackId::parse(name).expect("a one-segment Pack id parses");
-    (user_input().construct)(&name, config, &HostServices::new())
-}
-
+/// The Pack made under the Pack id `name` by the factory `install` inserts.
 fn built(name: &str) -> Arc<dyn Pack> {
-    let Ok(pack) = construct(name, Value::Null) else {
-        panic!("construct succeeds with no configuration");
+    let name = PackId::parse(name).expect("a one-segment Pack id parses");
+    let (_info, _id, factory) = inserted(Value::Null)
+        .pop()
+        .expect("install inserts one Pack");
+    let Ok(factory) = factory else {
+        panic!("install inserts user-input usable with no configuration");
+    };
+    let Ok(pack) = factory.new_pack(&name, &HostServices::new()) else {
+        panic!("the factory makes the Pack");
     };
     pack
 }
@@ -110,26 +127,37 @@ fn the_pack_is_runvil_user_input_and_needs_the_input_broker() {
 }
 
 #[test]
-fn install_adds_the_one_pack_with_the_config_under_its_pack_id() {
-    for (config, expected) in [
-        (json!({ "user-input": {}, "web": { "x": 1 } }), json!({})),
-        (json!({ "web": {} }), Value::Null),
-        (Value::Null, Value::Null),
+fn install_adds_the_one_pack_usable_when_its_config_is_null_or_an_empty_object() {
+    for config in [
+        json!({ "user-input": {}, "web": { "x": 1 } }),
+        json!({ "web": {} }),
+        Value::Null,
     ] {
-        let read: Vec<(&str, String, Value)> = inserted(config.clone())
-            .into_iter()
-            .map(|(info, id, config)| (info.fqn, id.to_string(), config))
-            .collect();
         assert_eq!(
-            read,
-            [("runvil/user-input", "user-input".to_owned(), expected)],
+            read(config.clone()),
+            [("runvil/user-input", "user-input".to_owned(), None)],
             "{config}"
         );
     }
 }
 
 #[test]
-fn construct_names_the_ask_tool_under_the_pack_id_it_receives_and_marks_it_to_survive_a_stop() {
+fn install_adds_the_one_pack_unavailable_for_any_other_configuration() {
+    for config in [json!(1), json!({ "greeting": "hi" })] {
+        assert_eq!(
+            read(json!({ "user-input": config })),
+            [(
+                "runvil/user-input",
+                "user-input".to_owned(),
+                Some("user-input takes no configuration".to_owned())
+            )],
+            "{config}"
+        );
+    }
+}
+
+#[test]
+fn the_factory_names_the_ask_tool_under_the_pack_id_it_receives_and_marks_it_to_survive_a_stop() {
     let tools = built("operator").tools();
     assert_eq!(tools.len(), 1, "one tool: {tools:?}");
     let ask = &tools[0];
@@ -147,15 +175,6 @@ fn construct_names_the_ask_tool_under_the_pack_id_it_receives_and_marks_it_to_su
     );
     assert!(ask.survives_stop, "a stop leaves the question open");
     assert!(!ask.structured_output, "the answer is plain text");
-}
-
-#[test]
-fn construct_accepts_no_configuration_or_an_empty_object_and_refuses_anything_else() {
-    assert!(construct("user-input", json!({})).is_ok());
-    let Err(error) = construct("user-input", json!({ "greeting": "hi" })) else {
-        panic!("a configuration with settings is refused");
-    };
-    assert_eq!(error.to_string(), "user-input takes no configuration");
 }
 
 #[test]

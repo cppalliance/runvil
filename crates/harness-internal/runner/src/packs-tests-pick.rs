@@ -123,12 +123,14 @@ fn an_entry_no_vendor_has_is_missing_and_an_absent_vendor_name_is_unavailable() 
 #[test]
 fn the_roster_covers_every_declared_pack_the_run_cannot_serve() {
     let needy = info("acme/needy").needs(NEEDS_SESSION);
-    let broken = PackInfo::new("acme/broken", backed);
-    let host = host(&[
-        (needy, Value::Null),
-        (broken, Value::Null),
-        (info("acme/fine"), Value::Null),
-    ]);
+    let host = host_with(
+        &HostServices::new(),
+        &[
+            (needy, listed, Value::Null),
+            (PackInfo::new("acme/broken"), backed, Value::Null),
+            (info("acme/fine"), listed, Value::Null),
+        ],
+    );
     let declares = prompt("uses:\n  - acme/needy\n  - absent\n  - acme/fine\n  - acme/broken\n");
     let run = begin(&host, HostServices::new(), BTreeMap::new(), &declares);
     assert_eq!(
@@ -158,13 +160,15 @@ fn the_roster_covers_every_declared_pack_the_run_cannot_serve() {
 }
 
 #[test]
-fn refusals_name_each_declared_pack_not_installed_or_whose_construct_failed() {
-    let broken = PackInfo::new("acme/broken", backed);
-    let host = host(&[
-        (info("runvil/web"), Value::Null),
-        (info("acme/poop"), Value::Null),
-        (broken, Value::Null),
-    ]);
+fn refusals_name_each_declared_pack_not_installed_or_whose_factory_refused() {
+    let host = host_with(
+        &HostServices::new(),
+        &[
+            (info("runvil/web"), listed, Value::Null),
+            (info("acme/poop"), listed, Value::Null),
+            (PackInfo::new("acme/broken"), backed, Value::Null),
+        ],
+    );
     let declares = prompt("uses:\n  - web\n  - nope\n  - acme/gone\n  - poop\n  - acme/broken\n");
     assert_eq!(
         host.refusals(&declares),

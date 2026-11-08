@@ -77,21 +77,25 @@
 
 mod ask;
 
-use runvil_plugin::{Error, PackInfo, PackRegistry, ServiceId, ServiceKey};
-use serde_json::Value;
+use runvil_plugin::{
+    Error, ErrorCode, HostServices, PackInfo, PackRegistry, ServiceId, ServiceKey, make_tool_error,
+};
+use serde_json::{Value, json};
 
 /// The Pack's `PackInfo`.
 ///
 /// Its FQN is `runvil/user-input`, so its Pack id is `user-input`. It
 /// has a prelude and needs the run's [`INPUT_BROKER`].
-const USER_INPUT: PackInfo = PackInfo::new("runvil/user-input", ask::construct)
+const USER_INPUT: PackInfo = PackInfo::new("runvil/user-input")
     .description("Ask the person running the prompt")
     .prelude(PRELUDE)
     .needs(NEEDS);
 
-/// The Plugin: inserts the `user-input` Pack into `packs` with
+/// The Plugin: inserts the `user-input` Pack into `packs`. Its config,
 /// `config["user-input"]`, which is `null` when `config` has no
-/// `user-input` key.
+/// `user-input` key, must be `null` or `{}`; anything else inserts the
+/// Pack unavailable with "user-input takes no configuration". It reads
+/// none of the Host-wide `services`.
 ///
 /// # Errors
 /// Returns the registry's refusal, such as an
@@ -101,8 +105,19 @@ const USER_INPUT: PackInfo = PackInfo::new("runvil/user-input", ask::construct)
     clippy::needless_pass_by_value,
     reason = "the Plugin signature fixes the argument types"
 )]
-pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), Error> {
-    packs.insert(USER_INPUT, config["user-input"].clone())
+pub fn install(
+    packs: &mut PackRegistry,
+    config: Value,
+    _services: &HostServices,
+) -> Result<(), Error> {
+    let config = &config["user-input"];
+    if !(config.is_null() || *config == json!({})) {
+        return packs.insert_unavailable(
+            USER_INPUT,
+            make_tool_error(ErrorCode::ToolOther, "user-input takes no configuration"),
+        );
+    }
+    packs.insert(USER_INPUT, ask::new_pack)
 }
 
 /// The ask tool's last segment: its full id is `user-input/ask`, under

@@ -42,7 +42,7 @@ impl AskBroker for Failing {
 /// The fixture Pack `probe`: one tool, `probe/saw`, answering whether
 /// its call was lent a broker. It needs nothing, so a run without a
 /// broker can use it.
-const PROBE: PackInfo = PackInfo::new("tests/probe", construct_probe);
+const PROBE: (PackInfo, Make) = (PackInfo::new("tests/probe"), new_probe);
 
 struct Probe {
     tools: Vec<ToolInfo>,
@@ -50,13 +50,9 @@ struct Probe {
 
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the PackInfo construct signature fixes the return type"
+    reason = "the PackFactory signature fixes the return type"
 )]
-fn construct_probe(
-    name: &PackId,
-    _config: Value,
-    _services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
+fn new_probe(name: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     let saw = ToolInfo::new(
         ToolId::parse(&format!("{name}/saw")).unwrap(),
         "Answer whether the call was lent a broker.",

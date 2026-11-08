@@ -1,6 +1,6 @@
 //! Tests for the Pack's two static tools.
 
-use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use runvil_plugin::{Pack, PackId};
 use tokio::runtime::Handle;
@@ -10,7 +10,7 @@ use super::Mcp;
 #[tokio::test]
 async fn only_the_listing_tool_describes_tools() {
     let name = PackId::parse("mcp").expect("a valid Pack id");
-    let mcp = Mcp::new(&name, BTreeMap::new(), Handle::current())
+    let mcp = Mcp::new(&name, Arc::default(), Handle::current())
         .expect("the Pack names its tools under a valid Pack id");
     let flags: Vec<(String, bool)> = mcp
         .tools()

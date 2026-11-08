@@ -8,12 +8,19 @@
 //! `install` function of a Plugin crate (a `plugin-*` crate):
 //!
 //! ```text
-//! pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), Error>
+//! pub fn install(
+//!     packs: &mut PackRegistry,
+//!     config: Value,
+//!     services: &HostServices,
+//! ) -> Result<(), Error>
 //! ```
 //!
-//! It calls [`PackRegistry::insert`] once for each Pack it offers, with the
-//! sub-object of `config` under that Pack's id (`null` when the key is
-//! missing), and returns the first error. A Plugin can also be a C entry
+//! For each Pack it offers, it reads the sub-object of `config` under that
+//! Pack's id (`null` when the key is missing) and the Host-wide
+//! `services`, then calls [`PackRegistry::insert`] with a [`PackFactory`]
+//! holding what the Pack's instances share, or
+//! [`PackRegistry::insert_unavailable`] with the reason its setup failed,
+//! and returns the first error. A Plugin can also be a C entry
 //! point that follows the C contract in the `runvil-plugin-sys` crate: a
 //! dynamic library exports it as `runvil_plugin`, or a Plugin crate links
 //! it in under a name of its own.
@@ -25,9 +32,10 @@
 //! The Host owns the [`PackRegistry`]; a Plugin only inserts its Packs into it.
 //!
 //! Each Pack is a [`PackInfo`], built with [`PackInfo::new`]: its FQN, an
-//! optional Lua prelude, the per-run services its calls read, and the
-//! `construct` function the Host calls once, when it builds its Packs,
-//! to build the one [`Pack`] object every run shares. [`Pack::call`]
+//! optional Lua prelude, and the per-run services its calls read. Its
+//! [`PackFactory`] makes the [`Pack`] object; the Host calls
+//! [`PackFactory::new_pack`] once, when it builds its Packs, and every run
+//! shares that object. [`Pack::call`]
 //! performs one tool call with the [`ToolContext`] the Harness lends it.
 //! [`Pack::render`] returns the tools the model sees, given the tools a
 //! section offered from the Pack and the [`RenderContext`] that names the
@@ -52,14 +60,14 @@
 //!   boundaries.
 //! - Only `[dev-dependencies]` enable `test-support`, which the
 //!   `test-support` leak guard enforces.
-//! - A Host builds each Pack object once, through
-//!   [`PackInfo::construct`], and every run shares it. Host-wide services
-//!   reach only `construct`, and a run's own services reach only calls,
-//!   through [`ToolContext::service`]. Cleanup goes in the Pack's
-//!   `Drop`; there is no shutdown hook.
-//! - Every tool a Pack offers sits under the Pack id `construct`
-//!   receives, as `web/fetch` sits under `web`. A tool that does not is
-//!   dropped from every run's catalog.
+//! - A Host makes each Pack object once, through its
+//!   [`PackFactory`], and every run shares it. Host-wide services
+//!   reach only a Plugin's `install`, and a run's own services reach
+//!   only calls, through [`ToolContext::service`]. Cleanup goes in the
+//!   Pack's `Drop`; there is no shutdown hook.
+//! - Every tool a Pack offers sits under the Pack id
+//!   [`PackFactory::new_pack`] receives, as `web/fetch` sits under `web`.
+//!   A tool that does not is dropped from every run's catalog.
 //! - [`Pack::ready`] resolves `Ok` once [`Pack::tools`] is complete,
 //!   or `Err` with a reason a model can read when the Pack can't serve
 //!   now. The Harness awaits it before each run's snapshot, and a Pack
@@ -96,7 +104,7 @@ mod service;
 pub mod testing;
 
 pub use context::{RenderContext, ToolContext};
-pub use pack::{Pack, PackFuture, PackInfo};
+pub use pack::{Pack, PackFactory, PackFuture, PackInfo};
 pub use registry::{PackOrigin, PackRegistry};
 pub use service::{HostServices, ServiceId, ServiceKey, TOKIO_RUNTIME};
 

@@ -13,6 +13,7 @@ use runvil_plugin::{
 use serde_json::{Value, json};
 
 use crate::prepare::{building, drive_over};
+use crate::support::Make;
 
 /// What the fixture tool writes to `/from-tool.md`.
 const WRITTEN: &str = "written through the context";
@@ -27,7 +28,7 @@ const CALLS_RECORD: &str = "---\nname: calls-record\ndescription: d\nrunvil: 0\n
 /// The fixture Pack `context`: one tool, `context/record`, which writes
 /// [`WRITTEN`] to `/from-tool.md` through the access its call lends it
 /// and answers with the caller its origin names.
-const CONTEXT: PackInfo = PackInfo::new("tests/context", construct);
+const CONTEXT: (PackInfo, Make) = (PackInfo::new("tests/context"), new_record);
 
 struct Record {
     tools: Vec<ToolInfo>,
@@ -35,13 +36,9 @@ struct Record {
 
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the PackInfo construct signature fixes the return type"
+    reason = "the PackFactory signature fixes the return type"
 )]
-fn construct(
-    name: &PackId,
-    _config: Value,
-    _services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
+fn new_record(name: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     let record = ToolInfo::new(
         ToolId::parse(&format!("{name}/record")).unwrap(),
         "Write a file through the call's access and name the caller.",

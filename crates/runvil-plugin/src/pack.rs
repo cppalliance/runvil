@@ -1,4 +1,5 @@
-//! The [`Pack`] trait and the [`PackInfo`] a Plugin crate exports.
+//! The [`Pack`] trait, the [`PackFactory`] that makes a Pack's instances,
+//! and the [`PackInfo`] a Plugin crate exports.
 
 use std::fmt;
 use std::future::Future;
@@ -21,10 +22,10 @@ pub type PackFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// One Pack object: the tools it offers and the calls it performs.
 ///
-/// The Host builds one object per registered Pack, through
-/// [`PackInfo::construct`], and every run shares it, so an implementation
-/// is `Send + Sync`. Cleanup, such as stopping a child process, goes in
-/// the implementation's `Drop`, which runs when the Host drops the context
+/// The Host makes one object per registered Pack, through the Pack's
+/// [`PackFactory`], and every run shares it, so an implementation is
+/// `Send + Sync`. Cleanup, such as stopping a child process, goes in the
+/// implementation's `Drop`, which runs when the Host drops the context
 /// holding the Pack. There is no shutdown hook.
 pub trait Pack: Send + Sync {
     /// Returns the tools the Pack offers now.
@@ -32,8 +33,8 @@ pub trait Pack: Send + Sync {
     /// The Harness reads the list once when each run starts, after it
     /// awaits [`ready`](Pack::ready), so a Pack whose tools change
     /// returns its current list, and a Pack still coming up returns what
-    /// it has so far. Each tool's id sits under the Pack id `construct`
-    /// received, as in `web/fetch`.
+    /// it has so far. Each tool's id sits under the Pack id
+    /// [`new_pack`](PackFactory::new_pack) received, as in `web/fetch`.
     fn tools(&self) -> Vec<ToolInfo>;
 
     /// Resolves once the Pack's tool list is complete, or with the
@@ -43,7 +44,7 @@ pub trait Pack: Send + Sync {
     /// reads [`tools`](Pack::tools). A Pack whose `ready` fails is
     /// unavailable to that run, with the error's message as the reason.
     /// The default resolves `Ok(())` at once, for a Pack whose tools are
-    /// known when `construct` returns.
+    /// known when [`new_pack`](PackFactory::new_pack) returns.
     ///
     /// # Invariants
     ///
@@ -134,23 +135,64 @@ pub trait Pack: Send + Sync {
     }
 }
 
-/// A Pack described as data, which a Plugin inserts into the Host's
-/// [`PackRegistry`](crate::PackRegistry).
+/// Makes instances of one installed Pack.
 ///
-/// It is fixed data the Host reads before anything is built. A Plugin
-/// crate keeps it in a private constant, builds it with
-/// [`PackInfo::new`], adding a [`PackInfo::description`], and
+/// A Plugin builds the factory at `install`, from its config and the
+/// Host-wide services, and keeps in it what every instance shares, such
+/// as a connection pool. In this build the Harness calls it once, at Host
+/// startup, with an empty `run` map, and every run shares that instance.
+pub trait PackFactory: Send + Sync {
+    /// Makes one instance named `id`. `run` holds the run's own services.
+    ///
+    /// It must not block, do I/O, or panic, because it may run inside a
+    /// run's future.
+    ///
+    /// # Errors
+    /// Returns an [`Error`], whose prose is safe to show the model, when
+    /// the factory cannot make the Pack, such as when `run` lacks a
+    /// service it needs. The Pack is then unavailable, with the error's
+    /// message as the reason.
+    fn new_pack(&self, id: &PackId, run: &HostServices) -> Result<Arc<dyn Pack>, Error>;
+}
+
+/// A plain function or closure with `new_pack`'s parameters and return
+/// type is a factory, so a Pack that shares nothing needs no type of its
+/// own.
+impl<Func> PackFactory for Func
+where
+    Func: Fn(&PackId, &HostServices) -> Result<Arc<dyn Pack>, Error> + Send + Sync,
+{
+    fn new_pack(&self, id: &PackId, run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+        self(id, run)
+    }
+}
+
+/// A Pack described as data, which a Plugin inserts into the Host's
+/// [`PackRegistry`](crate::PackRegistry) beside its [`PackFactory`].
+///
+/// It is fixed data the Host reads before anything is made: the Pack's
+/// FQN, an optional prelude, the run services it needs, and a one-line
+/// description. A Plugin crate keeps it in a private constant, builds it
+/// with [`PackInfo::new`], adding a [`PackInfo::description`], and
 /// [`PackInfo::prelude`] and [`PackInfo::needs`] only where it has them,
-/// and inserts it from its `install` function:
+/// and inserts it from its `install` function, or inserts it
+/// unavailable when its setup fails:
 ///
 /// ```text
-/// const GREETER: PackInfo = PackInfo::new("acme/greeter", construct)
+/// const GREETER: PackInfo = PackInfo::new("acme/greeter")
 ///     .description("Greet the person running the prompt")
 ///     .prelude(PRELUDE)
 ///     .needs(NEEDS);
 ///
-/// pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), Error> {
-///     packs.insert(GREETER, config["greeter"].clone())
+/// pub fn install(
+///     packs: &mut PackRegistry,
+///     config: Value,
+///     services: &HostServices,
+/// ) -> Result<(), Error> {
+///     match greeting(&config["greeter"], services) {
+///         Ok(greeting) => packs.insert(GREETER, Greetings { greeting }),
+///         Err(reason) => packs.insert_unavailable(GREETER, reason),
+///     }
 /// }
 /// ```
 #[derive(Clone, Copy)]
@@ -166,48 +208,20 @@ pub struct PackInfo {
     /// The per-run services the Pack's calls read. A run without every
     /// one of them cannot use the Pack.
     pub needs: &'static [ServiceId],
-    /// Builds the one Pack object every run shares. The Host calls it
-    /// once, when it builds its Packs, with the Pack id, the config the
-    /// Plugin inserted the Pack with, and the Host-wide services.
-    ///
-    /// A failure, such as a missing Host-wide service, leaves the Pack
-    /// unavailable, and its message appears in the refusal notice of each
-    /// run whose prompt declares the Pack.
-    #[expect(
-        clippy::type_complexity,
-        reason = "spelled out so a Plugin author reads the signature construct implements in one place"
-    )]
-    pub construct: fn(
-        name: &PackId,
-        config: serde_json::Value,
-        services: &HostServices,
-    ) -> Result<Arc<dyn Pack>, Error>,
     /// One line saying what the Pack offers, for a Host listing the
     /// Packs its registry holds; empty unless the Plugin crate sets it.
     pub description: &'static str,
 }
 
 impl PackInfo {
-    /// Builds the `PackInfo` for the FQN `fqn`, with an empty
-    /// description, no prelude, and no needs.
-    #[expect(
-        clippy::type_complexity,
-        reason = "spelled out so a Plugin author reads the signature construct implements in one place"
-    )]
+    /// Names the Pack `fqn`, with an empty description, no prelude, and
+    /// no needs; the builders add the rest.
     #[must_use]
-    pub const fn new(
-        fqn: &'static str,
-        construct: fn(
-            name: &PackId,
-            config: serde_json::Value,
-            services: &HostServices,
-        ) -> Result<Arc<dyn Pack>, Error>,
-    ) -> PackInfo {
+    pub const fn new(fqn: &'static str) -> PackInfo {
         PackInfo {
             fqn,
             prelude: None,
             needs: &[],
-            construct,
             description: "",
         }
     }

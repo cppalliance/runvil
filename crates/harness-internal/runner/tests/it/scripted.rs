@@ -19,13 +19,14 @@ use runvil::model::{
 };
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
-    HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceKey, ToolContext,
-    ToolId, ToolInfo, ToolOutput,
+    HostServices, Pack, PackFactory, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo,
+    ToolOutput,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
 use crate::asker::{ASKER, AskBroker, broker_services};
+use crate::support::registry;
 
 /// The one model the scripted broker lists.
 pub(crate) const MODEL: &str = "m";
@@ -200,42 +201,32 @@ pub(crate) fn held_broker(held: &Arc<Held>) -> ScriptedBroker {
     ScriptedBroker::new(move |_round, _messages| held.hold())
 }
 
-/// The Host-wide service the hold Pack's construct reads its [`Held`]
-/// from.
-const HELD: ServiceKey<Held> = ServiceKey::new("tests/held");
-
 /// The fixture Pack `harness`: one tool, `harness/hold`, whose every
-/// call is held, and which a stop leaves in flight when its configuration
-/// sets `survives_stop`.
-const HOLD: PackInfo = PackInfo::new("tests/harness", construct_hold);
+/// call is held, and which a stop leaves in flight when its factory says
+/// so.
+const HOLD: PackInfo = PackInfo::new("tests/harness");
 
 struct HoldPack {
     held: Arc<Held>,
     tools: Vec<ToolInfo>,
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "the PackInfo construct signature fixes the argument types"
-)]
-fn construct_hold(
-    name: &PackId,
-    config: Value,
-    services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
-    let held = services
-        .get(&HELD)
-        .ok_or_else(|| make_tool_error(ErrorCode::ToolOther, "the hold Pack needs tests/held"))?;
-    let info = ToolInfo::new(
-        ToolId::parse(&format!("{name}/hold")).unwrap(),
-        "Hold until the call is dropped.",
-        json!({ "type": "object", "properties": {} }),
-    )
-    .survives_stop(config["survives_stop"].as_bool().unwrap_or(false));
-    Ok(Arc::new(HoldPack {
-        held,
-        tools: vec![info],
-    }))
+/// The hold Pack's factory over `held`, its tool marked to survive a stop
+/// when `survives_stop` is set.
+fn holding(held: &Arc<Held>, survives_stop: bool) -> impl PackFactory + use<> {
+    let held = Arc::clone(held);
+    move |name: &PackId, _run: &HostServices| -> Result<Arc<dyn Pack>, Error> {
+        let info = ToolInfo::new(
+            ToolId::parse(&format!("{name}/hold")).unwrap(),
+            "Hold until the call is dropped.",
+            json!({ "type": "object", "properties": {} }),
+        )
+        .survives_stop(survives_stop);
+        Ok(Arc::new(HoldPack {
+            held: Arc::clone(&held),
+            tools: vec![info],
+        }))
+    }
 }
 
 impl Pack for HoldPack {
@@ -266,14 +257,9 @@ pub(crate) fn surviving_hold_host(held: &Arc<Held>) -> Packs {
 /// A Host that built the hold Pack over `held` and the fixture ask Pack,
 /// which reach only a run that declares them.
 fn host_holding(held: &Arc<Held>, survives_stop: bool) -> Packs {
-    let mut services = HostServices::new();
-    services.provide(&HELD, Arc::clone(held)).unwrap();
-    let mut packs = PackRegistry::new();
-    packs
-        .insert(HOLD, json!({ "survives_stop": survives_stop }))
-        .unwrap();
-    packs.insert(ASKER, Value::Null).unwrap();
-    Packs::new(packs, services)
+    let mut packs = registry(&[ASKER]);
+    packs.insert(HOLD, holding(held, survives_stop)).unwrap();
+    Packs::new(packs)
 }
 
 /// The operator: counts each question asked and each one torn down

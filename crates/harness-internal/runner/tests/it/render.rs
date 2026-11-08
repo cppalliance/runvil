@@ -11,12 +11,11 @@ use std::sync::{Arc, Mutex};
 
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind};
 use harness_runner::{Harness, Packs};
-use runvil::make_tool_error;
+use runvil::Error;
 use runvil::model::{Completion, CompletionResult, ToolCall};
-use runvil::{Error, ErrorCode};
 use runvil_plugin::{
-    HostServices, ModelInfo, Pack, PackFuture, PackId, PackInfo, PackRegistry, RenderContext,
-    ServiceKey, ToolContext, ToolId, ToolInfo, ToolOutput,
+    HostServices, ModelInfo, Pack, PackFactory, PackFuture, PackId, PackInfo, PackRegistry,
+    RenderContext, ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
@@ -34,17 +33,13 @@ mod entries;
 /// [`ECHO`], and a render that names each offered tool `shout_<model>`
 /// and adds [`SECRET`] as `secret_<model>`, after the name of the round's
 /// model.
-const RENDERER: PackInfo = PackInfo::new("tests/render", construct);
+const RENDERER: PackInfo = PackInfo::new("tests/render");
 
 /// The render Pack's one catalog tool.
 const ECHO: &str = "render/echo";
 
 /// The tool only the model sees, which every render adds.
 const SECRET: &str = "render/secret";
-
-/// The Host-wide service the render Pack's construct reads its [`Seen`]
-/// from.
-const SEEN: ServiceKey<Seen> = ServiceKey::new("tests/render-seen");
 
 /// The frontmatter and H1 every prompt here shares: the render Pack
 /// declared and a title.
@@ -129,36 +124,25 @@ struct RenderPack {
     panics: bool,
 }
 
-/// Builds the render Pack over the Host's [`Seen`] from a configuration
+/// The render Pack's factory over the test's `seen`, from a configuration
 /// whose `surviving` lists model names and whose `panics` makes every
 /// render panic.
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "the PackInfo construct signature fixes the argument types"
-)]
-fn construct(
-    _name: &PackId,
-    config: Value,
-    services: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
-    let seen = services.get(&SEEN).ok_or_else(|| {
-        make_tool_error(
-            ErrorCode::ToolOther,
-            "the render Pack needs tests/render-seen",
-        )
-    })?;
-    let surviving = config["surviving"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_owned)
-        .collect();
-    Ok(Arc::new(RenderPack {
-        seen,
-        surviving,
-        panics: config["panics"] == true,
-    }))
+fn renderer(seen: &Arc<Seen>, config: Value) -> impl PackFactory + use<> {
+    let seen = Arc::clone(seen);
+    move |_name: &PackId, _run: &HostServices| -> Result<Arc<dyn Pack>, Error> {
+        let surviving = config["surviving"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect();
+        Ok(Arc::new(RenderPack {
+            seen: Arc::clone(&seen),
+            surviving,
+            panics: config["panics"] == true,
+        }))
+    }
 }
 
 /// A render Pack tool under `id` whose arguments are any object.
@@ -274,12 +258,10 @@ fn render_harness(
     config: Value,
     source: &str,
 ) -> Harness {
-    let mut services = HostServices::new();
-    services.provide(&SEEN, Arc::clone(seen)).unwrap();
     let mut packs = PackRegistry::new();
-    packs.insert(RENDERER, config).unwrap();
+    packs.insert(RENDERER, renderer(seen, config)).unwrap();
     launch(
-        Packs::new(packs, services),
+        Packs::new(packs),
         PendingTimer::default(),
         source,
         setup(recorder.clone(), broker),

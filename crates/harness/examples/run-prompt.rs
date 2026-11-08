@@ -8,7 +8,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use harness::pack::{HostServices, PackRegistry, Packs};
+use harness::pack::{PackRegistry, Packs};
 use harness::record::MemoryRecorder;
 use harness::{BoxFuture, Harness, Host, InferenceBroker, RunSetup, Timer};
 use runvil::effect::Round;
@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Build the Host once: its built Packs, how it finds prompts, and
     //    its timer.
     let host = Arc::new(Host {
-        packs: Packs::new(PackRegistry::new(), HostServices::new()),
+        packs: Packs::new(PackRegistry::new()),
         prompts: Arc::new(find),
         timer: Arc::new(Clock),
     });

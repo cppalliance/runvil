@@ -11,7 +11,6 @@ use std::sync::{Arc, OnceLock};
 use harness_runner::recorder::MemoryRecorder;
 use harness_runner::{Packs, RunControl, RunSetup};
 use runvil::vfs::VfsRef;
-use runvil_plugin::HostServices;
 use serde_json::json;
 
 use super::{
@@ -67,7 +66,7 @@ const WRITES_THEN_INFERS: &str = "---\nname: writes-infers\ndescription: d\nrunv
 /// A Host that built only the fixture ask Pack, as `user-input`, beside
 /// the built-in.
 fn asker_host() -> Packs {
-    Packs::new(registry(&[ASKER]), HostServices::new())
+    Packs::new(registry(&[ASKER]))
 }
 
 /// A store whose every write raises a stop through the control the

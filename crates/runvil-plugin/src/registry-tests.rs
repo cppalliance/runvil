@@ -2,17 +2,21 @@
 //! `runvil/subagents` and lists every Pack in FQN order, `insert` refuses an
 //! FQN that is not a vendor/name pair, an FQN the registry holds already,
 //! a reserved Pack id from any vendor, and a third-party Pack taking the
-//! built-in's Pack id, and accepts a Pack id another vendor has; the
-//! registry keeps each Pack's config and hands it on with the Pack id, its
-//! Debug output never shows a config, and each built-in takes no reserved
-//! Pack id and builds a Pack that offers no tools and carries no prelude
-//! and no needs.
+//! built-in's Pack id, and accepts a Pack id another vendor has;
+//! `insert_unavailable` refuses what `insert` refuses and keeps its
+//! reason; the registry hands each Pack's factory on with the Pack id, its
+//! Debug output shows each FQN, origin, and Pack id, and each built-in
+//! takes no reserved Pack id and makes a Pack that offers no tools and
+//! carries no prelude and no needs.
+
+use std::sync::Arc;
 
 use runvil_types::error::{Error, ErrorCode, ErrorFact};
-use serde_json::{Value, json};
+use runvil_types::tools::make_tool_error;
+use serde_json::Value;
 
 use super::{BUILTIN, PackOrigin, PackRegistry, builtin, pack_id};
-use crate::{HostServices, PackId, PackInfo, ServiceId, ServiceKey};
+use crate::{HostServices, Pack, PackId, PackInfo, ServiceId, ServiceKey};
 
 /// Asserts `result` refuses the insert of `fqn` for `reason`, with its
 /// message as its prose, and returns the message.
@@ -44,9 +48,10 @@ const NEEDS: &[ServiceId] = &[GREETING.id()];
 
 const NO_NEEDS: &[ServiceId] = &[];
 
-/// A Pack with the FQN `fqn` whose object offers nothing.
+/// A Pack with the FQN `fqn`, inserted with the built-in's factory, whose
+/// object offers nothing.
 const fn fixture(fqn: &'static str) -> PackInfo {
-    PackInfo::new(fqn, builtin)
+    PackInfo::new(fqn)
 }
 
 fn name(text: &str) -> PackId {
@@ -57,9 +62,9 @@ fn name(text: &str) -> PackId {
 fn a_new_registry_holds_the_builtin_and_lists_every_pack_in_fqn_order() {
     let mut packs = PackRegistry::new();
     packs
-        .insert(fixture("tests/zeta").needs(NEEDS), Value::Null)
+        .insert(fixture("tests/zeta").needs(NEEDS), builtin)
         .unwrap();
-    packs.insert(fixture("acme/alpha"), Value::Null).unwrap();
+    packs.insert(fixture("acme/alpha"), builtin).unwrap();
     let listed: Vec<(&str, PackOrigin, &[ServiceId])> = packs
         .list()
         .map(|(info, origin)| (info.fqn, origin, info.needs))
@@ -91,7 +96,7 @@ fn add_refuses_an_fqn_that_is_not_a_vendor_name_pair() {
         "acme/Web",
     ] {
         refused(
-            PackRegistry::new().insert(fixture(bad), Value::Null),
+            PackRegistry::new().insert(fixture(bad), builtin),
             "invalid_fqn",
             bad,
         );
@@ -101,10 +106,10 @@ fn add_refuses_an_fqn_that_is_not_a_vendor_name_pair() {
 #[test]
 fn add_refuses_an_fqn_the_registry_holds_already_the_builtins_included() {
     let mut packs = PackRegistry::new();
-    packs.insert(fixture("tests/tools"), Value::Null).unwrap();
+    packs.insert(fixture("tests/tools"), builtin).unwrap();
     for taken in ["tests/tools", SUBAGENTS] {
         refused(
-            packs.insert(fixture(taken), Value::Null),
+            packs.insert(fixture(taken), builtin),
             "duplicate_pack",
             taken,
         );
@@ -121,7 +126,7 @@ fn add_refuses_an_fqn_the_registry_holds_already_the_builtins_included() {
 fn add_refuses_a_third_party_pack_taking_the_builtins_pack_id() {
     let mut packs = PackRegistry::new();
     refused(
-        packs.insert(fixture("acme/subagents"), Value::Null),
+        packs.insert(fixture("acme/subagents"), builtin),
         "reserved_name",
         "acme/subagents",
     );
@@ -140,11 +145,7 @@ fn add_refuses_a_pack_taking_a_reserved_pack_id_from_any_vendor() {
         ("runvil/dynamic", "dynamic"),
     ] {
         let mut packs = PackRegistry::new();
-        let message = refused(
-            packs.insert(fixture(fqn), Value::Null),
-            "reserved_pack_id",
-            fqn,
-        );
+        let message = refused(packs.insert(fixture(fqn), builtin), "reserved_pack_id", fqn);
         assert!(
             message.contains(&format!("the Pack id {reserved},")),
             "{message}"
@@ -159,11 +160,11 @@ fn add_refuses_a_pack_taking_a_reserved_pack_id_from_any_vendor() {
 #[test]
 fn add_accepts_a_pack_whose_id_another_vendor_has() {
     let mut packs = PackRegistry::new();
-    packs.insert(fixture("runvil/web"), Value::Null).unwrap();
-    assert_eq!(packs.insert(fixture("acme/web"), Value::Null), Ok(()));
+    packs.insert(fixture("runvil/web"), builtin).unwrap();
+    assert_eq!(packs.insert(fixture("acme/web"), builtin), Ok(()));
     let ids: Vec<(&'static str, String)> = packs
         .into_entries()
-        .map(|(info, id, _config)| (info.fqn, id.to_string()))
+        .map(|(info, id, _factory)| (info.fqn, id.to_string()))
         .collect();
     assert_eq!(
         ids,
@@ -177,34 +178,45 @@ fn add_accepts_a_pack_whose_id_another_vendor_has() {
 }
 
 #[test]
-fn the_registry_keeps_each_packs_config_and_hands_it_on_with_its_pack_id() {
+fn the_registry_hands_each_packs_factory_on_with_its_pack_id() {
+    let depth = 2;
     let mut packs = PackRegistry::new();
     packs
-        .insert(fixture("acme/kit"), json!({ "depth": 2 }))
+        .insert(
+            fixture("acme/kit"),
+            move |id: &PackId, _run: &HostServices| -> Result<Arc<dyn Pack>, Error> {
+                Err(make_tool_error(
+                    ErrorCode::ToolOther,
+                    format!("{id} refuses at depth {depth}"),
+                ))
+            },
+        )
         .unwrap();
-    let entries: Vec<(&'static str, PackId, Value)> = packs
+    let made: Vec<(&'static str, PackId, Option<String>)> = packs
         .into_entries()
-        .map(|(info, id, config)| (info.fqn, id, config))
+        .map(|(info, id, factory)| {
+            let made = factory.unwrap().new_pack(&id, &HostServices::new());
+            (info.fqn, id, made.err().map(|error| error.to_string()))
+        })
         .collect();
     assert_eq!(
-        entries,
+        made,
         [
-            ("acme/kit", name("kit"), json!({ "depth": 2 })),
-            (SUBAGENTS, name("subagents"), Value::Null),
-        ]
+            (
+                "acme/kit",
+                name("kit"),
+                Some("kit refuses at depth 2".to_owned())
+            ),
+            (SUBAGENTS, name("subagents"), None),
+        ],
+        "each factory is the one inserted, and makes its Pack under the Pack id handed on"
     );
 }
 
 #[test]
-fn the_registrys_debug_output_shows_each_fqn_origin_and_pack_id_and_no_config() {
+fn the_registrys_debug_output_shows_each_fqn_origin_and_pack_id() {
     let mut packs = PackRegistry::new();
-    let secret = "Bearer ghp_secret_token_value_0042";
-    packs
-        .insert(
-            fixture("acme/mcp"),
-            json!({ "docs": { "headers": { "Authorization": secret } } }),
-        )
-        .unwrap();
+    packs.insert(fixture("acme/mcp"), builtin).unwrap();
     let shown = format!("{packs:?}");
     for part in ["acme/mcp", "Linked", SUBAGENTS, "Builtin"] {
         assert!(shown.contains(part), "{part} is shown: {shown}");
@@ -213,18 +225,13 @@ fn the_registrys_debug_output_shows_each_fqn_origin_and_pack_id_and_no_config() 
         let id = format!("{id:?}");
         assert!(shown.contains(&id), "{id} is shown: {shown}");
     }
-    assert!(!shown.contains(secret), "no config is shown: {shown}");
-    assert!(
-        !shown.contains("Authorization"),
-        "no config key is shown: {shown}"
-    );
 }
 
 #[test]
 fn the_registry_refusals_name_the_pack() {
     let mut packs = PackRegistry::new();
-    packs.insert(fixture("acme/web"), Value::Null).unwrap();
-    let mut insert = |fqn| packs.insert(fixture(fqn), Value::Null);
+    packs.insert(fixture("acme/web"), builtin).unwrap();
+    let mut insert = |fqn| packs.insert(fixture(fqn), builtin);
     let messages = [
         refused(insert("web"), "invalid_fqn", "web"),
         refused(insert("acme/web"), "duplicate_pack", "acme/web"),
@@ -246,6 +253,44 @@ fn the_registry_refusals_name_the_pack() {
 }
 
 #[test]
+fn insert_unavailable_refuses_a_bad_fqn_and_a_duplicate_and_hands_on_its_reason() {
+    let reason = || make_tool_error(ErrorCode::ToolOther, "kit takes no configuration");
+    let mut packs = PackRegistry::new();
+    refused(
+        packs.insert_unavailable(PackInfo::new("kit"), reason()),
+        "invalid_fqn",
+        "kit",
+    );
+    packs
+        .insert_unavailable(PackInfo::new("acme/kit"), reason())
+        .unwrap();
+    for taken in ["acme/kit", SUBAGENTS] {
+        refused(
+            packs.insert_unavailable(PackInfo::new(taken), reason()),
+            "duplicate_pack",
+            taken,
+        );
+    }
+    refused(
+        packs.insert(PackInfo::new("acme/kit"), builtin),
+        "duplicate_pack",
+        "acme/kit",
+    );
+    let entries: Vec<(&str, Option<String>)> = packs
+        .into_entries()
+        .map(|(info, _id, factory)| (info.fqn, factory.err().map(|error| error.to_string())))
+        .collect();
+    assert_eq!(
+        entries,
+        [
+            ("acme/kit", Some("kit takes no configuration".to_owned())),
+            (SUBAGENTS, None),
+        ],
+        "the Pack inserted unavailable keeps its reason, and the built-in its factory"
+    );
+}
+
+#[test]
 fn no_builtin_takes_a_reserved_pack_id() {
     for info in BUILTIN {
         let id = pack_id(info.fqn).unwrap();
@@ -259,7 +304,7 @@ fn builtins_offer_no_tools_prelude_or_needs() {
         assert!(info.prelude.is_none(), "{} has a prelude", info.fqn);
         assert!(info.needs.is_empty(), "{} has needs", info.fqn);
         let name = pack_id(info.fqn).unwrap();
-        let pack = (info.construct)(&name, Value::Null, &HostServices::new()).unwrap();
+        let pack = builtin(&name, &HostServices::new()).unwrap();
         assert!(pack.tools().is_empty(), "{} offers tools", info.fqn);
     }
 }

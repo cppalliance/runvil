@@ -26,7 +26,7 @@ use runvil::vfs::{
 use runvil::{Error, ErrorCode, ErrorFact};
 use runvil::{Prompt, Run, RunParams, RunSeed};
 use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
-use runvil_plugin::{PackInfo, PackRegistry};
+use runvil_plugin::{HostServices, Pack, PackId, PackInfo, PackRegistry};
 use serde_json::{Value, json};
 
 /// The fixed seed every fixture run and recorded meta takes.
@@ -55,14 +55,18 @@ pub(crate) fn assert_canceled(result: &Result<String, Error>) {
     );
 }
 
-/// A registry holding the built-ins and each of `infos` with a `null`
-/// config, which a suite builds its Host over.
-pub(crate) fn registry(infos: &[PackInfo]) -> PackRegistry {
-    let mut packs = PackRegistry::new();
-    for info in infos {
-        packs.insert(*info, Value::Null).unwrap();
+/// The factory of a fixture Pack that shares nothing: it makes the Pack
+/// under the Pack id it receives.
+pub(crate) type Make = fn(&PackId, &HostServices) -> Result<Arc<dyn Pack>, Error>;
+
+/// A registry holding the built-ins and each of `packs`, an info beside
+/// its factory, which a suite builds its Host over.
+pub(crate) fn registry(packs: &[(PackInfo, Make)]) -> PackRegistry {
+    let mut registry = PackRegistry::new();
+    for (info, make) in packs {
+        registry.insert(*info, *make).unwrap();
     }
-    packs
+    registry
 }
 
 /// A Host over `packs` that sleeps through `timer`. Its finder serves no

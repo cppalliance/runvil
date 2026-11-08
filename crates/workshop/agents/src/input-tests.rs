@@ -267,10 +267,10 @@ async fn an_ask_is_answered_when_the_registry_receives_the_text() {
                   uses:\n  - user-input\n---\n\n\
                   # Ask\n\n## Only\n\n```lua\nreturn (input.ask())\n```\n";
     let mut packs = PackRegistry::new();
-    plugin_user_input::install(&mut packs, serde_json::Value::Null)
+    plugin_user_input::install(&mut packs, serde_json::Value::Null, &HostServices::new())
         .expect("a new registry takes the Pack");
     let host = Arc::new(Host {
-        packs: Packs::new(packs, HostServices::new()),
+        packs: Packs::new(packs),
         prompts: Arc::new(|_: &str| -> Result<String, runvil::Error> { Ok(source.to_owned()) }),
         timer: Arc::new(TokioTimer),
     });

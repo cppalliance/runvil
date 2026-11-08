@@ -65,10 +65,10 @@ pub(crate) fn run_for(
     source: String,
 ) -> (Arc<Host>, RunSetup) {
     let mut packs = PackRegistry::new();
-    plugin_user_input::install(&mut packs, serde_json::Value::Null)
+    plugin_user_input::install(&mut packs, serde_json::Value::Null, &HostServices::new())
         .expect("a new registry takes the Pack");
     let host = Arc::new(Host {
-        packs: Packs::new(packs, HostServices::new()),
+        packs: Packs::new(packs),
         prompts: Arc::new(move |name: &str| {
             if name == AGENT {
                 return Ok(source.clone());
