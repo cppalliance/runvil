@@ -254,8 +254,8 @@ pub(crate) fn surviving_hold_host(held: &Arc<Held>) -> Packs {
     host_holding(held, true)
 }
 
-/// A Host that built the hold Pack over `held` and the fixture ask Pack,
-/// which reach only a run that declares them.
+/// A Host that installed the hold Pack over `held` and the fixture ask
+/// Pack, which reach only a run that declares them.
 fn host_holding(held: &Arc<Held>, survives_stop: bool) -> Packs {
     let mut packs = registry(&[ASKER]);
     packs.insert(HOLD, holding(held, survives_stop)).unwrap();

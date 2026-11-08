@@ -7,10 +7,11 @@
 //! every run has a record. Then [`prepare`] takes the steps that build the
 //! run: put the prompt's declared `input:` file in place in the store
 //! (`files::stage_input`); hand the run's whole filesystem, real
-//! directories and the declared store, to the params as given; take the
-//! run's snapshot of the Host's Packs with the run's own services once
-//! each of the run's Packs is ready, or the run's cancel fires, which
-//! yields the catalog, the roster, the preludes, and the tool performer;
+//! directories and the declared store, to the params as given; make the
+//! run's instance of each of its Packs with the run's own services, and
+//! take the run's snapshot of them once each is ready, or the run's
+//! cancel fires, which yields the catalog, the roster, the preludes, and
+//! the tool performer;
 //! set the first three, the setup's limits, and the run's model on the
 //! params; and build the `Run` beside that snapshot.
 //!
@@ -65,19 +66,20 @@ pub(crate) async fn begin(
     Ok((run_id, RunParams::new(seed, started_at)))
 }
 
-/// Stages `prompt`'s input in `setup.vfs`, snapshots the run's Packs from
-/// `host.packs` once each is ready or `cancel` fires, and builds the `Run`
-/// over `params` under `setup.limits`. Ends the run at the recorder with
-/// an input failure as its result and returns it.
+/// Stages `prompt`'s input in `setup.vfs`, makes the run's Packs from
+/// `host.packs` with `setup.services` and snapshots them once each is
+/// ready or `cancel` fires, and builds the `Run` over `params` under
+/// `setup.limits`. Ends the run at the recorder with an input failure as
+/// its result and returns it.
 ///
 /// The run's `ui()` snapshot is `setup`'s selection and first workspace
 /// root, and `model` fills all five roles, so the run's first step checks
-/// each declared role's requirements against it. A Pack whose `ready`
-/// fails is unavailable to this run, with its error as the reason. A
-/// cancel ends the wait, and each Pack is snapshotted as it stands. A
-/// prompt the environment cannot satisfy is prepared all the same: the
-/// run's first step ends it with the Engine's notice, or as canceled when
-/// the run's cancel fired first.
+/// each declared role's requirements against it. A Pack whose factory
+/// refuses or panics, or whose `ready` fails, is unavailable to this run,
+/// with the reason. A cancel ends the wait, and each Pack is snapshotted
+/// as it stands. A prompt the environment cannot satisfy is prepared all
+/// the same: the run's first step ends it with the Engine's notice, or as
+/// canceled when the run's cancel fired first.
 ///
 /// # Errors
 /// Returns the input failure from `stage_input` when the declared input
@@ -108,13 +110,13 @@ pub(crate) async fn prepare(
     }
 
     // The run's whole filesystem, the real directories and the declared
-    // store, goes to the params as given. The snapshot of the run's Packs
-    // is taken once each of them is ready or the run is canceled: its
-    // catalog is what the run offers, its roster gives each Pack's object
-    // in the run's Lua and is what the run's first step checks the
-    // declared Packs against, its preludes go to every section VM, and the
-    // snapshot itself is the run's tool performer, lending each call the
-    // run's services.
+    // store, goes to the params as given. The run makes its instance of
+    // each of its Packs with its own services, and the snapshot of them
+    // is taken once each is ready or the run is canceled: its catalog is
+    // what the run offers, its roster gives each Pack's object in the
+    // run's Lua and is what the run's first step checks the declared
+    // Packs against, its preludes go to every section VM, and the
+    // snapshot itself is the run's tool performer.
     let packs = host
         .packs
         .snapshot(&prompt, setup.services.clone(), cancel)

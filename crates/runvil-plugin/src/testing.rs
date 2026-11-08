@@ -3,27 +3,26 @@
 use runvil_types::tools::{ToolCallOrigin, ToolCaller, ToolId};
 use runvil_vfs::{Access, Origin, VfsRef};
 
-use crate::{HostServices, ToolContext};
+use crate::ToolContext;
 
 /// One tool call a test makes directly, without a Harness.
 ///
 /// It owns everything a [`ToolContext`] borrows: the called tool's id, an
-/// access over a fresh in-memory filesystem, an origin naming the section
-/// `Test` and a caller that is the script unless
-/// [`with_caller`](TestCall::with_caller) names another, and the run's
-/// services, which are empty unless
-/// [`with_services`](TestCall::with_services) supplies them.
+/// access over a fresh in-memory filesystem, and an origin naming the
+/// section `Test` and a caller that is the script unless
+/// [`with_caller`](TestCall::with_caller) names another. A test hands the
+/// run's own services to the Pack's factory, which makes the instance it
+/// calls.
 #[derive(Debug)]
 pub struct TestCall {
     tool: ToolId,
     access: Access,
     origin: ToolCallOrigin,
-    services: HostServices,
 }
 
 impl TestCall {
     /// A call of `tool` from the script of the section `Test`, over a
-    /// fresh in-memory filesystem, with no services.
+    /// fresh in-memory filesystem.
     ///
     /// # Panics
     /// Panics when the fresh in-memory filesystem refuses the access,
@@ -42,15 +41,7 @@ impl TestCall {
             tool,
             access,
             origin,
-            services: HostServices::new(),
         }
-    }
-
-    /// Returns the call with `services` as the run's services.
-    #[must_use]
-    pub fn with_services(mut self, services: HostServices) -> TestCall {
-        self.services = services;
-        self
     }
 
     /// Returns the call with `caller` as the origin's caller, keeping its
@@ -64,6 +55,6 @@ impl TestCall {
     /// Lends the context to one call.
     #[must_use]
     pub fn context(&self) -> ToolContext<'_> {
-        ToolContext::new(&self.tool, &self.access, &self.origin, &self.services)
+        ToolContext::new(&self.tool, &self.access, &self.origin)
     }
 }

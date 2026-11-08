@@ -3,7 +3,7 @@
 //! answers, so a Pack still starting has its tools in the run once it is
 //! ready, a Pack whose `ready` fails is unavailable to that run and
 //! offering it raises its reason, an undeclared third-party Pack that
-//! never gets ready holds no run up, a built Pack with no tools still
+//! never gets ready holds no run up, a built-in Pack with no tools still
 //! reaches the prompt's Lua, a cancel during the wait ends the run as
 //! canceled in both the report and the record, even when the run's first
 //! step would refuse it, a cancel that lands while a refusal is recorded
@@ -122,7 +122,7 @@ impl Pack for Starting {
     }
 }
 
-/// A Host that built a [`Starting`] Pack for each of `fqns`, in order,
+/// A Host that installed a [`Starting`] Pack for each of `fqns`, in order,
 /// every startup standing at `phase`, beside each Pack's handle in `fqns`
 /// order.
 fn starting_host(fqns: &[&'static str], phase: Phase) -> (Packs, Vec<StartupHandle>) {
@@ -142,7 +142,7 @@ fn starting_host(fqns: &[&'static str], phase: Phase) -> (Packs, Vec<StartupHand
     (Packs::new(packs), handles)
 }
 
-/// A Host that built [`SLOW`], whose startup stands at `phase`, beside
+/// A Host that installed [`SLOW`], whose startup stands at `phase`, beside
 /// the sender that moves it and the startup the Pack shares.
 fn slow_host(phase: Phase) -> (Packs, watch::Sender<Phase>, Arc<Startup>) {
     let (host, mut handles) = starting_host(&[SLOW], phase);
@@ -297,7 +297,7 @@ async fn an_undeclared_builtin_with_no_tools_has_an_object_the_prompt_can_offer(
     assert_eq!(
         completed(drive_over(reads_stub, host).await),
         "subagents:0",
-        "every Host builds the stub and every run holds it, so Lua sees it and offers it"
+        "every Host installs the stub and every run makes it, so Lua sees it and offers it"
     );
 }
 

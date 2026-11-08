@@ -125,7 +125,7 @@ use crate::server::{Server, State};
 /// Its FQN is `runvil/mcp`, so its Pack id is `mcp`. Its config is the
 /// `mcpServers` object of an `mcp.json` file, and its `install` reads
 /// the Plugin contract's [`runvil_plugin::TOKIO_RUNTIME`] service. It has
-/// no prelude and needs no per-run service.
+/// no prelude, and its factory reads none of the run's services.
 const MCP: PackInfo =
     PackInfo::new("runvil/mcp").description("Tools from every configured MCP server");
 

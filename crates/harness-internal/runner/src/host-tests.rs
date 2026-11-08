@@ -1,7 +1,8 @@
 //! Tests for `Host::parse`: a prompt found by its name parses and names
-//! itself by that name, a finder or parse failure comes back as given,
-//! and a `uses:` entry the Host's Packs cannot serve is refused naming the
-//! Pack and its reason.
+//! itself by that name, a finder or parse failure comes back as given, a
+//! `uses:` entry naming a Pack not installed or inserted unavailable is
+//! refused naming the Pack and its reason, and one naming a Pack whose
+//! factory refuses parses, since parsing makes no Pack.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -64,9 +65,9 @@ impl Timer for Instant {
     }
 }
 
-/// A Host holding `acme/kit`, which builds, `acme/broken`, whose factory
-/// refuses, and `acme/offline`, inserted unavailable, that finds each
-/// prompt in `sources` by its name.
+/// A Host holding `acme/kit`, whose factory makes it, `acme/broken`,
+/// whose factory refuses, and `acme/offline`, inserted unavailable, that
+/// finds each prompt in `sources` by its name.
 fn host(sources: &[(&str, String)]) -> Host {
     let mut registry = PackRegistry::new();
     registry.insert(PackInfo::new("acme/kit"), builds).unwrap();
@@ -110,11 +111,11 @@ fn declaring(uses: &str) -> String {
 }
 
 #[test]
-fn a_prompt_whose_declared_packs_all_built_parses_under_its_name() {
+fn a_prompt_whose_declared_packs_are_all_installed_parses_under_its_name() {
     let host = host(&[("research.md", declaring("uses:\n  - acme/kit\n"))]);
     let prompt = host
         .parse("research.md")
-        .expect("every declared Pack built");
+        .expect("every declared Pack is installed");
     assert_eq!(prompt.file(), "research.md");
     assert_eq!(prompt.title(), "Research");
 }
@@ -137,17 +138,12 @@ fn a_uses_entry_naming_an_uninstalled_pack_is_refused_naming_it() {
 }
 
 #[test]
-fn a_uses_entry_naming_a_pack_whose_factory_refused_is_refused_with_its_reason() {
+fn a_uses_entry_naming_a_pack_whose_factory_refuses_parses_since_parsing_makes_no_pack() {
     let host = host(&[("research.md", declaring("uses:\n  - acme/broken\n"))]);
-    let error = host
+    let prompt = host
         .parse("research.md")
-        .expect_err("acme/broken failed to build");
-    assert_eq!(error.code, ErrorCode::RequirementsUnmet, "{error:?}");
-    assert_eq!(
-        error.message,
-        "the environment cannot satisfy this prompt:\n\
-         - broken is unavailable: the broken backend is down"
-    );
+        .expect("only a run calls acme/broken's factory");
+    assert_eq!(prompt.file(), "research.md");
 }
 
 #[test]

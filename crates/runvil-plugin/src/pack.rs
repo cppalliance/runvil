@@ -10,7 +10,7 @@ use runvil_types::error::Error;
 use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolInfo, ToolOutput};
 
-use crate::{HostServices, RenderContext, ServiceId, ToolContext};
+use crate::{HostServices, RenderContext, ToolContext};
 
 /// A boxed future that may borrow for `'a`, the same type as
 /// `futures::future::BoxFuture`.
@@ -20,37 +20,39 @@ use crate::{HostServices, RenderContext, ServiceId, ToolContext};
 /// body in `Box::pin(async move { ... })`.
 pub type PackFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-/// One Pack object: the tools it offers and the calls it performs.
+/// One run's instance of a Pack: the tools it offers and the calls it
+/// performs.
 ///
-/// The Host makes one object per registered Pack, through the Pack's
-/// [`PackFactory`], and every run shares it, so an implementation is
-/// `Send + Sync`. Cleanup, such as stopping a child process, goes in the
-/// implementation's `Drop`, which runs when the Host drops the context
-/// holding the Pack. There is no shutdown hook.
+/// Each run makes its own instance of each Pack it holds, through the
+/// Pack's [`PackFactory`]. The run's effects share it behind an `Arc`, so
+/// an implementation is `Send + Sync`. Cleanup, such as closing what the
+/// instance opened for its run, goes in the implementation's `Drop`, which
+/// runs when the run ends. There is no shutdown hook.
 pub trait Pack: Send + Sync {
     /// Returns the tools the Pack offers now.
     ///
-    /// The Harness reads the list once when each run starts, after it
-    /// awaits [`ready`](Pack::ready), so a Pack whose tools change
-    /// returns its current list, and a Pack still coming up returns what
-    /// it has so far. Each tool's id sits under the Pack id
+    /// The Harness reads the list once, when the run takes its snapshot
+    /// after it awaits [`ready`](Pack::ready), so a Pack whose tools
+    /// change returns its current list, and a Pack still coming up
+    /// returns what it has so far. Each tool's id sits under the Pack id
     /// [`new_pack`](PackFactory::new_pack) received, as in `web/fetch`.
     fn tools(&self) -> Vec<ToolInfo>;
 
     /// Resolves once the Pack's tool list is complete, or with the
     /// reason it can't serve now.
     ///
-    /// The Harness awaits every Pack's `ready` together before each run
-    /// reads [`tools`](Pack::tools). A Pack whose `ready` fails is
-    /// unavailable to that run, with the error's message as the reason.
-    /// The default resolves `Ok(())` at once, for a Pack whose tools are
-    /// known when [`new_pack`](PackFactory::new_pack) returns.
+    /// The Harness awaits the `ready` of each of a run's instances
+    /// together before the run reads [`tools`](Pack::tools). A Pack whose
+    /// `ready` fails is unavailable to that run, with the error's message
+    /// as the reason. The default resolves `Ok(())` at once, for a Pack
+    /// whose tools are known when [`new_pack`](PackFactory::new_pack)
+    /// returns.
     ///
     /// # Invariants
     ///
     /// - `ready` resolves `Ok` once [`tools`](Pack::tools) is complete,
     ///   or `Err` with a reason a model can read when the Pack can't serve
-    ///   now. A Pack that recovers answers `Ok` to a later call.
+    ///   now.
     /// - `ready` resolves within a bound the Pack owns. The Pack's own
     ///   task enforces that bound, and `ready` uses no runtime timer,
     ///   because it may be polled outside any particular runtime.
@@ -68,9 +70,10 @@ pub trait Pack: Send + Sync {
 
     /// Performs one tool call.
     ///
-    /// `cx` names the called tool and lends the call's filesystem access,
-    /// its origin, and the run's services. `args` is the JSON the model or
-    /// the script passed.
+    /// `cx` names the called tool and lends the call's filesystem access
+    /// and its origin. What the call needs from the run's own services,
+    /// the instance took at [`new_pack`](PackFactory::new_pack). `args` is
+    /// the JSON the model or the script passed.
     ///
     /// # Invariants
     ///
@@ -135,23 +138,24 @@ pub trait Pack: Send + Sync {
     }
 }
 
-/// Makes instances of one installed Pack.
+/// Makes each run's instance of one installed Pack.
 ///
-/// A Plugin builds the factory at `install`, from its config and the
-/// Host-wide services, and keeps in it what every instance shares, such
-/// as a connection pool. In this build the Harness calls it once, at Host
-/// startup, with an empty `run` map, and every run shares that instance.
+/// A Plugin builds it at `install`, from its config and the Host-wide
+/// services, and keeps in it what every run's instance shares, such as a
+/// connection pool.
 pub trait PackFactory: Send + Sync {
-    /// Makes one instance named `id`. `run` holds the run's own services.
+    /// Makes this run's instance named `id`, taking what it needs from
+    /// the run's own services in `run`.
     ///
-    /// It must not block, do I/O, or panic, because it may run inside a
-    /// run's future.
+    /// It runs inside the run's future, so it must not block, do I/O, or
+    /// panic. The Harness calls it once for each run that holds the Pack,
+    /// and never for a run that does not.
     ///
     /// # Errors
     /// Returns an [`Error`], whose prose is safe to show the model, when
-    /// the factory cannot make the Pack, such as when `run` lacks a
-    /// service it needs. The Pack is then unavailable, with the error's
-    /// message as the reason.
+    /// the factory cannot make the instance, such as when `run` lacks a
+    /// service it needs. The Pack is then unavailable to this run, with
+    /// the error's message as the reason.
     fn new_pack(&self, id: &PackId, run: &HostServices) -> Result<Arc<dyn Pack>, Error>;
 }
 
@@ -171,18 +175,16 @@ where
 /// [`PackRegistry`](crate::PackRegistry) beside its [`PackFactory`].
 ///
 /// It is fixed data the Host reads before anything is made: the Pack's
-/// FQN, an optional prelude, the run services it needs, and a one-line
-/// description. A Plugin crate keeps it in a private constant, builds it
-/// with [`PackInfo::new`], adding a [`PackInfo::description`], and
-/// [`PackInfo::prelude`] and [`PackInfo::needs`] only where it has them,
-/// and inserts it from its `install` function, or inserts it
-/// unavailable when its setup fails:
+/// FQN, an optional prelude, and a one-line description. A Plugin crate
+/// keeps it in a private constant, builds it with [`PackInfo::new`],
+/// adding a [`PackInfo::description`], and a [`PackInfo::prelude`] only
+/// where it has one, and inserts it from its `install` function, or
+/// inserts it unavailable when its setup fails:
 ///
 /// ```text
 /// const GREETER: PackInfo = PackInfo::new("acme/greeter")
 ///     .description("Greet the person running the prompt")
-///     .prelude(PRELUDE)
-///     .needs(NEEDS);
+///     .prelude(PRELUDE);
 ///
 /// pub fn install(
 ///     packs: &mut PackRegistry,
@@ -205,23 +207,19 @@ pub struct PackInfo {
     /// Lua run once for each prompt that declares the Pack, as a chunk
     /// whose `...` is the Pack id; `None` when the Pack has no prelude.
     pub prelude: Option<&'static str>,
-    /// The per-run services the Pack's calls read. A run without every
-    /// one of them cannot use the Pack.
-    pub needs: &'static [ServiceId],
     /// One line saying what the Pack offers, for a Host listing the
     /// Packs its registry holds; empty unless the Plugin crate sets it.
     pub description: &'static str,
 }
 
 impl PackInfo {
-    /// Names the Pack `fqn`, with an empty description, no prelude, and
-    /// no needs; the builders add the rest.
+    /// Names the Pack `fqn`, with an empty description and no prelude;
+    /// the builders add the rest.
     #[must_use]
     pub const fn new(fqn: &'static str) -> PackInfo {
         PackInfo {
             fqn,
             prelude: None,
-            needs: &[],
             description: "",
         }
     }
@@ -243,23 +241,15 @@ impl PackInfo {
             ..self
         }
     }
-
-    /// Sets the per-run services the Pack's calls read.
-    #[must_use]
-    pub const fn needs(self, needs: &'static [ServiceId]) -> PackInfo {
-        PackInfo { needs, ..self }
-    }
 }
 
 impl fmt::Debug for PackInfo {
-    /// Shows the FQN, the description, whether a prelude exists, and the
-    /// needs.
+    /// Shows the FQN, the description, and whether a prelude exists.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PackInfo")
             .field("fqn", &self.fqn)
             .field("description", &self.description)
             .field("prelude", &self.prelude.is_some())
-            .field("needs", &self.needs)
             .finish_non_exhaustive()
     }
 }

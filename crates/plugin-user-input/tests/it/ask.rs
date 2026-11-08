@@ -1,7 +1,8 @@
 //! The `user-input` Pack through the crate's `install`: the one Pack it
 //! inserts, unavailable for any config but `null` or `{}`, what its
-//! factory makes under the Pack id it receives, what the ask tool answers
-//! from the run's broker, and the prelude a declaring prompt runs.
+//! factory makes under the Pack id it receives from a run with a broker
+//! and its refusal of a run without one, what the ask tool answers from
+//! the broker its instance took, and the prelude a declaring prompt runs.
 
 use std::future::Future;
 use std::pin::pin;
@@ -84,21 +85,6 @@ fn user_input() -> PackInfo {
     info
 }
 
-/// The Pack made under the Pack id `name` by the factory `install` inserts.
-fn built(name: &str) -> Arc<dyn Pack> {
-    let name = PackId::parse(name).expect("a one-segment Pack id parses");
-    let (_info, _id, factory) = inserted(Value::Null)
-        .pop()
-        .expect("install inserts one Pack");
-    let Ok(factory) = factory else {
-        panic!("install inserts user-input usable with no configuration");
-    };
-    let Ok(pack) = factory.new_pack(&name, &HostServices::new()) else {
-        panic!("the factory makes the Pack");
-    };
-    pack
-}
-
 /// Run services whose broker is `broker`.
 fn with_broker(broker: impl InputBroker + 'static) -> HostServices {
     let mut services = HostServices::new();
@@ -109,20 +95,41 @@ fn with_broker(broker: impl InputBroker + 'static) -> HostServices {
     services
 }
 
-/// Asks once through the Pack built under `user-input`, with `services`
-/// as the run's services.
-fn ask(services: HostServices) -> Result<runvil_plugin::ToolOutput, Error> {
-    let pack = built("user-input");
-    let call = TestCall::new(pack.tools()[0].id.clone()).with_services(services);
+/// The instance the factory `install` inserts makes under the Pack id
+/// `name` for a run whose own services are `run`, or its refusal.
+fn made(name: &str, run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+    let name = PackId::parse(name).expect("a one-segment Pack id parses");
+    let (_info, _id, factory) = inserted(Value::Null)
+        .pop()
+        .expect("install inserts one Pack");
+    let Ok(factory) = factory else {
+        panic!("install inserts user-input usable with no configuration");
+    };
+    factory.new_pack(&name, run)
+}
+
+/// The instance made under the Pack id `name` for a run whose broker is
+/// `broker`.
+fn built(name: &str, broker: impl InputBroker + 'static) -> Arc<dyn Pack> {
+    let Ok(pack) = made(name, &with_broker(broker)) else {
+        panic!("a run with a broker gets an instance");
+    };
+    pack
+}
+
+/// Asks once through the instance made under `user-input` for a run
+/// whose broker is `broker`.
+fn ask(broker: impl InputBroker + 'static) -> Result<runvil_plugin::ToolOutput, Error> {
+    let pack = built("user-input", broker);
+    let call = TestCall::new(pack.tools()[0].id.clone());
     block_on(pack.call(call.context(), json!({})))
 }
 
 #[test]
-fn the_pack_is_runvil_user_input_and_needs_the_input_broker() {
+fn the_pack_is_runvil_user_input_and_its_broker_key_is_runvil_input_broker() {
     let info = user_input();
     assert_eq!(info.fqn, "runvil/user-input");
-    assert_eq!(info.needs, [INPUT_BROKER.id()]);
-    assert_eq!(info.needs[0].to_string(), "runvil/input-broker");
+    assert_eq!(INPUT_BROKER.id().to_string(), "runvil/input-broker");
     assert_eq!(ASK, "ask");
 }
 
@@ -158,7 +165,7 @@ fn install_adds_the_one_pack_unavailable_for_any_other_configuration() {
 
 #[test]
 fn the_factory_names_the_ask_tool_under_the_pack_id_it_receives_and_marks_it_to_survive_a_stop() {
-    let tools = built("operator").tools();
+    let tools = built("operator", Scripted("unused")).tools();
     assert_eq!(tools.len(), 1, "one tool: {tools:?}");
     let ask = &tools[0];
     assert_eq!(
@@ -180,14 +187,14 @@ fn the_factory_names_the_ask_tool_under_the_pack_id_it_receives_and_marks_it_to_
 #[test]
 fn the_ask_tool_returns_the_brokers_text_trusted_and_byte_exact() {
     let typed = "  two lines\nwith\ttabs and trailing space  ";
-    let output = ask(with_broker(Scripted(typed))).expect("the broker answers");
+    let output = ask(Scripted(typed)).expect("the broker answers");
     assert_eq!(output.text(), typed, "no trimming or re-encoding");
     assert_eq!(output.trust(), OutputTrust::Trusted);
 }
 
 #[test]
 fn a_broker_failure_is_the_ask_calls_error_unchanged() {
-    let error = ask(with_broker(Failing)).expect_err("a failed wait fails the call");
+    let error = ask(Failing).expect_err("a failed wait fails the call");
     assert_eq!(error.prose, "the operator's window closed");
     assert_eq!(error.code, ErrorCode::ToolBackend);
     assert_eq!(
@@ -197,9 +204,29 @@ fn a_broker_failure_is_the_ask_calls_error_unchanged() {
 }
 
 #[test]
-fn a_call_without_a_broker_fails_saying_no_operator_is_connected() {
-    let error = ask(HostServices::new()).expect_err("no broker, no answer");
-    assert_eq!(error.to_string(), "no operator is connected to this run");
+fn the_factory_over_a_run_with_no_input_broker_fails_naming_it() {
+    let Err(error) = made("user-input", &HostServices::new()) else {
+        panic!("a run without a broker gets no instance");
+    };
+    assert_eq!(
+        error.to_string(),
+        "user-input needs runvil/input-broker, and this run provides none"
+    );
+}
+
+#[test]
+fn the_ask_call_uses_the_broker_its_instance_took() {
+    let ada = built("user-input", Scripted("ada"));
+    let bob = built("user-input", Scripted("bob"));
+    for (pack, typed) in [(ada, "ada"), (bob, "bob")] {
+        let call = TestCall::new(pack.tools()[0].id.clone());
+        let output = block_on(pack.call(call.context(), json!({}))).expect("the broker answers");
+        assert_eq!(
+            output.text(),
+            typed,
+            "each instance asks the broker of the run that made it"
+        );
+    }
 }
 
 #[test]

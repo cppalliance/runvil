@@ -2,9 +2,9 @@
 //! three Plugins and builds its Host, every run holds the `web`,
 //! `user-input`, `subagents`, and `mcp` Packs, and the ask is the fixed
 //! `user-input/ask` of vendor `runvil`. A prompt declaring `web` or the built-in
-//! `subagents` prepares over the server's built Packs, a Host without the
-//! search provider builds web as unavailable and refuses the prompt as it
-//! parses, naming that service, and outside a runtime the services leave
+//! `subagents` prepares over the server's installed Packs, a Host without
+//! the search provider installs web unavailable and refuses the prompt as
+//! it parses, naming that service, and outside a runtime the services leave
 //! the runtime out. The `mcp.json` reader returns the `mcpServers` object
 //! as it stands, or an empty one, and a prompt declaring `mcp` prepares,
 //! because the one mcp Pack reads the runtime the server provides. The
@@ -144,7 +144,7 @@ async fn every_run_holds_the_packs_the_three_plugins_add_and_the_builtin() {
     assert_eq!(
         run_prompt(host, lists.to_owned()).await,
         Ok(Ok("web,user-input,subagents,mcp,std".to_owned())),
-        "a run that declares nothing holds every runvil Pack the server built"
+        "a run that declares nothing holds every runvil Pack the server installed"
     );
 }
 
@@ -164,7 +164,7 @@ async fn a_prompt_declaring_subagents_prepares_on_the_servers_built_packs() {
     assert_eq!(
         run_prompt(host, requiring("subagents")).await,
         Ok(Ok("browsed".to_owned())),
-        "the server's Host builds the built-in subagents"
+        "the server's Host installs the built-in subagents"
     );
 }
 

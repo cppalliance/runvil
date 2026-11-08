@@ -28,9 +28,9 @@ mod tests;
 /// [`new`](PackRegistry::new), which holds the built-ins such as
 /// `runvil/subagents` from the start, and calls each Plugin it links. Then
 /// it hands the registry to `Packs::new`, which reads it through
-/// [`into_entries`](PackRegistry::into_entries) and calls each Pack's
-/// factory once, at startup, to make the one Pack object every run
-/// shares.
+/// [`into_entries`](PackRegistry::into_entries) and keeps each Pack's
+/// factory. Each run calls the factory of each Pack it holds to make that
+/// run's instance.
 pub struct PackRegistry {
     entries: BTreeMap<&'static str, Registered>,
 }
@@ -101,8 +101,8 @@ impl PackRegistry {
     ///   [reserved](PackId::is_reserved), such as `adhoc`;
     /// - `reserved_name` when the Pack id is a built-in's.
     ///
-    /// A Pack whose factory refuses to make it is not refused here; the
-    /// Host builds it as unavailable instead.
+    /// A Pack whose factory refuses a run is not refused here; that run
+    /// holds the Pack as unavailable instead.
     pub fn insert(
         &mut self,
         info: PackInfo,
@@ -227,10 +227,10 @@ fn make_refusal_error(reason: &'static str, message: String, fqn: &str) -> Error
 
 /// The built-ins every registry holds from the start.
 ///
-/// A built-in Pack's behavior and tools live in the Engine. Its Pack
-/// object exists only so building, readiness, and the run snapshot treat
-/// it like any other Pack, so a built-in must never offer tools, carry a
-/// prelude, or need services. Its `call` is unreachable, because the
+/// A built-in Pack's behavior and tools live in the Engine. Its instance
+/// exists only so making, readiness, and the run snapshot treat it like
+/// any other Pack, so a built-in must never offer tools, carry a prelude,
+/// or refuse a run. Its `call` is unreachable, because the
 /// Engine never issues a call under a built-in's id: a built-in lists no
 /// tools, so no section offers one of its tools and no render of it adds
 /// one. A built-in never takes a [reserved](PackId::is_reserved) Pack id:
@@ -240,8 +240,8 @@ const BUILTIN: [PackInfo; 1] = [PackInfo::new("runvil/subagents").description(
     "Reserves the subagents name for the Engine's subagent tools, which are not built yet",
 )];
 
-/// The factory of every built-in: makes its [`Builtin`] object; see
-/// [`BUILTIN`].
+/// The factory of every built-in: makes each run's [`Builtin`] instance;
+/// see [`BUILTIN`].
 #[expect(
     clippy::unnecessary_wraps,
     reason = "the PackFactory signature fixes the return type"
@@ -250,7 +250,8 @@ fn builtin(_id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     Ok(Arc::new(Builtin))
 }
 
-/// The object of a built-in Pack, which offers no tools; see [`BUILTIN`].
+/// The instance of a built-in Pack, which offers no tools; see
+/// [`BUILTIN`].
 struct Builtin;
 
 impl Pack for Builtin {

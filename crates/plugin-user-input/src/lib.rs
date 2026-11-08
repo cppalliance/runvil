@@ -35,10 +35,11 @@
 //!
 //! # A run without an operator
 //!
-//! The Pack names [`INPUT_BROKER`] among its needs, so a run whose Host
-//! supplies no broker cannot use the Pack, and a prompt that declares it
-//! is refused before the run starts with a line naming the Pack and
-//! `runvil/input-broker`.
+//! Each run's instance takes the broker from the run's own services
+//! under [`INPUT_BROKER`] when the run makes it. A run whose Host supplies
+//! no broker gets no instance, so it cannot use the Pack, and a prompt
+//! that declares it is refused before the run starts with a line naming
+//! the Pack and `runvil/input-broker`.
 //!
 //! # Failed and canceled waits
 //!
@@ -78,18 +79,18 @@
 mod ask;
 
 use runvil_plugin::{
-    Error, ErrorCode, HostServices, PackInfo, PackRegistry, ServiceId, ServiceKey, make_tool_error,
+    Error, ErrorCode, HostServices, PackInfo, PackRegistry, ServiceKey, make_tool_error,
 };
 use serde_json::{Value, json};
 
 /// The Pack's `PackInfo`.
 ///
 /// Its FQN is `runvil/user-input`, so its Pack id is `user-input`. It
-/// has a prelude and needs the run's [`INPUT_BROKER`].
+/// has a prelude, and each run's instance takes the run's
+/// [`INPUT_BROKER`].
 const USER_INPUT: PackInfo = PackInfo::new("runvil/user-input")
     .description("Ask the person running the prompt")
-    .prelude(PRELUDE)
-    .needs(NEEDS);
+    .prelude(PRELUDE);
 
 /// The Plugin: inserts the `user-input` Pack into `packs`. Its config,
 /// `config["user-input"]`, which is `null` when `config` has no
@@ -130,9 +131,6 @@ pub const ASK: &str = "ask";
 /// The key's id is `runvil/input-broker`. A Host with an operator
 /// provides its broker among each run's services under this key.
 pub const INPUT_BROKER: ServiceKey<dyn InputBroker> = ServiceKey::new("runvil/input-broker");
-
-/// The Pack's needs: a run without a broker cannot use the Pack.
-const NEEDS: &[ServiceId] = &[INPUT_BROKER.id()];
 
 /// The Lua that defines `input.ask()` for a prompt that declares the
 /// Pack. `...` is the Pack's id.

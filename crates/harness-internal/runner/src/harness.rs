@@ -102,10 +102,12 @@ impl Harness {
     /// The run is recorded through `setup.recorder`. It resolves its model
     /// and gets the model's replies through `setup.broker`, and it reads
     /// its start from `host.timer` and sleeps through it. It runs under
-    /// `setup.limits`. Its tool calls go to the Packs of `host.packs` that
-    /// the prompt picks, and each call is lent `setup.services`. A run has
-    /// at most `setup.max_tool_calls_in_flight` tool calls in flight; the
-    /// rest wait and start oldest first. All of this work happens in
+    /// `setup.limits`. It makes its own instance of each Pack of
+    /// `host.packs` that the prompt picks, handing each factory
+    /// `setup.services`, and its tool calls go to those instances, which
+    /// drop when the run ends. A run has at most
+    /// `setup.max_tool_calls_in_flight` tool calls in flight; the rest wait
+    /// and start oldest first. All of this work happens in
     /// [`Harness::run`].
     #[must_use]
     pub fn new(host: Arc<Host>, prompt: Prompt, setup: RunSetup) -> Harness {
@@ -130,9 +132,10 @@ impl Harness {
     /// is `RecorderFailed`.
     ///
     /// It begins the run's record, resolves the run's model through the
-    /// setup's broker, puts the prompt's declared input in place, waits
-    /// for the Host's Packs to be ready, drives the run, and reads the
-    /// declared output file if the run completed. The returned future is
+    /// setup's broker, puts the prompt's declared input in place, makes
+    /// the run's Packs and waits for them to be ready, drives the run, and
+    /// reads the declared output file if the run completed. The run's
+    /// Pack instances drop before it returns. The returned future is
     /// `Send`. Its only runtime needs are those of the Host's performers
     /// and Packs.
     ///

@@ -5,8 +5,8 @@
 //! conversations. The `/ws` workshop socket sits outside this subsystem;
 //! the two share only [`crate::websocket`].
 //!
-//! The server builds one [`Host`] at startup: its `Packs`, built from the
-//! web, user-input, and mcp Plugins, the last over the servers of the
+//! The server builds one [`Host`] at startup: its `Packs`, installed from
+//! the web, user-input, mcp, and std Plugins, mcp over the servers of the
 //! configured `mcp.json`, and the built-in subagents; a finder that reads
 //! each agent from the agents folder through `load_agent`; and the tokio
 //! timer. Each launch opens a conversation in `workshop-agents` and builds
@@ -14,15 +14,18 @@
 //! recorder tee on a handle of the run log's [`TursoRecorder`] that names
 //! the launched agent, a per-run broker over the server's inference broker
 //! ([`broker`]), and the conversation's own services, which hold its input
-//! broker. The run reaches the gateway only through that broker, which
-//! follows the live gateway binding and sends each round to the dropdown's
-//! current pick. Each run's filesystem is an in-memory root, with the
-//! language guide demo's read-only mount beside it while that demo's
-//! switch is on (`language_guide`). The run's setup carries the Host state
-//! ([`bindings`]): the menu's pick and the workspace's granted roots, read
-//! once the menu's catalog holds a chat-capable model. Status-bar
-//! reporting stays in the server (`status`): a per-conversation reporter
-//! derives it from the conversation's events, deltas, and failure reports.
+//! broker. The run makes its own instance of each Pack it holds from those
+//! services, so its user-input instance asks that conversation's operator,
+//! and drops them when it ends. The run reaches the gateway only through
+//! its per-run broker, which follows the live gateway binding and sends
+//! each round to the dropdown's current pick. Each run's filesystem is an
+//! in-memory root, with the language guide demo's read-only mount beside
+//! it while that demo's switch is on (`language_guide`). The run's setup
+//! carries the Host state ([`bindings`]): the menu's pick and the
+//! workspace's granted roots, read once the menu's catalog holds a
+//! chat-capable model. Status-bar reporting stays in the server
+//! (`status`): a per-conversation reporter derives it from the
+//! conversation's events, deltas, and failure reports.
 //!
 //! **Registry carve-out.** Conversations survive socket disconnect and
 //! sockets attach and detach (`socket`), so the launcher keeps the
@@ -78,9 +81,9 @@ const HARNESS_STATE_DIR: &str = "harness";
 /// tokio runtime service, as the handle it supplies.
 const RUNTIME: ServiceKey<tokio::runtime::Handle> = ServiceKey::new(runvil_plugin::TOKIO_RUNTIME);
 
-/// The server's built Packs over its Host-wide [`services`], beside the
-/// ask tool's vendor and id. `mcp` is the `[agents] mcp` setting: the mcp
-/// Pack is built over the servers of the file it names.
+/// The server's installed Packs over its Host-wide [`services`], beside
+/// the ask tool's vendor and id. `mcp` is the `[agents] mcp` setting: the
+/// mcp Pack is installed over the servers of the file it names.
 fn host_packs(registry: &Registry, mcp: Option<&Path>) -> (Packs, Option<AskTool>) {
     with_plugins(&services(registry), read_mcp_servers(mcp))
 }
@@ -143,10 +146,11 @@ fn read_mcp_servers(setting: Option<&Path>) -> Value {
 /// A Host after the server calls, with the Host-wide `services`, the
 /// Plugins of the Packs agents may declare: `web`, `user-input`, so they
 /// can ask the operator, `mcp`, with the `servers` object as its
-/// configuration, and `std`, the file tools. Building the Host builds
-/// those Packs and the built-in `subagents`. The ask tool is the fixed
-/// `user-input/ask` of the `runvil/user-input` Pack, so its vendor is
-/// `runvil`, and `None` only if the user-input Plugin was refused.
+/// configuration, and `std`, the file tools. The Host keeps those Packs
+/// and the built-in `subagents`, and each run makes its own instances of
+/// them. The ask tool is the fixed `user-input/ask` of the
+/// `runvil/user-input` Pack, so its vendor is `runvil`, and `None` only if
+/// the user-input Plugin was refused.
 fn with_plugins(services: &HostServices, servers: Value) -> (Packs, Option<AskTool>) {
     let mut packs = PackRegistry::new();
     if let Err(error) = plugin_web::install(&mut packs, Value::Null, services) {
@@ -245,8 +249,8 @@ struct Inner {
     recorder: Arc<TursoRecorder>,
     /// The inference broker behind each run's broker.
     broker: WorkshopBroker,
-    /// What every run shares: the built Packs every run takes its
-    /// snapshot of, the finder that reads each agent from the agents
+    /// What every run shares: the installed Packs each run makes its
+    /// instances of, the finder that reads each agent from the agents
     /// folder, and the tokio timer.
     host: Arc<Host>,
     /// The ask tool, `user-input/ask` of vendor `runvil`, which a

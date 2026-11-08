@@ -1,12 +1,8 @@
 //! `TestCall`: the context a Plugin crate's own test lends a call it makes
 //! directly.
 
-use std::sync::Arc;
-
 use runvil_plugin::testing::TestCall;
-use runvil_plugin::{HostServices, ServiceKey, ToolCaller, ToolId};
-
-const GREETING: ServiceKey<str> = ServiceKey::new("acme/greeting");
+use runvil_plugin::{ToolCaller, ToolId};
 
 fn inspect() -> ToolId {
     ToolId::parse("acme/inspect").expect("a two-segment tool id parses")
@@ -27,10 +23,6 @@ fn a_test_call_lends_its_tool_a_script_origin_and_a_working_filesystem() {
             .expect("the written file reads back"),
         b"hello"
     );
-    assert!(
-        cx.service(&GREETING).is_none(),
-        "a call built without services has none"
-    );
 }
 
 #[test]
@@ -40,16 +32,6 @@ fn a_test_call_with_a_caller_lends_that_caller() {
     assert_eq!(cx.tool(), &inspect());
     assert_eq!(cx.origin().caller, ToolCaller::Model);
     assert_eq!(cx.origin().section, "Test");
-}
-
-#[test]
-fn a_test_call_lends_the_services_it_was_given() {
-    let mut services = HostServices::new();
-    services
-        .provide(&GREETING, Arc::from("hello"))
-        .expect("a valid, new id is accepted");
-    let call = TestCall::new(inspect()).with_services(services);
-    assert_eq!(call.context().service(&GREETING).as_deref(), Some("hello"));
 }
 
 #[test]

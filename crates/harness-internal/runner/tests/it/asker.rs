@@ -1,16 +1,16 @@
 //! The fixture ask Pack the Harness suites build in place of a real
 //! user-input Pack, which Harness crates may not name: an ask tool that
-//! survives stops, a prelude defining `input.ask()`, a need for the run's
-//! broker, and a broker that fails with a tool error. A prompt declares
-//! it as `tests/user-input`.
+//! survives stops, a prelude defining `input.ask()`, a factory that takes
+//! the run's broker and refuses a run without one, and a broker that
+//! fails with a tool error. A prompt declares it as `tests/user-input`.
 
 use std::sync::Arc;
 
 use runvil::make_tool_error;
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
-    HostServices, Pack, PackFuture, PackId, PackInfo, ServiceId, ServiceKey, ToolContext, ToolId,
-    ToolInfo, ToolOutput,
+    HostServices, Pack, PackFuture, PackId, PackInfo, ServiceKey, ToolContext, ToolId, ToolInfo,
+    ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -18,16 +18,12 @@ use crate::support::Make;
 
 /// The `PackInfo`, whose Pack id is `user-input`, beside its factory.
 pub(crate) const ASKER: (PackInfo, Make) = (
-    PackInfo::new("tests/user-input")
-        .prelude(PRELUDE)
-        .needs(NEEDS),
+    PackInfo::new("tests/user-input").prelude(PRELUDE),
     new_asker,
 );
 
 /// The key the run's broker is provided under.
 pub(crate) const BROKER: ServiceKey<dyn AskBroker> = ServiceKey::new("tests/input-broker");
-
-const NEEDS: &[ServiceId] = &[BROKER.id()];
 
 const PRELUDE: &str = r#"local pack = ...
 input = {}
@@ -52,22 +48,29 @@ pub(crate) fn broker_services(broker: Arc<dyn AskBroker>) -> HostServices {
     services
 }
 
+/// One run's instance: its ask tool and the broker it took from the run.
 struct Asker {
     tools: Vec<ToolInfo>,
+    broker: Arc<dyn AskBroker>,
 }
 
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "the PackFactory signature fixes the return type"
-)]
-fn new_asker(name: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+fn new_asker(name: &PackId, run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+    let broker = run.get(&BROKER).ok_or_else(|| {
+        make_tool_error(
+            ErrorCode::ToolOther,
+            format!("{name} needs tests/input-broker, and this run provides none"),
+        )
+    })?;
     let ask = ToolInfo::new(
         ToolId::parse(&format!("{name}/ask")).unwrap(),
         "Wait for the operator's next message.",
         json!({ "type": "object", "properties": {} }),
     )
     .survives_stop(true);
-    Ok(Arc::new(Asker { tools: vec![ask] }))
+    Ok(Arc::new(Asker {
+        tools: vec![ask],
+        broker,
+    }))
 }
 
 impl Pack for Asker {
@@ -77,14 +80,9 @@ impl Pack for Asker {
 
     fn call<'a>(
         &'a self,
-        cx: ToolContext<'a>,
+        _cx: ToolContext<'a>,
         _args: Value,
     ) -> PackFuture<'a, Result<ToolOutput, Error>> {
-        Box::pin(async move {
-            let broker = cx.service(&BROKER).ok_or_else(|| {
-                make_tool_error(ErrorCode::ToolOther, "no operator is connected to this run")
-            })?;
-            broker.wait().await.map(ToolOutput::trusted)
-        })
+        Box::pin(async move { self.broker.wait().await.map(ToolOutput::trusted) })
     }
 }

@@ -25,7 +25,7 @@ use support::{
 };
 
 #[tokio::test]
-async fn install_adds_runvil_mcp_with_no_prelude_and_no_needs() {
+async fn install_adds_runvil_mcp_with_no_prelude() {
     let inserted = inserted(Value::Null, &runtime_services());
     let [(info, id, factory)] = inserted.as_slice() else {
         panic!("install inserts one Pack");
@@ -34,7 +34,6 @@ async fn install_adds_runvil_mcp_with_no_prelude_and_no_needs() {
     assert_eq!(id.to_string(), "mcp");
     assert!(factory.is_ok(), "no servers is a usable Pack");
     assert!(info.prelude.is_none());
-    assert!(info.needs.is_empty());
 }
 
 #[tokio::test(flavor = "multi_thread")]

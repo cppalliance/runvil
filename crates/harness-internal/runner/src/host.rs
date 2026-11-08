@@ -1,5 +1,5 @@
-//! What every run of one Host shares: [`Host`], its built Packs, how it
-//! finds prompts, and its timer, and [`Host::parse`], which finds a
+//! What every run of one Host shares: [`Host`], its installed Packs, how
+//! it finds prompts, and its timer, and [`Host::parse`], which finds a
 //! prompt by its name, parses it, and checks its `uses:` list against the
 //! Host's Packs.
 
@@ -11,11 +11,12 @@ use runvil::{Error, ErrorCode, Prompt, PromptFinder};
 use crate::packs::Packs;
 use crate::performers::Timer;
 
-/// What every run of one Host shares: its built Packs, how it finds
+/// What every run of one Host shares: its installed Packs, how it finds
 /// prompts, and its timer. A Host builds one and shares it behind an
 /// `Arc`.
 pub struct Host {
-    /// Every Pack the Host built from its registry.
+    /// Every Pack the Host installed in its registry, whose factories
+    /// make each run's instances.
     pub packs: Packs,
     /// Finds each prompt's source by its name.
     pub prompts: Arc<dyn PromptFinder>,
@@ -27,7 +28,10 @@ impl Host {
     /// Parses the prompt `name` with `Prompt::parse` over `prompts`, then
     /// checks its `uses:` against `packs`. Returns the parse failure, a
     /// finder's included, as given, or `RequirementsUnmet` naming each
-    /// Pack that `Packs::refusals` reports, with its reason.
+    /// Pack that `Packs::refusals` reports, with its reason: one not
+    /// installed, or inserted unavailable. Parsing makes no Pack, so a
+    /// factory that would refuse a run is refused at that run's first step
+    /// instead.
     ///
     /// The parse events go to `tracing` at debug level; no run exists yet
     /// to record them.

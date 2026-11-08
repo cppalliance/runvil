@@ -2,7 +2,7 @@
 //!
 //! A Host makes a [`pack::PackRegistry`], calls each Plugin it links,
 //! which inserts its Packs into the registry, and builds one
-//! [`pack::Packs`] over it, which builds every Pack the registry holds.
+//! [`pack::Packs`] over it, which keeps each Pack's factory.
 //! It builds one [`Host`] at startup over those Packs, a
 //! [`PromptFinder`], and its [`Timer`], which also stamps each run's
 //! start as a [`Timestamp`], and shares it behind an `Arc`.
@@ -12,7 +12,9 @@
 //! [`RunLimits`], tool-call cap, arguments, and input text, and
 //! [`Harness::new`] takes the Host, the parsed prompt, and that setup.
 //! [`Harness::run`] runs the prompt to its end and returns its
-//! [`RunReport`]. While the run goes on, the launcher steers it through
+//! [`RunReport`]. The run makes its own instance of each Pack it holds,
+//! handing each factory the setup's services, and drops the instances
+//! when it ends. While the run goes on, the launcher steers it through
 //! the [`RunControl`] it took from `Harness::control` before the run
 //! started.
 //!
@@ -40,10 +42,10 @@ pub use runvil::RunLimits;
 pub use runvil::timestamp::Timestamp;
 
 pub mod pack {
-    //! The registry a Host's Plugins insert Packs into, the Packs built
-    //! from every Pack the registry holds, the services maps a Host
-    //! fills, and the Pack ids. The Plugin crates themselves are the
-    //! Host's own dependencies.
+    //! The registry a Host's Plugins insert Packs into, the Packs
+    //! installed from it, whose factories make each run's instances, the
+    //! services maps a Host fills, and the Pack ids. The Plugin crates
+    //! themselves are the Host's own dependencies.
 
     pub use harness_runner::Packs;
     pub use runvil_plugin::HostServices;

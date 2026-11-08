@@ -1,6 +1,6 @@
 //! The crate's Plugin, [`install`], the `std` Pack's `PackInfo`, the
-//! factory that makes its object, and the stub that every tool but Read,
-//! ListDir, and Grep still answers with in this build.
+//! factory that makes each run's instance, and the stub that every tool
+//! but Read, ListDir, and Grep still answers with in this build.
 
 use std::sync::Arc;
 
@@ -29,8 +29,8 @@ pub const NOT_IMPLEMENTED: &str = "The <name> tool is not implemented in this bu
 /// The Pack's `PackInfo`.
 ///
 /// Its FQN is `runvil/std`, so its Pack id is `std`. It has no prelude,
-/// needs no per-run service, and takes no configuration but `null` or
-/// `{}`.
+/// its factory reads none of the run's services, and it takes no
+/// configuration but `null` or `{}`.
 const STD: PackInfo =
     PackInfo::new("runvil/std").description("Read, write, search, and delete files");
 
@@ -63,7 +63,7 @@ pub fn install(
     packs.insert(STD, new_pack)
 }
 
-/// The one object every run shares: its tool list.
+/// One run's instance: its tool list.
 #[derive(Debug)]
 struct Std {
     tools: Vec<ToolInfo>,

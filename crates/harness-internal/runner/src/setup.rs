@@ -24,7 +24,7 @@ pub struct RunSetup {
     pub recorder: Arc<dyn RunRecorder>,
     /// Lists the models and performs model rounds.
     pub broker: Arc<dyn InferenceBroker>,
-    /// What each of the run's tool calls is lent.
+    /// The services the run makes its Pack instances from.
     pub services: HostServices,
     /// The run's whole filesystem: the input is staged in it, the run
     /// works in it, and the declared output is read from it.

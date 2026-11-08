@@ -149,9 +149,10 @@ test("Engine crates name the caller, never the Host or the Harness's crates and 
   assert.deepEqual(offenders, [], "Engine crate lines break the root AGENTS.md Engine rule");
 });
 
-// Packs are built once, when the Host sets up, and every run takes a
-// snapshot of them, so nothing activates a Pack when a run starts. Comment
-// lines are checked, not code, so a local variable keeps its name.
+// Packs are installed once, when the Host sets up, and each run makes its
+// own instance of each Pack it holds and takes a snapshot of them, so docs
+// say a Pack is made for each run, never activated. Comment lines are
+// checked, not code, so a local variable keeps its name.
 const PLUGIN_DOC_DIRS = [
   "crates/runvil",
   "crates/runvil-internal",

@@ -100,11 +100,10 @@ fn call_seeded(segment: &str, files: &[(&str, &[u8])], args: Value) -> Result<To
 }
 
 #[test]
-fn the_pack_is_runvil_std_with_no_prelude_and_no_per_run_needs() {
+fn the_pack_is_runvil_std_with_no_prelude() {
     let info = std_pack();
     assert_eq!(info.fqn, "runvil/std");
     assert!(info.prelude.is_none());
-    assert!(info.needs.is_empty());
     assert_eq!(info.description, "Read, write, search, and delete files");
 }
 

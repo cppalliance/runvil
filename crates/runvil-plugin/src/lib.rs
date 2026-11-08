@@ -32,10 +32,10 @@
 //! The Host owns the [`PackRegistry`]; a Plugin only inserts its Packs into it.
 //!
 //! Each Pack is a [`PackInfo`], built with [`PackInfo::new`]: its FQN, an
-//! optional Lua prelude, and the per-run services its calls read. Its
-//! [`PackFactory`] makes the [`Pack`] object; the Host calls
-//! [`PackFactory::new_pack`] once, when it builds its Packs, and every run
-//! shares that object. [`Pack::call`]
+//! optional Lua prelude, and a one-line description. Its [`PackFactory`]
+//! makes each run's [`Pack`] instance: the Harness calls
+//! [`PackFactory::new_pack`] for each Pack a run holds, with the run's own
+//! services, and the instance drops when the run ends. [`Pack::call`]
 //! performs one tool call with the [`ToolContext`] the Harness lends it.
 //! [`Pack::render`] returns the tools the model sees, given the tools a
 //! section offered from the Pack and the [`RenderContext`] that names the
@@ -60,11 +60,17 @@
 //!   boundaries.
 //! - Only `[dev-dependencies]` enable `test-support`, which the
 //!   `test-support` leak guard enforces.
-//! - A Host makes each Pack object once, through its
-//!   [`PackFactory`], and every run shares it. Host-wide services
-//!   reach only a Plugin's `install`, and a run's own services reach
-//!   only calls, through [`ToolContext::service`]. Cleanup goes in the
-//!   Pack's `Drop`; there is no shutdown hook.
+//! - Each run makes its own instance of each Pack it holds, through the
+//!   Pack's [`PackFactory`], and of no other Pack. The instance drops
+//!   when the run ends, so cleanup goes in its `Drop`; there is no
+//!   shutdown hook.
+//! - Each object takes the services that live as long as it does when it
+//!   is made. Host-wide services reach only a Plugin's `install`, a run's
+//!   own services reach only [`PackFactory::new_pack`], and a call gets
+//!   only facts about itself, through its [`ToolContext`].
+//! - [`PackFactory::new_pack`] runs inside the run's future, so it must
+//!   not block, do I/O, or panic. A refusal or a panic makes the Pack
+//!   unavailable to that run alone.
 //! - Every tool a Pack offers sits under the Pack id
 //!   [`PackFactory::new_pack`] receives, as `web/fetch` sits under `web`.
 //!   A tool that does not is dropped from every run's catalog.

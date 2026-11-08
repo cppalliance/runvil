@@ -5,10 +5,9 @@ use super::{NOT_IMPLEMENTED, STD};
 use crate::spec;
 
 #[test]
-fn the_pack_is_runvil_std_and_takes_no_per_run_service() {
+fn the_pack_is_runvil_std_with_no_prelude() {
     assert_eq!(STD.fqn, "runvil/std");
     assert!(STD.prelude.is_none());
-    assert!(STD.needs.is_empty());
 }
 
 #[test]

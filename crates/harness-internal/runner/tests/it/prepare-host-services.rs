@@ -1,20 +1,18 @@
-//! The run's services at preparation: a declared Pack that needs a
-//! service serves a call with the provider the run's map holds, and a run
-//! whose services lack it is refused at its first step naming the
-//! service.
+//! The run's services at preparation: a declared Pack whose factory takes
+//! a service from the run serves a call with the provider the run's map
+//! holds, and a run whose services lack it is refused at its first step
+//! naming the service.
 
 use super::*;
 
-use runvil_plugin::{ServiceId, ServiceKey};
+use runvil_plugin::ServiceKey;
 
-/// The test-only service the fixture needs.
+/// The test-only service the fixture's factory takes.
 const GREETING: ServiceKey<str> = ServiceKey::new("tests/greeting");
 
-const NEEDS: &[ServiceId] = &[GREETING.id()];
-
 /// The fixture Pack `greeter`: one tool, `greeter/greet`, answering
-/// with the run's greeting.
-const GREETER: (PackInfo, Make) = (PackInfo::new("tests/greeter").needs(NEEDS), new_greeter);
+/// with the greeting its instance took from the run.
+const GREETER: (PackInfo, Make) = (PackInfo::new("tests/greeter"), new_greeter);
 
 /// A prompt declaring the greeter Pack and returning its greeting.
 const GREETS: &str = "---\nname: greets\ndescription: d\nrunvil: 0\n\
@@ -23,19 +21,25 @@ const GREETS: &str = "---\nname: greets\ndescription: d\nrunvil: 0\n\
 
 struct Greeter {
     tools: Vec<ToolInfo>,
+    greeting: Arc<str>,
 }
 
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "the PackFactory signature fixes the return type"
-)]
-fn new_greeter(name: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+fn new_greeter(name: &PackId, run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+    let greeting = run.get(&GREETING).ok_or_else(|| {
+        make_tool_error(
+            ErrorCode::ToolOther,
+            format!("{name} needs tests/greeting, and this run provides none"),
+        )
+    })?;
     let greet = ToolInfo::new(
         ToolId::parse(&format!("{name}/greet")).unwrap(),
         "Answer with the run's greeting.",
         json!({ "type": "object", "properties": {} }),
     );
-    Ok(Arc::new(Greeter { tools: vec![greet] }))
+    Ok(Arc::new(Greeter {
+        tools: vec![greet],
+        greeting,
+    }))
 }
 
 impl Pack for Greeter {
@@ -45,15 +49,10 @@ impl Pack for Greeter {
 
     fn call<'a>(
         &'a self,
-        cx: ToolContext<'a>,
+        _cx: ToolContext<'a>,
         _args: Value,
     ) -> PackFuture<'a, Result<ToolOutput, Error>> {
-        Box::pin(async move {
-            let greeting = cx
-                .service(&GREETING)
-                .ok_or_else(|| make_tool_error(ErrorCode::ToolOther, "no greeting in this run"))?;
-            Ok(ToolOutput::trusted(greeting.to_string()))
-        })
+        Box::pin(async move { Ok(ToolOutput::trusted(self.greeting.to_string())) })
     }
 }
 
@@ -77,7 +76,7 @@ async fn a_pack_serves_a_call_with_the_service_the_runs_map_provides() {
     assert_eq!(
         completed(result),
         "hello",
-        "the call read the run's provider"
+        "the instance took the run's provider"
     );
 }
 
@@ -87,7 +86,7 @@ async fn a_pack_whose_service_the_run_lacks_is_refused_naming_the_service() {
     let notice = refusal(result);
     assert!(
         notice.contains(
-            "- greeter is unavailable: the run lacks the services it needs: tests/greeting"
+            "- greeter is unavailable: greeter needs tests/greeting, and this run provides none"
         ),
         "the notice names the Pack and the missing service: {notice}"
     );

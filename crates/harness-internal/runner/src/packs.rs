@@ -1,26 +1,28 @@
-//! The Host's built Packs: [`Packs`], built once at startup from every
-//! Pack a [`PackRegistry`] holds and shared by every run, the pick of
-//! each run's Packs, and the snapshot each run takes of them.
+//! The Host's installed Packs: [`Packs`], which keeps the factory of
+//! every Pack a [`PackRegistry`] holds, the pick of each run's Packs, the
+//! instance each run makes of each of them, and the snapshot each run
+//! takes of those instances.
 //!
 //! The Host's Plugins insert Packs into the registry, each with its
-//! factory or unavailable for a reason, and building the Packs calls each
-//! factory once, with an empty run map, to make the one Pack object every
-//! run shares. A factory's refusal is not an error: the Pack is stored as
-//! unavailable with the refusal as its reason, as a Pack inserted
-//! unavailable is with its own, and every run that needs it is refused
-//! naming that reason.
+//! factory or unavailable for a reason, and every run that declares a
+//! Pack inserted unavailable is refused naming that reason.
 //!
 //! A run's Packs are the Packs its prompt declares under `uses:`, plus
 //! every `runvil` Pack whose Pack id no declaration takes, so a declared
 //! `acme/web` stands in for `runvil/web` and an undeclared third-party
-//! Pack is in no run. Before each run, the Harness's preparation picks
-//! those Packs and waits for each of them to be ready, and a Pack whose
-//! `ready` fails is unavailable to that run the same way. Then it takes a
-//! snapshot of them with the run's own services: the catalog the Engine
-//! offers the run, the roster that says how each Pack stands, a declared
-//! Pack the pick could not resolve included, the preludes of the Packs
-//! the prompt declares, and the performer that sends each tool call to
-//! the Pack its id names.
+//! Pack is in no run and is never made. Before each run, the Harness's
+//! preparation picks those Packs and makes the run's instance of each
+//! with the run's own services. A factory's refusal or panic is not an
+//! error: the Pack is unavailable to that run alone, with the refusal or
+//! "the Pack's factory panicked" as its reason, and the next run calls
+//! the factory again. Then it waits for each instance to be ready, and a
+//! Pack whose `ready` fails is unavailable to that run the same way. Then
+//! it takes a snapshot of the instances: the catalog the Engine offers
+//! the run, the roster that says how each Pack stands, a declared Pack
+//! the pick could not resolve included, the preludes of the Packs the
+//! prompt declares, and the performer that sends each tool call to the
+//! instance its id names. The instances drop with the snapshot, when the
+//! run's future ends.
 //!
 //! The snapshot reads each usable Pack's tool list once, so the run's
 //! catalog stays fixed for the run. A render may add tools only the model
@@ -28,8 +30,10 @@
 //! Pack its id's first segment names, so a call reaches such a tool as it
 //! reaches a catalog tool.
 
+use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::pin::pin;
 use std::sync::Arc;
 
@@ -43,7 +47,7 @@ use runvil::vfs::Access;
 use runvil::{Error, ErrorCode};
 use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput, make_tool_error};
 use runvil_plugin::{
-    HostServices, Pack, PackId, PackInfo, PackRegistry, RenderContext, ServiceId, ToolContext,
+    HostServices, Pack, PackFactory, PackId, PackInfo, PackRegistry, RenderContext, ToolContext,
 };
 use serde_json::Value;
 
@@ -53,19 +57,24 @@ use crate::performers::{BoxFuture, ToolPerformer};
 /// their id, and the vendor a bare `uses:` entry means.
 const RUNVIL: &str = "runvil";
 
-/// Every Pack a Host built from its registry. Built once and shared by
-/// every run of that Host; the Pack objects drop with it, which is where
-/// a Pack cleans up.
+/// The reason a Pack is unavailable to a run whose call of its factory
+/// panicked.
+const FACTORY_PANICKED: &str = "the Pack's factory panicked";
+
+/// Every Pack a Host installed in its registry, each with its factory or
+/// the reason it was inserted unavailable. Built once and shared by every
+/// run of that Host; each run makes its own instance of each Pack it
+/// holds.
 pub struct Packs {
-    built: BTreeMap<&'static str, Built>,
+    installed: BTreeMap<&'static str, Installed>,
 }
 
-/// One built Pack: its Pack id, its `PackInfo`, and the built object or
-/// the reason building it failed.
-struct Built {
+/// One installed Pack: its Pack id, its `PackInfo`, and its factory or
+/// the reason it was inserted unavailable.
+struct Installed {
     id: PackId,
     info: PackInfo,
-    pack: Result<Arc<dyn Pack>, String>,
+    factory: Result<Arc<dyn PackFactory>, String>,
 }
 
 /// The Packs one run holds, picked by `Packs::pick` from its
@@ -73,61 +82,53 @@ struct Built {
 #[derive(Debug)]
 pub(crate) struct Picked {
     /// The FQN of each of the run's Packs: the declared ones the Host
-    /// built, then every `runvil` Pack whose Pack id no entry takes.
+    /// installed, then every `runvil` Pack whose Pack id no entry takes.
     fqns: Vec<&'static str>,
-    /// Each declared Pack id the Host built no Pack for, with the reason
-    /// it is unavailable, or `None` when it is simply missing.
+    /// Each declared Pack id the Host installed no Pack for, with the
+    /// reason it is unavailable, or `None` when it is simply missing.
     unresolved: BTreeMap<PackId, Option<String>>,
 }
 
+/// One of a run's Packs as the run made it: its FQN, Pack id, and
+/// `PackInfo`, with the run's instance or the reason the run has none.
+struct Made<'a> {
+    fqn: &'static str,
+    id: &'a PackId,
+    info: PackInfo,
+    pack: Result<Arc<dyn Pack>, String>,
+}
+
 impl Packs {
-    /// Takes every Pack `packs` holds, the built-ins included. In this
-    /// build it calls each factory once with its Pack id and an empty run
-    /// map, and warns once per Pack inserted unavailable or refused by its
-    /// factory, each of which is stored as unavailable with its reason.
-    ///
-    /// The Host-wide services reached each Plugin's `install`; a tool
-    /// call reads the run's own services instead.
+    /// Takes every Pack `packs` holds, keeping each factory for the runs
+    /// to call, and warns once per Pack inserted unavailable.
     #[must_use]
     pub fn new(packs: PackRegistry) -> Packs {
-        let run = HostServices::new();
-        let built = packs
+        let installed = packs
             .into_entries()
             .map(|(info, id, factory)| {
-                let pack = match factory {
-                    Ok(factory) => factory.new_pack(&id, &run).map_err(|error| {
-                        tracing::warn!(
-                            pack = %id,
-                            fqn = info.fqn,
-                            %error,
-                            "Pack factory refused; it is built as unavailable"
-                        );
-                        error.to_string()
-                    }),
-                    Err(error) => {
-                        tracing::warn!(
-                            pack = %id,
-                            fqn = info.fqn,
-                            %error,
-                            "Pack was inserted unavailable"
-                        );
-                        Err(error.to_string())
-                    }
-                };
-                (info.fqn, Built { id, info, pack })
+                let factory = factory.map_err(|error| {
+                    tracing::warn!(
+                        pack = %id,
+                        fqn = info.fqn,
+                        %error,
+                        "Pack was inserted unavailable"
+                    );
+                    error.to_string()
+                });
+                (info.fqn, Installed { id, info, factory })
             })
             .collect();
-        Packs { built }
+        Packs { installed }
     }
 
-    /// Picks the Packs a run of `prompt` holds, waits
-    /// until each is ready or `cancel` fires, and
-    /// takes the run's snapshot of them, lending
-    /// each tool call `services`.
+    /// Picks the Packs a run of `prompt` holds, makes
+    /// the run's instance of each with `services`, the
+    /// run's own, waits until each is ready or
+    /// `cancel` fires, and takes the run's snapshot.
     ///
-    /// A Pack whose `ready` fails is unavailable to this run, with its
-    /// error as the reason. A cancel ends the wait, and each Pack is
-    /// snapshotted as it stands.
+    /// A Pack whose factory refuses or panics, or whose `ready` fails, is
+    /// unavailable to this run, with the reason. A cancel ends the wait,
+    /// and each Pack is snapshotted as it stands.
     pub(crate) async fn snapshot(
         &self,
         prompt: &Prompt,
@@ -135,8 +136,9 @@ impl Packs {
         cancel: &CancelHandle,
     ) -> RunPacks {
         let picked = self.pick(prompt);
-        let failures = self.wait_ready(&picked, cancel).await;
-        self.begin_run(&picked, services, failures)
+        let made = self.make(&picked, &services);
+        let failures = wait_ready(&made, cancel).await;
+        RunPacks::snapshot(made, failures, &picked.unresolved)
     }
 
     /// Picks the Packs a run of `prompt` holds: each Pack its `uses:`
@@ -144,8 +146,8 @@ impl Packs {
     /// takes.
     ///
     /// A bare entry means the `runvil` Pack of that id. One the Host did
-    /// not build is missing, or unavailable naming each other vendor's
-    /// Pack of that id; a `vendor/name` the Host did not build is
+    /// not install is missing, or unavailable naming each other vendor's
+    /// Pack of that id; a `vendor/name` the Host did not install is
     /// unavailable.
     fn pick(&self, prompt: &Prompt) -> Picked {
         let uses = prompt.frontmatter().uses();
@@ -159,20 +161,52 @@ impl Packs {
                 }
             }
         }
-        for (fqn, built) in &self.built {
+        for (fqn, installed) in &self.installed {
             let runvil = fqn
                 .split_once('/')
                 .is_some_and(|(vendor, _)| vendor == RUNVIL);
-            if runvil && !uses.iter().any(|entry| *entry.id() == built.id) {
+            if runvil && !uses.iter().any(|entry| *entry.id() == installed.id) {
                 fqns.push(*fqn);
             }
         }
         Picked { fqns, unresolved }
     }
 
+    /// Makes the run's instance of each of its `packs` with `run`, the
+    /// run's own services, in pick order.
+    ///
+    /// A Pack inserted unavailable keeps its reason and is never made. A
+    /// factory that refuses leaves its Pack unavailable to this run with
+    /// the refusal as the reason, logged at debug, since a Host with no
+    /// operator refuses `runvil/user-input` on every run. A factory that
+    /// panics leaves its Pack unavailable with [`FACTORY_PANICKED`],
+    /// logged at error.
+    fn make(&self, packs: &Picked, run: &HostServices) -> Vec<Made<'_>> {
+        packs
+            .fqns
+            .iter()
+            .filter_map(|fqn| {
+                let (&fqn, installed) = self.installed.get_key_value(fqn)?;
+                let pack = match &installed.factory {
+                    Err(reason) => Err(reason.clone()),
+                    Ok(factory) => new_pack(factory.as_ref(), installed, run),
+                };
+                Some(Made {
+                    fqn,
+                    id: &installed.id,
+                    info: installed.info,
+                    pack,
+                })
+            })
+            .collect()
+    }
+
     /// Why each Pack `prompt` declares can serve no run of this Host: not
-    /// installed, inserted unavailable, or refused by its factory. A bare
-    /// `uses:` id means `runvil/<id>`. Empty when every one built.
+    /// installed, or inserted unavailable. A bare `uses:` id means
+    /// `runvil/<id>`. Empty when every one is installed with a factory.
+    ///
+    /// Only a run makes a Pack, so a factory that would refuse a run is no
+    /// refusal here.
     pub(crate) fn refusals(&self, prompt: &Prompt) -> Vec<(PackId, String)> {
         prompt
             .frontmatter()
@@ -180,7 +214,7 @@ impl Packs {
             .iter()
             .filter_map(|entry| {
                 let reason = match self.find(entry) {
-                    Ok((_, built)) => built.pack.as_ref().err()?.clone(),
+                    Ok((_, installed)) => installed.factory.as_ref().err()?.clone(),
                     Err(reason) => reason.unwrap_or_else(|| {
                         format!("{}/{} is not installed", entry.vendor(), entry.id())
                     }),
@@ -190,25 +224,25 @@ impl Packs {
             .collect()
     }
 
-    /// The built Pack the `uses:` entry `entry` names, by FQN, or why the
-    /// Host built none.
+    /// The installed Pack the `uses:` entry `entry` names, by FQN, or why
+    /// the Host installed none.
     ///
     /// A bare entry means the `runvil` Pack of that id. One the Host did
-    /// not build is unavailable naming each other vendor's Pack of that
+    /// not install is unavailable naming each other vendor's Pack of that
     /// id, or simply missing, with no reason, when no vendor has one; a
-    /// `vendor/name` the Host did not build is unavailable.
-    fn find(&self, entry: &PackRef) -> Result<(&'static str, &Built), Option<String>> {
+    /// `vendor/name` the Host did not install is unavailable.
+    fn find(&self, entry: &PackRef) -> Result<(&'static str, &Installed), Option<String>> {
         let wanted = format!("{}/{}", entry.vendor(), entry.id());
-        if let Some((fqn, built)) = self.built.get_key_value(wanted.as_str()) {
-            return Ok((*fqn, built));
+        if let Some((fqn, installed)) = self.installed.get_key_value(wanted.as_str()) {
+            return Ok((*fqn, installed));
         }
         if entry.vendor() != RUNVIL {
             return Err(Some(format!("{wanted} is not installed")));
         }
         let others: Vec<&str> = self
-            .built
+            .installed
             .iter()
-            .filter(|(_, built)| built.id == *entry.id())
+            .filter(|(_, installed)| installed.id == *entry.id())
             .map(|(fqn, _)| *fqn)
             .collect();
         Err((!others.is_empty()).then(|| {
@@ -219,91 +253,108 @@ impl Packs {
             )
         }))
     }
-
-    /// Waits until the `ready` of each of the run's `packs` that built
-    /// resolves, polling them together, and returns the reason of each
-    /// one that will not be ready, by FQN.
-    ///
-    /// A cancel on `cancel` ends the wait with no failures, so each Pack
-    /// is snapshotted as it stands, and a run canceled here ends
-    /// canceled whatever the snapshot holds.
-    async fn wait_ready(
-        &self,
-        packs: &Picked,
-        cancel: &CancelHandle,
-    ) -> BTreeMap<&'static str, String> {
-        let waits = packs.fqns.iter().filter_map(|fqn| {
-            let (fqn, built) = self.built.get_key_value(fqn)?;
-            let pack = built.pack.as_ref().ok()?;
-            Some(async move { (*fqn, pack.ready().await) })
-        });
-        let joined = pin!(join_all(waits));
-        // The cancel arm is polled first, so a run canceled already does
-        // not wait.
-        match select(cancel.canceled(), joined).await {
-            Either::Left(((), _)) => BTreeMap::new(),
-            Either::Right((results, _)) => results
-                .into_iter()
-                .filter_map(|(fqn, result)| {
-                    let error = result.err()?;
-                    tracing::warn!(
-                        fqn,
-                        %error,
-                        "Pack will not be ready; this run treats it as unavailable"
-                    );
-                    Some((fqn, error.to_string()))
-                })
-                .collect(),
-        }
-    }
-
-    /// Takes one run's snapshot of its `packs` with `services`, the run's
-    /// own services.
-    ///
-    /// `failures` holds the reason of each Pack whose `ready` failed
-    /// before this run, by FQN, which the run treats as unavailable. The
-    /// snapshot gives the run's catalog, which holds the tools of each of
-    /// its usable Packs, its roster, which names each of its Packs with
-    /// the reason of each one that can't serve, a declared Pack the pick
-    /// could not resolve with a reason included, and its declared
-    /// preludes, the declared, usable Packs', in declaration order. It also
-    /// performs the run's tool calls.
-    fn begin_run(
-        &self,
-        packs: &Picked,
-        services: HostServices,
-        failures: BTreeMap<&'static str, String>,
-    ) -> RunPacks {
-        RunPacks::snapshot(
-            packs
-                .fqns
-                .iter()
-                .filter_map(|fqn| self.built.get(fqn))
-                .map(|built| (&built.id, built.info, &built.pack)),
-            services,
-            failures,
-            &packs.unresolved,
-        )
-    }
 }
 
 impl fmt::Debug for Packs {
-    /// Shows each built Pack's FQN and Pack id with whether it built.
+    /// Shows each installed Pack's FQN and Pack id, and whether it was
+    /// inserted unavailable.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let built: Vec<(&str, &PackId, bool)> = self
-            .built
+        let installed: Vec<(&str, &PackId, &str)> = self
+            .installed
             .iter()
-            .map(|(fqn, built)| (*fqn, &built.id, built.pack.is_ok()))
+            .map(|(fqn, installed)| {
+                let state = if installed.factory.is_ok() {
+                    "installed"
+                } else {
+                    "unavailable"
+                };
+                (*fqn, &installed.id, state)
+            })
             .collect();
-        f.debug_struct("Packs").field("built", &built).finish()
+        f.debug_struct("Packs")
+            .field("installed", &installed)
+            .finish()
     }
 }
 
-/// One run's frozen snapshot of its Packs, by Pack id, its one tool
-/// catalog, and the run's own services. It performs the run's renders and
-/// tool calls.
+/// Calls `factory` for the run's instance of the Pack `installed` names,
+/// with `run`, the run's own services, and returns the instance or the
+/// reason the run has none. A refusal is logged at debug, and a panic is
+/// caught and logged at error.
+fn new_pack(
+    factory: &dyn PackFactory,
+    installed: &Installed,
+    run: &HostServices,
+) -> Result<Arc<dyn Pack>, String> {
+    let id = &installed.id;
+    match catch_unwind(AssertUnwindSafe(|| factory.new_pack(id, run))) {
+        Ok(Ok(pack)) => Ok(pack),
+        Ok(Err(error)) => {
+            tracing::debug!(
+                pack = %id,
+                fqn = installed.info.fqn,
+                %error,
+                "Pack factory refused this run; the Pack is unavailable to it"
+            );
+            Err(error.to_string())
+        }
+        Err(panic) => {
+            tracing::error!(
+                pack = %id,
+                fqn = installed.info.fqn,
+                panic = panic_message(&*panic),
+                "Pack factory panicked; the Pack is unavailable to this run"
+            );
+            Err(FACTORY_PANICKED.to_owned())
+        }
+    }
+}
+
+/// A panic payload's message, when it carries one.
+fn panic_message(payload: &(dyn Any + Send)) -> &str {
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("a panic with no message")
+}
+
+/// Waits until the `ready` of each instance in `made` resolves, polling
+/// them together, and returns the reason of each one that will not be
+/// ready, by FQN. A Pack the run could not make is never waited on.
+///
+/// A cancel on `cancel` ends the wait with no failures, so each Pack is
+/// snapshotted as it stands, and a run canceled here ends canceled
+/// whatever the snapshot holds.
+async fn wait_ready(made: &[Made<'_>], cancel: &CancelHandle) -> BTreeMap<&'static str, String> {
+    let waits = made.iter().filter_map(|made| {
+        let pack = made.pack.as_ref().ok()?;
+        Some(async move { (made.fqn, pack.ready().await) })
+    });
+    let joined = pin!(join_all(waits));
+    // The cancel arm is polled first, so a run canceled already does not
+    // wait.
+    match select(cancel.canceled(), joined).await {
+        Either::Left(((), _)) => BTreeMap::new(),
+        Either::Right((results, _)) => results
+            .into_iter()
+            .filter_map(|(fqn, result)| {
+                let error = result.err()?;
+                tracing::warn!(
+                    fqn,
+                    %error,
+                    "Pack will not be ready; this run treats it as unavailable"
+                );
+                Some((fqn, error.to_string()))
+            })
+            .collect(),
+    }
+}
+
+/// One run's frozen snapshot of its Pack instances, by Pack id, and its
+/// one tool catalog. It performs the run's renders and tool calls, and
+/// the instances drop with it.
 pub(crate) struct RunPacks {
-    services: HostServices,
     packs: BTreeMap<PackId, PackState>,
     catalog: ToolCatalog,
 }
@@ -313,60 +364,49 @@ enum PackState {
     /// It can serve; its validated tools are in the run's catalog.
     Usable { info: PackInfo, pack: Arc<dyn Pack> },
     /// The pick could not resolve it, or it was inserted unavailable, or
-    /// its factory refused, or its `ready` failed before this run, for
-    /// this reason.
+    /// its factory refused or panicked, or its `ready` failed, for this
+    /// reason.
     Unavailable(String),
-    /// The run lacks these services from the Pack's needs.
-    NeedsUnmet(Vec<ServiceId>),
 }
 
 impl RunPacks {
-    /// Takes the snapshot of the run's `packs`, which share no Pack id,
-    /// with `services` as the run's own.
+    /// Takes the snapshot of the run's `made` Packs, which share no Pack
+    /// id.
     ///
-    /// A built Pack whose FQN `failures` names is unavailable with the
-    /// reason it maps to. Any other built Pack is usable when `services`
-    /// provide every id the Pack needs; only then is its tool list read
-    /// and validated. The run's one catalog is built from every usable
-    /// Pack's validated tools, in Pack id order. Each declared Pack id the
-    /// pick could not resolve that `unresolved` gives a reason for is
-    /// unavailable with that reason; one with no reason stays out, so the
-    /// run finds it missing.
-    fn snapshot<'a>(
-        packs: impl Iterator<Item = (&'a PackId, PackInfo, &'a Result<Arc<dyn Pack>, String>)>,
-        services: HostServices,
+    /// `failures` holds the reason of each Pack whose `ready` failed, by
+    /// FQN, which the run treats as unavailable, as it does a Pack it has
+    /// no instance of. Every other Pack is usable, and only its tool list
+    /// is read and validated. The run's one catalog is built from every
+    /// usable Pack's validated tools, in Pack id order. Each declared Pack
+    /// id the pick could not resolve that `unresolved` gives a reason for
+    /// is unavailable with that reason; one with no reason stays out, so
+    /// the run finds it missing. The roster names each of the run's Packs
+    /// with the reason of each one that can't serve, and the declared
+    /// preludes are the declared, usable Packs', in declaration order.
+    fn snapshot(
+        made: Vec<Made<'_>>,
         mut failures: BTreeMap<&'static str, String>,
         unresolved: &BTreeMap<PackId, Option<String>>,
     ) -> RunPacks {
         let mut seen = BTreeSet::new();
         // The input arrives in pick order, declared Packs first, so the
-        // catalog is built after `packs` is collected, from these lists
-        // in Pack id order.
+        // catalog is built after `made` is collected, from these lists in
+        // Pack id order.
         let mut usable_tools: BTreeMap<&PackId, Vec<ToolInfo>> = BTreeMap::new();
-        let mut packs: BTreeMap<PackId, PackState> = packs
-            .map(|(name, info, built)| {
-                let state = match (built, failures.remove(info.fqn)) {
-                    (Err(reason), _) => PackState::Unavailable(reason.clone()),
-                    (Ok(_), Some(reason)) => PackState::Unavailable(reason),
+        let mut packs: BTreeMap<PackId, PackState> = made
+            .into_iter()
+            .map(|made| {
+                let state = match (made.pack, failures.remove(made.fqn)) {
+                    (Err(reason), _) | (Ok(_), Some(reason)) => PackState::Unavailable(reason),
                     (Ok(pack), None) => {
-                        let unmet: Vec<ServiceId> = info
-                            .needs
-                            .iter()
-                            .copied()
-                            .filter(|service| !services.provides(service))
-                            .collect();
-                        if unmet.is_empty() {
-                            usable_tools.insert(name, validated(name, pack.tools(), &mut seen));
-                            PackState::Usable {
-                                info,
-                                pack: Arc::clone(pack),
-                            }
-                        } else {
-                            PackState::NeedsUnmet(unmet)
+                        usable_tools.insert(made.id, validated(made.id, pack.tools(), &mut seen));
+                        PackState::Usable {
+                            info: made.info,
+                            pack,
                         }
                     }
                 };
-                (name.clone(), state)
+                (made.id.clone(), state)
             })
             .collect();
         packs.extend(unresolved.iter().filter_map(|(name, reason)| {
@@ -380,11 +420,7 @@ impl RunPacks {
                 tracing::warn!(%error, "the run's catalog failed after per-tool validation");
                 ToolCatalog::default()
             });
-        RunPacks {
-            services,
-            packs,
-            catalog,
-        }
+        RunPacks { packs, catalog }
     }
 
     /// The run's catalog: a clone sharing the snapshot's one list.
@@ -413,15 +449,6 @@ impl RunPacks {
                     PackState::Unavailable(reason) => RosterEntry::Unavailable {
                         reason: reason.clone(),
                     },
-                    PackState::NeedsUnmet(unmet) => {
-                        let services: Vec<String> = unmet.iter().map(ToString::to_string).collect();
-                        RosterEntry::Unavailable {
-                            reason: format!(
-                                "the run lacks the services it needs: {}",
-                                services.join(", ")
-                            ),
-                        }
-                    }
                 };
                 (name.clone(), entry)
             })
@@ -448,7 +475,7 @@ impl RunPacks {
     fn usable(&self, pack: &PackId) -> Option<&Arc<dyn Pack>> {
         match self.packs.get(pack)? {
             PackState::Usable { pack, .. } => Some(pack),
-            PackState::Unavailable(_) | PackState::NeedsUnmet(_) => None,
+            PackState::Unavailable(_) => None,
         }
     }
 }
@@ -463,7 +490,6 @@ impl ToolPerformer for RunPacks {
         args: Value,
     ) -> BoxFuture<Result<ToolOutput, Error>> {
         let pack = self.usable(&tool.pack()).cloned();
-        let services = self.services.clone();
         Box::pin(async move {
             let Some(pack) = pack else {
                 tracing::error!(
@@ -476,7 +502,7 @@ impl ToolPerformer for RunPacks {
                     format!("tool `{alias}` ({tool}) belongs to no usable Pack of this run"),
                 ));
             };
-            let cx = ToolContext::new(&tool, &access, &origin, &services);
+            let cx = ToolContext::new(&tool, &access, &origin);
             pack.call(cx, args).await
         })
     }
@@ -514,8 +540,7 @@ impl ToolPerformer for RunPacks {
 }
 
 impl fmt::Debug for RunPacks {
-    /// Shows the run's services, each Pack's name and state, and its
-    /// catalog's tool ids.
+    /// Shows each Pack's name and state, and the catalog's tool ids.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let packs: Vec<(&PackId, &str)> = self
             .packs
@@ -524,13 +549,11 @@ impl fmt::Debug for RunPacks {
                 let state = match pack {
                     PackState::Usable { .. } => "usable",
                     PackState::Unavailable(_) => "unavailable",
-                    PackState::NeedsUnmet(_) => "needs unmet",
                 };
                 (name, state)
             })
             .collect();
         f.debug_struct("RunPacks")
-            .field("services", &self.services)
             .field("packs", &packs)
             .field("catalog", &self.catalog)
             .finish()

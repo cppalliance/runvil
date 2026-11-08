@@ -7,7 +7,7 @@
 //! reason; the registry hands each Pack's factory on with the Pack id, its
 //! Debug output shows each FQN, origin, and Pack id, and each built-in
 //! takes no reserved Pack id and makes a Pack that offers no tools and
-//! carries no prelude and no needs.
+//! carries no prelude.
 
 use std::sync::Arc;
 
@@ -16,7 +16,7 @@ use runvil_types::tools::make_tool_error;
 use serde_json::Value;
 
 use super::{BUILTIN, PackOrigin, PackRegistry, builtin, pack_id};
-use crate::{HostServices, Pack, PackId, PackInfo, ServiceId, ServiceKey};
+use crate::{HostServices, Pack, PackId, PackInfo};
 
 /// Asserts `result` refuses the insert of `fqn` for `reason`, with its
 /// message as its prose, and returns the message.
@@ -41,13 +41,6 @@ fn refused(result: Result<(), Error>, reason: &str, fqn: &str) -> String {
 /// The built-in's FQN.
 const SUBAGENTS: &str = "runvil/subagents";
 
-/// The test-only service a listed Pack needs.
-const GREETING: ServiceKey<str> = ServiceKey::new("tests/greeting");
-
-const NEEDS: &[ServiceId] = &[GREETING.id()];
-
-const NO_NEEDS: &[ServiceId] = &[];
-
 /// A Pack with the FQN `fqn`, inserted with the built-in's factory, whose
 /// object offers nothing.
 const fn fixture(fqn: &'static str) -> PackInfo {
@@ -61,22 +54,19 @@ fn name(text: &str) -> PackId {
 #[test]
 fn a_new_registry_holds_the_builtin_and_lists_every_pack_in_fqn_order() {
     let mut packs = PackRegistry::new();
-    packs
-        .insert(fixture("tests/zeta").needs(NEEDS), builtin)
-        .unwrap();
+    packs.insert(fixture("tests/zeta"), builtin).unwrap();
     packs.insert(fixture("acme/alpha"), builtin).unwrap();
-    let listed: Vec<(&str, PackOrigin, &[ServiceId])> = packs
+    let listed: Vec<(&str, PackOrigin)> = packs
         .list()
-        .map(|(info, origin)| (info.fqn, origin, info.needs))
+        .map(|(info, origin)| (info.fqn, origin))
         .collect();
     assert_eq!(
         listed,
         [
-            ("acme/alpha", PackOrigin::Linked, NO_NEEDS),
-            (SUBAGENTS, PackOrigin::Builtin, NO_NEEDS),
-            ("tests/zeta", PackOrigin::Linked, NEEDS),
-        ],
-        "a Pack inserted with needs lists those needs"
+            ("acme/alpha", PackOrigin::Linked),
+            (SUBAGENTS, PackOrigin::Builtin),
+            ("tests/zeta", PackOrigin::Linked),
+        ]
     );
     let (builtin, _origin) = packs.list().nth(1).unwrap();
     assert!(
@@ -299,10 +289,9 @@ fn no_builtin_takes_a_reserved_pack_id() {
 }
 
 #[test]
-fn builtins_offer_no_tools_prelude_or_needs() {
+fn builtins_offer_no_tools_or_prelude() {
     for info in BUILTIN {
         assert!(info.prelude.is_none(), "{} has a prelude", info.fqn);
-        assert!(info.needs.is_empty(), "{} has needs", info.fqn);
         let name = pack_id(info.fqn).unwrap();
         let pack = builtin(&name, &HostServices::new()).unwrap();
         assert!(pack.tools().is_empty(), "{} offers tools", info.fqn);

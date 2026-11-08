@@ -1,11 +1,11 @@
 //! Host services: typed objects the Host hands to the Packs it
 //! installs, each under a named id.
 //!
-//! A Pack names the per-run services its calls read as [`ServiceId`]s,
-//! and reads a service through a [`ServiceKey`], which binds an id
-//! literal to the provider's Rust type. The Host fills two
-//! [`HostServices`] maps: the Host-wide one a Plugin's `install` reads,
-//! and each run's own, which a Pack's calls read.
+//! A Plugin reads a service through a [`ServiceKey`], which binds an id
+//! literal, its [`ServiceId`], to the provider's Rust type. The Host fills
+//! two [`HostServices`] maps: the Host-wide one, which reaches a Plugin's
+//! `install`, and each run's own, which reaches
+//! [`PackFactory::new_pack`](crate::PackFactory::new_pack).
 //!
 //! An id literal is a [`GlobalName`] with exactly one `/`, as in
 //! `namespace/name`. [`HostServices::provide`] refuses any other literal.
@@ -276,7 +276,7 @@ mod tests {
     /// A second key with the greeting's literal and another type.
     const GREETING_AS_NUMBER: ServiceKey<u32> = ServiceKey::new("acme/greeting");
 
-    /// A static slice of ids, the shape `PackInfo::needs` holds.
+    /// A static slice of ids, built in a `const`.
     const NEEDS: &[ServiceId] = &[GREETING.id()];
 
     /// Stands in for the runtime handle, which this crate cannot name.

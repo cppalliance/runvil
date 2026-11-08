@@ -1,9 +1,9 @@
 //! The run's optional input broker at preparation, supplied among its own
-//! services under the fixture's `BROKER`: every tool call of the run is
-//! lent it, or lent none when the Host has nobody to ask; and the fixture
-//! ask Pack's `input.ask()` reaches it, and is refused on a run without
-//! one. The ask tool, read by its id, runs beside the Pack's `input`
-//! prelude global.
+//! services under the fixture's `BROKER`: each Pack the run makes can
+//! take it at `new_pack`, and finds none when the Host has nobody to ask;
+//! and the fixture ask Pack's `input.ask()` reaches it, and is refused on
+//! a run without one. The ask tool, read by its id, runs beside the
+//! Pack's `input` prelude global.
 
 use super::*;
 
@@ -40,25 +40,29 @@ impl AskBroker for Failing {
 }
 
 /// The fixture Pack `probe`: one tool, `probe/saw`, answering whether
-/// its call was lent a broker. It needs nothing, so a run without a
-/// broker can use it.
+/// its instance found a broker among the run's services. Its factory
+/// refuses no run, so a run without a broker can use it.
 const PROBE: (PackInfo, Make) = (PackInfo::new("tests/probe"), new_probe);
 
 struct Probe {
     tools: Vec<ToolInfo>,
+    saw: bool,
 }
 
 #[expect(
     clippy::unnecessary_wraps,
     reason = "the PackFactory signature fixes the return type"
 )]
-fn new_probe(name: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+fn new_probe(name: &PackId, run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     let saw = ToolInfo::new(
         ToolId::parse(&format!("{name}/saw")).unwrap(),
-        "Answer whether the call was lent a broker.",
+        "Answer whether the instance found a broker.",
         json!({ "type": "object", "properties": {} }),
     );
-    Ok(Arc::new(Probe { tools: vec![saw] }))
+    Ok(Arc::new(Probe {
+        tools: vec![saw],
+        saw: run.get(&BROKER).is_some(),
+    }))
 }
 
 impl Pack for Probe {
@@ -68,10 +72,10 @@ impl Pack for Probe {
 
     fn call<'a>(
         &'a self,
-        cx: ToolContext<'a>,
+        _cx: ToolContext<'a>,
         _args: Value,
     ) -> PackFuture<'a, Result<ToolOutput, Error>> {
-        let saw = cx.service(&BROKER).is_some();
+        let saw = self.saw;
         Box::pin(async move { Ok(ToolOutput::trusted(saw.to_string())) })
     }
 }
@@ -88,7 +92,8 @@ async fn drive_prompt(source: &str, packs: Packs, setup: RunSetup) -> Result<Str
     prepare_and_drive(source, packs, setup).await.1
 }
 
-/// What the probe's one call saw, on a run with `input` as its broker.
+/// What the probe's one call answers, on a run with `input` as its
+/// broker.
 async fn probe_sees(input: Option<Arc<dyn AskBroker>>) -> String {
     let recorder = recorder();
     let setup = RunSetup {
@@ -99,12 +104,12 @@ async fn probe_sees(input: Option<Arc<dyn AskBroker>>) -> String {
 }
 
 #[tokio::test]
-async fn a_tool_call_is_lent_the_runs_broker() {
+async fn a_packs_factory_finds_the_runs_broker() {
     assert_eq!(probe_sees(Some(Arc::new(Scripted("unused")))).await, "true");
 }
 
 #[tokio::test]
-async fn a_tool_call_is_lent_no_broker_when_the_host_has_none() {
+async fn a_packs_factory_finds_no_broker_when_the_host_has_none() {
     assert_eq!(probe_sees(None).await, "false");
 }
 
@@ -151,8 +156,8 @@ async fn a_required_user_input_declaration_on_a_host_without_a_broker_is_refused
         refusal(drive_asking(&user_input_prompt(REQUIRED, ASKS_ONCE), &recorder, None).await);
     assert!(
         notice.contains(
-            "- user-input is unavailable: the run lacks the services it needs: \
-             tests/input-broker"
+            "- user-input is unavailable: user-input needs tests/input-broker, and this run \
+             provides none"
         ),
         "the notice names the Pack and the missing service: {notice}"
     );

@@ -22,11 +22,11 @@ use crate::search::WebSearch;
 
 /// The Pack's `PackInfo`.
 ///
-/// Its FQN is `runvil/web`, so its Pack id is `web`. It has no prelude
-/// and needs no per-run service; its `install` reads [`SEARCH_PROVIDER`]
-/// and the Plugin contract's [`runvil_plugin::TOKIO_RUNTIME`] service
-/// from the Host-wide services and takes no configuration but `null` or
-/// `{}`.
+/// Its FQN is `runvil/web`, so its Pack id is `web`. It has no prelude,
+/// and its factory reads none of the run's services; its `install` reads
+/// [`SEARCH_PROVIDER`] and the Plugin contract's
+/// [`runvil_plugin::TOKIO_RUNTIME`] service from the Host-wide services
+/// and takes no configuration but `null` or `{}`.
 const WEB: PackInfo = PackInfo::new("runvil/web").description("Search the web and fetch pages");
 
 /// The Plugin: inserts the `web` Pack into `packs` with a factory holding
@@ -112,7 +112,7 @@ impl PackFactory for Clients {
     }
 }
 
-/// The one object every run shares: its two-tool list and the two tools.
+/// One run's instance: its two-tool list and the two tools.
 #[derive(Debug)]
 struct Web {
     tools: Vec<ToolInfo>,

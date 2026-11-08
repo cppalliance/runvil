@@ -92,10 +92,9 @@ fn made(id: &str) -> Arc<dyn Pack> {
 }
 
 #[test]
-fn the_pack_is_runvil_web_with_no_prelude_and_no_per_run_needs() {
+fn the_pack_is_runvil_web_with_no_prelude() {
     assert_eq!(WEB.fqn, "runvil/web");
     assert!(WEB.prelude.is_none());
-    assert!(WEB.needs.is_empty());
 }
 
 #[tokio::test]

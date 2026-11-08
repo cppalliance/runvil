@@ -76,8 +76,8 @@ impl Timer for Clock {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. Build the Host once: its built Packs, how it finds prompts, and
-    //    its timer.
+    // 1. Build the Host once: its installed Packs, how it finds prompts,
+    //    and its timer.
     let host = Arc::new(Host {
         packs: Packs::new(PackRegistry::new()),
         prompts: Arc::new(find),

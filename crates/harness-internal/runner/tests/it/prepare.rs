@@ -4,11 +4,13 @@
 //! recorder that refuses the run's first record fails the run naming it;
 //! each run's begin draws a fresh seed and reads its start from the
 //! Host's timer, both handed to the recorder; the setup's limits reach
-//! the prepared run; and the run's tool performer sends a `ToolCall`
-//! effect to the Pack its id names. The run's optional input broker - one
-//! of its own services, lent to every tool call and behind the fixture
-//! ask Pack - sits in the `input` child module, the run's services
-//! meeting a Pack's needs sit in the `host_services` child module, a
+//! the prepared run; each run makes its own instance of each of its Packs
+//! and drops it by the time `Harness::run` returns; and the run's tool
+//! performer sends a `ToolCall` effect to the Pack its id names. The
+//! run's optional input broker - one of its own services, which a Pack's
+//! factory takes and the fixture ask Pack holds - sits in the `input`
+//! child module, a Pack's factory taking a service from the run's
+//! services sits in the `host_services` child module, a
 //! Pack's prelude reaching the prepared run sits in the `prelude` child
 //! module, the prompt's declared input and output files sit in the
 //! `files` child module, and the wait for each Pack to be ready sits in
@@ -23,19 +25,20 @@ use harness_runner::performers::{BoxFuture, Timer};
 use harness_runner::recorder::{
     MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
 };
-use harness_runner::{Packs, RunReport, RunSetup};
+use harness_runner::{Harness, Packs, RunReport, RunSetup};
 use runvil::make_tool_error;
 use runvil::model::{Completion, CompletionResult, ToolCall};
 use runvil::timestamp::Timestamp;
 use runvil::{Error, ErrorCode, ErrorFact, RunLimits};
 use runvil_plugin::{
-    HostServices, Pack, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
+    HostServices, Pack, PackFactory, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo,
+    ToolOutput,
 };
 use serde_json::{Value, json};
 
 use crate::harness::launch;
 use crate::scripted::{MODEL, ScriptedBroker};
-use crate::support::{Make, Unused, registry};
+use crate::support::{Make, Unused, host_over, parsed, registry};
 
 #[path = "prepare-files.rs"]
 mod files;
@@ -390,6 +393,88 @@ pub(crate) fn refusal(result: Result<String, Error>) -> String {
     match result {
         Err(error) if error.code == ErrorCode::RequirementsUnmet => error.located_message(),
         other => panic!("the run's first step refuses it: {other:?}"),
+    }
+}
+
+/// How many [`Counted`] instances a factory made, and how many dropped.
+#[derive(Default)]
+struct Counts {
+    made: AtomicUsize,
+    dropped: AtomicUsize,
+}
+
+/// An echo Pack instance that counts its drop in the [`Counts`] it
+/// shares with its factory.
+struct Counted {
+    echo: Arc<dyn Pack>,
+    counts: Arc<Counts>,
+}
+
+impl Drop for Counted {
+    fn drop(&mut self) {
+        self.counts.dropped.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+impl Pack for Counted {
+    fn tools(&self) -> Vec<ToolInfo> {
+        self.echo.tools()
+    }
+
+    fn call<'a>(
+        &'a self,
+        cx: ToolContext<'a>,
+        args: Value,
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+        self.echo.call(cx, args)
+    }
+}
+
+/// The factory of a [`Counted`] Pack, counting each instance it makes in
+/// `counts`.
+fn counting(counts: Arc<Counts>) -> impl PackFactory {
+    move |name: &PackId, run: &HostServices| -> Result<Arc<dyn Pack>, Error> {
+        counts.made.fetch_add(1, Ordering::SeqCst);
+        Ok(Arc::new(Counted {
+            echo: new_echo(name, run)?,
+            counts: Arc::clone(&counts),
+        }))
+    }
+}
+
+#[tokio::test]
+async fn each_run_makes_its_own_instance_and_drops_it_by_the_time_harness_run_returns() {
+    let counts = Arc::new(Counts::default());
+    let mut packs = registry(&[]);
+    packs
+        .insert(PackInfo::new("tests/tools"), counting(Arc::clone(&counts)))
+        .unwrap();
+    let host = host_over(Packs::new(packs), Unused);
+    assert_eq!(
+        counts.made.load(Ordering::SeqCst),
+        0,
+        "installing the Pack makes no instance"
+    );
+    for runs in 1..=2 {
+        let report = Harness::new(
+            Arc::clone(&host),
+            parsed(CALLS_ECHO),
+            setup_over(&recorder()),
+        )
+        .run()
+        .await
+        .expect("the run is reported");
+        assert_eq!(completed(report.result), "hi");
+        assert_eq!(
+            counts.made.load(Ordering::SeqCst),
+            runs,
+            "each run makes its own instance"
+        );
+        assert_eq!(
+            counts.dropped.load(Ordering::SeqCst),
+            runs,
+            "the run's instance is dropped by the time Harness::run returns"
+        );
     }
 }
 

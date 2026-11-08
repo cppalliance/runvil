@@ -1,5 +1,5 @@
-//! The Pack object and the factory that makes it: one ask tool, named
-//! under the Pack id the factory receives.
+//! The Pack instance and the factory that makes it: one ask tool, named
+//! under the Pack id the factory receives, and the run's input broker.
 
 use std::sync::Arc;
 
@@ -9,16 +9,25 @@ use runvil_plugin::{
 };
 use serde_json::{Value, json};
 
-use crate::{ASK, INPUT_BROKER};
+use crate::{ASK, INPUT_BROKER, InputBroker};
 
-/// The one object every run shares: its one-tool list.
+/// One run's instance: its one-tool list and the broker it took from the
+/// run.
 struct UserInput {
     tools: Vec<ToolInfo>,
+    broker: Arc<dyn InputBroker>,
 }
 
-/// Makes one `runvil/user-input` instance named `id`. Ignores `run`; the
-/// ask call still looks up the run's input broker on each call.
-pub(crate) fn new_pack(id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+/// Makes this run's `runvil/user-input` instance named `id`, holding the
+/// input broker from `run`. Fails with "user-input needs
+/// runvil/input-broker, and this run provides none" when `run` has none.
+pub(crate) fn new_pack(id: &PackId, run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+    let broker = run.get(&INPUT_BROKER).ok_or_else(|| {
+        make_tool_error(
+            ErrorCode::ToolOther,
+            "user-input needs runvil/input-broker, and this run provides none",
+        )
+    })?;
     let id = ToolId::parse(&format!("{id}/{ASK}")).map_err(|e| {
         make_tool_error(
             ErrorCode::ToolBackend,
@@ -32,7 +41,10 @@ pub(crate) fn new_pack(id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>
         json!({ "type": "object", "properties": {} }),
     )
     .survives_stop(true);
-    Ok(Arc::new(UserInput { tools: vec![ask] }))
+    Ok(Arc::new(UserInput {
+        tools: vec![ask],
+        broker,
+    }))
 }
 
 impl Pack for UserInput {
@@ -42,16 +54,9 @@ impl Pack for UserInput {
 
     fn call<'a>(
         &'a self,
-        cx: ToolContext<'a>,
+        _cx: ToolContext<'a>,
         _args: Value,
     ) -> PackFuture<'a, Result<ToolOutput, Error>> {
-        Box::pin(async move {
-            // The Pack's needs keep a run without a broker from seeing
-            // the ask tool, so this branch is defensive.
-            let broker = cx.service(&INPUT_BROKER).ok_or_else(|| {
-                make_tool_error(ErrorCode::ToolOther, "no operator is connected to this run")
-            })?;
-            broker.wait().await.map(ToolOutput::trusted)
-        })
+        Box::pin(async move { self.broker.wait().await.map(ToolOutput::trusted) })
     }
 }

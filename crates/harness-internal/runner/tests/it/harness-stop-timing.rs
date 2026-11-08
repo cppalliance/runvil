@@ -63,8 +63,8 @@ const WRITES_THEN_INFERS: &str = "---\nname: writes-infers\ndescription: d\nrunv
     # WritesInfers\n\n\
     ## Only\n\n```lua\nstore.write('note.md', 'kept')\nreturn models.infer('after')\n```\n";
 
-/// A Host that built only the fixture ask Pack, as `user-input`, beside
-/// the built-in.
+/// A Host that installed only the fixture ask Pack, as `user-input`,
+/// beside the built-in.
 fn asker_host() -> Packs {
     Packs::new(registry(&[ASKER]))
 }

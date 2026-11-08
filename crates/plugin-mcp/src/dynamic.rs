@@ -62,9 +62,9 @@ impl Namespace {
     }
 }
 
-/// The Pack: its two tools, every configured server under its name, which
-/// every instance shares, and the Host's runtime its calls are spawned
-/// on.
+/// One run's instance: its two tools, every configured server under its
+/// name, which every instance shares, and the Host's runtime its calls
+/// are spawned on.
 #[derive(Debug)]
 pub(crate) struct Mcp {
     get: ToolInfo,

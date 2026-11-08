@@ -36,14 +36,15 @@ struct Rendering {
 fn rendering(
     name: &PackId,
     config: &Value,
-    services: &HostServices,
+    wide: &HostServices,
+    run: &HostServices,
 ) -> Result<Arc<dyn Pack>, Error> {
-    let renders = services
+    let renders = wide
         .get(&RENDERS)
         .ok_or_else(|| make_tool_error(ErrorCode::ToolOther, "rendering needs tests/renders"))?;
     Ok(Arc::new(Rendering {
         name: name.clone(),
-        listed: listed(name, config, services)?,
+        listed: listed(name, config, wide, run)?,
         renders,
     }))
 }
@@ -118,7 +119,6 @@ async fn a_render_asks_each_usable_pack_once_per_set_it_was_offered_into_and_ans
     let renders = Arc::new(Mutex::new(Vec::new()));
     let mut wide = HostServices::new();
     wide.provide(&RENDERS, Arc::clone(&renders)).unwrap();
-    let needy = PackInfo::new("runvil/needy").needs(NEEDS_SESSION);
     let host = host_with(
         &wide,
         &[
@@ -128,10 +128,10 @@ async fn a_render_asks_each_usable_pack_once_per_set_it_was_offered_into_and_ans
                 offering(&["one/a", "one/b"]),
             ),
             (PackInfo::new("runvil/two"), rendering, offering(&["two/a"])),
-            (needy, rendering, offering(&["needy/a"])),
+            (PackInfo::new("runvil/needy"), needy, offering(&["needy/a"])),
         ],
     );
-    let run = begin(&host, HostServices::new(), BTreeMap::new(), &prompt(""));
+    let run = begin(&host, &HostServices::new(), BTreeMap::new(), &prompt(""));
     let offered = vec![
         sets("two", &["two/a"], &[]),
         sets("one", &["one/a"], &["one/b"]),
@@ -174,7 +174,7 @@ async fn a_render_asks_each_usable_pack_once_per_set_it_was_offered_into_and_ans
 #[tokio::test]
 async fn a_call_goes_to_the_pack_its_id_names_when_the_catalog_lacks_the_tool() {
     let host = host(&[(info("runvil/one"), offering(&["one/echo"]))]);
-    let run = begin(&host, HostServices::new(), BTreeMap::new(), &prompt(""));
+    let run = begin(&host, &HostServices::new(), BTreeMap::new(), &prompt(""));
     let extra = ToolId::parse("one/extra").unwrap();
     assert!(
         run.catalog().get(&extra).is_none(),
