@@ -45,6 +45,10 @@ pub struct Harness {
     prompt: Prompt,
     setup: RunSetup,
     control: RunControl,
+    /// Ends the run's send queue when it drops: with the Harness, with the
+    /// future `run` returns, polled or not, or as `run` returns, a refusal
+    /// included.
+    ended: EndOnDrop,
 }
 
 impl fmt::Debug for Harness {
@@ -55,7 +59,7 @@ impl fmt::Debug for Harness {
             .field("prompt", &self.prompt.file())
             .field("setup", &self.setup)
             .field("control", &self.control)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -115,11 +119,13 @@ impl Harness {
     /// happens in [`Harness::run`].
     #[must_use]
     pub fn new(host: Arc<Host>, prompt: Prompt, setup: RunSetup) -> Harness {
+        let control = RunControl::new(CancelHandle::new());
         Harness {
             host,
             prompt,
             setup,
-            control: RunControl::new(CancelHandle::new()),
+            ended: EndOnDrop(Arc::clone(control.send_queue())),
+            control,
         }
     }
 
@@ -186,10 +192,8 @@ impl Harness {
             prompt,
             setup,
             control,
+            ended: _ended,
         } = self;
-        // However this future ends, a refusal or a drop included, the run
-        // accepts no message after it.
-        let _ended = EndOnDrop(Arc::clone(control.send_queue()));
         let cancel = control.cancel_handle();
 
         let (run_id, params) = begin(&setup, host.timer.now())
@@ -297,10 +301,11 @@ impl RunControl {
     }
 
     /// Sends `text` to the run's main-chain inbox and returns true, or
-    /// returns false, dropping the text, once the run has ended. Text sent
-    /// before the run starts is delivered before its first step. True
-    /// means accepted, not read: text the run never reads comes back on
-    /// `RunReport::unread`.
+    /// returns false, dropping the text, once the run has ended or its
+    /// Harness, or the future `Harness::run` returned, has been dropped.
+    /// Text sent before the run starts is delivered before its first step.
+    /// True means accepted, not read: text the run never reads comes back
+    /// on `RunReport::unread`.
     ///
     /// Once the run has started, the loop that drives it delivers each
     /// message the next time it waits, oldest first, and it handles a stop
@@ -330,8 +335,15 @@ impl RunControl {
     ///
     /// A stop reaches only the effects in flight or waiting when the loop
     /// that drives the run sees it. The loop looks for a stop while it
-    /// waits for an answer and before it starts a step's effects. It drops
-    /// the effects the stop reaches, if any, then lowers the stop.
+    /// waits for an answer, before each step, and before it starts a
+    /// step's effects. It drops the effects the stop reaches, if any, then
+    /// lowers the stop.
+    ///
+    /// A message that arrives while a model round has no answer withdraws
+    /// the round, and the run reissues it with the message appended. A
+    /// stop the loop first sees after the step that reissued the round,
+    /// before the reissued round starts, drops that round too, unstarted:
+    /// it is the request the stop meant.
     pub fn stop_round(&self) {
         self.stop.raise();
     }

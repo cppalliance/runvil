@@ -1,5 +1,5 @@
 //! A Host runs one prompt through a Harness: it builds a Host over a
-//! fresh Pack registry, which holds only the built-in, a finder that
+//! fresh Pack registry, which holds only the built-ins, a finder that
 //! serves its one prompt, and a tokio timer, parses the prompt by its
 //! name, hands the run a recorder, an offline inference broker, and the
 //! operator's name, and prints the greeting the run leaves at its output

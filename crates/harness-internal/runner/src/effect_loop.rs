@@ -32,18 +32,24 @@
 //! survive stops and answers each `Dropped`, leaving the cancel flag
 //! clear, so the run decides what a dropped call means: a `pcall` catches
 //! it, and an uncaught one ends the run canceled. The loop also looks for
-//! a stop before it starts a step's effects, and lowers each stop it sees
-//! once it has dropped what the stop reached, none included, so a stop
-//! never reaches an effect started after the loop saw it. A drop made
-//! there resumes the run as an inline answer does, so once the step's
-//! effects start the loop steps again instead of awaiting an answer. A Vfs
-//! effect is never in flight at a cancel or a stop: it is answered before
-//! the loop waits again. A drop is an answer, recorded like any other, so
-//! every effect record has exactly one answer record. Tool calls beyond the
-//! setup's cap wait unstarted, oldest first, so none starves, and a
-//! cancel, a stop, or a withdrawal reaches them by the same reach as the
-//! effects in flight. Chat, render, and timer effects never wait and never
-//! count toward the cap.
+//! a stop before each step and before it starts a step's effects, and
+//! lowers each stop it sees once it has dropped what the stop reached,
+//! none included, so a stop never reaches an effect started after the
+//! loop saw it. A stop seen before a step drops the round in flight
+//! before the step applies a message delivered meanwhile, so the run
+//! applies the drop first and the message stays queued. A stop first seen
+//! after a step that withdrew a model round for a message also drops,
+//! unstarted, each model round that step issued for the same task: that
+//! reissue is the request the Host stopped. A drop made before a step's
+//! effects start resumes the run as an inline answer does, so once the
+//! step's effects start the loop steps again instead of awaiting an
+//! answer. A Vfs effect is never in flight at a cancel or a stop: it is
+//! answered before the loop waits again. A drop is an answer, recorded
+//! like any other, so every effect record has exactly one answer record.
+//! Tool calls beyond the setup's cap wait unstarted, oldest first, so none
+//! starves, and a cancel, a stop, or a withdrawal reaches them by the same
+//! reach as the effects in flight. Chat, render, and timer effects never
+//! wait and never count toward the cap.
 //!
 //! A performer that panics is caught where its future is polled: its
 //! effect is answered `Dropped` and the panic is logged, so a lost
@@ -84,7 +90,7 @@ use futures_util::stream::{FuturesUnordered, StreamExt as _};
 use runvil::cancel::CancelHandle;
 use runvil::effect::{Effect, EffectAnswer, EffectId, IssuedEffect};
 use runvil::event::Event;
-use runvil::ids::Provenance;
+use runvil::ids::{Provenance, TaskId};
 use runvil::vfs::{Access, VfsOp, perform_vfs_op};
 use runvil::{Error, ErrorCode};
 use runvil::{Run, Step};
@@ -209,6 +215,12 @@ impl Driver {
         let early = self.sends.take();
         self.deliver(early).await?;
         loop {
+            // A stop raised while the loop recorded answers or delivered a
+            // message drops the round in flight here, so the step applies
+            // the drop before the message instead of reissuing the round.
+            if self.stop.is_raised() {
+                self.act_on_stop().await?;
+            }
             match self.run.step() {
                 Step::Done {
                     result,
@@ -245,7 +257,13 @@ impl Driver {
                         continue;
                     }
                     let mut answered = false;
+                    // The tasks whose round in flight this step withdrew
+                    // for a message, when the stop is first seen here: the
+                    // round the step reissued for each is the request the
+                    // stop meant.
+                    let mut stopped = Vec::new();
                     if self.stop.is_raised() {
+                        stopped = self.flights.round_tasks(&withdrawn);
                         answered = self.act_on_stop().await?;
                     }
                     for issued in effects {
@@ -254,8 +272,11 @@ impl Driver {
                         // The run's own word, not a scan of its events: the
                         // events are a report, not a control channel. A
                         // withdrawn effect is moot before it is performed,
-                        // a Vfs effect included.
-                        if withdrawn.binary_search(&id).is_ok() {
+                        // a Vfs effect included, and so is a stopped task's
+                        // reissued round.
+                        let reissued = matches!(issued.effect, Effect::Chat { .. })
+                            && stopped.contains(&provenance.task);
+                        if reissued || withdrawn.binary_search(&id).is_ok() {
                             self.drop_effect(id, provenance).await?;
                             answered = true;
                             continue;
@@ -428,7 +449,7 @@ impl Driver {
         provenance: &Provenance,
         effect: Effect,
     ) -> Option<(Arc<Access>, VfsOp)> {
-        let answer: BoxFuture<EffectAnswer> = match effect {
+        let (kind, answer): (Kind, BoxFuture<EffectAnswer>) = match effect {
             Effect::Chat {
                 binding,
                 messages,
@@ -442,7 +463,7 @@ impl Driver {
                     let completion = broker.chat(binding, messages, tools, options, round).await;
                     EffectAnswer::Chat(completion)
                 };
-                Box::pin(round)
+                (Kind::Round, Box::pin(round))
             }
             Effect::Render {
                 entry,
@@ -451,9 +472,10 @@ impl Driver {
             } => {
                 let performer = Arc::clone(&self.tool);
                 let model = binding.render_info();
-                Box::pin(async move {
+                let render = async move {
                     EffectAnswer::Render(performer.render(entry, model, offered).await)
-                })
+                };
+                (Kind::Other, Box::pin(render))
             }
             Effect::ToolCall {
                 tool,
@@ -478,10 +500,10 @@ impl Driver {
                     timer.sleep(duration).await;
                     EffectAnswer::Timer
                 };
-                Box::pin(sleep)
+                (Kind::Other, Box::pin(sleep))
             }
         };
-        self.flights.start(id, provenance.clone(), answer);
+        self.flights.start(id, provenance.clone(), kind, answer);
         None
     }
 
@@ -559,7 +581,7 @@ enum Reach<'a> {
     All,
     /// Every effect but the tool calls that survive stops: a stop.
     AllButSurvivors,
-    /// The listed effects, waiting or in flight: the tool calls a step
+    /// The listed effects, waiting or in flight: the effects a step
     /// withdrew, in effect order.
     Withdrawn(&'a [EffectId]),
 }
@@ -576,14 +598,26 @@ impl Reach<'_> {
     }
 }
 
+/// What kind of effect one in flight is, where the loop treats kinds
+/// apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Kind {
+    /// A model round, which a message can withdraw for the run to reissue.
+    Round,
+    /// A tool call, which counts toward the cap.
+    ToolCall,
+    /// A render or a timer.
+    Other,
+}
+
 /// One effect in flight: what the loop needs to answer or drop it.
 struct InFlight {
     /// The provenance the effect was issued under, for its answer record.
     provenance: Provenance,
     /// Aborts the effect's future.
     abort: AbortHandle,
-    /// Whether the effect is a tool call, which counts toward the cap.
-    tool_call: bool,
+    /// What kind of effect it is.
+    kind: Kind,
     /// Whether the effect is a tool call that survives stops, which a
     /// stop leaves alone.
     survives_stop: bool,
@@ -644,10 +678,16 @@ impl Flights {
     }
 
     /// Puts `answer`, the future of chat, render, or timer effect `id`, in
-    /// flight under `provenance`. It never waits and never counts toward
-    /// the cap.
-    fn start(&mut self, id: EffectId, provenance: Provenance, answer: BoxFuture<EffectAnswer>) {
-        self.launch(id, provenance, false, false, answer);
+    /// flight under `provenance` as `kind`. It never waits and never
+    /// counts toward the cap.
+    fn start(
+        &mut self,
+        id: EffectId,
+        provenance: Provenance,
+        kind: Kind,
+        answer: BoxFuture<EffectAnswer>,
+    ) {
+        self.launch(id, provenance, kind, false, answer);
     }
 
     /// Queues `answer`, the performer future of tool call `id`, under
@@ -678,27 +718,33 @@ impl Flights {
         let mut running = self
             .effects
             .values()
-            .filter(|in_flight| in_flight.tool_call)
+            .filter(|in_flight| in_flight.kind == Kind::ToolCall)
             .count();
         while running < self.cap.get() {
             let Some((id, call)) = self.waiting.pop_first() else {
                 return;
             };
-            self.launch(id, call.provenance, true, call.survives_stop, call.answer);
+            self.launch(
+                id,
+                call.provenance,
+                Kind::ToolCall,
+                call.survives_stop,
+                call.answer,
+            );
             running += 1;
         }
     }
 
     /// Puts `answer`, the performer future of effect `id`, in flight under
-    /// `provenance`, inside a span that records the effect id, the task
-    /// path, and the task-local sequence, so a run's effects trace as a
-    /// group. `tool_call` marks a tool call, and `survives_stop` one that
-    /// survives stops.
+    /// `provenance` as `kind`, inside a span that records the effect id,
+    /// the task path, and the task-local sequence, so a run's effects
+    /// trace as a group. `survives_stop` marks a tool call that survives
+    /// stops.
     fn launch(
         &mut self,
         id: EffectId,
         provenance: Provenance,
-        tool_call: bool,
+        kind: Kind,
         survives_stop: bool,
         answer: BoxFuture<EffectAnswer>,
     ) {
@@ -717,10 +763,20 @@ impl Flights {
             InFlight {
                 provenance,
                 abort,
-                tool_call,
+                kind,
                 survives_stop,
             },
         );
+    }
+
+    /// The task of each model round in flight among `ids`, the effects a
+    /// step withdrew.
+    fn round_tasks(&self, ids: &[EffectId]) -> Vec<TaskId> {
+        ids.iter()
+            .filter_map(|id| self.effects.get(id))
+            .filter(|in_flight| in_flight.kind == Kind::Round)
+            .map(|in_flight| in_flight.provenance.task.clone())
+            .collect()
     }
 
     /// Polls for the next effect whose future landed, with its provenance
@@ -735,7 +791,7 @@ impl Flights {
             let Some(in_flight) = self.effects.remove(&id) else {
                 continue;
             };
-            if in_flight.tool_call {
+            if in_flight.kind == Kind::ToolCall {
                 self.fill();
             }
             let answer = match landed {

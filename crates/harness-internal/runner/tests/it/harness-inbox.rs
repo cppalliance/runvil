@@ -1,22 +1,29 @@
 //! The main chain's inbox through `RunControl::send`: each send while the
 //! run waits on its inbox resumes it, a send before the run starts is
-//! delivered before its first step, and a send after the run ends returns
-//! false; the recorder holds a sent message's `InboxMessage` event after
-//! the events of the answers that landed before it and ahead of the
-//! records of the step that applies it; a cancel ends a run that
-//! waits for input; a stop never reaches a message, whether it was sent
-//! before the stop or after it, so the next `tasks.receive()` returns it;
-//! a message sent once a round's answer has landed leaves that answer
-//! standing, and the loop asks again with the message; and every message
-//! a run never read comes back on its report, the ones the loop never
-//! delivered last.
+//! delivered before its first step, and a send returns false once the run
+//! ends, once `run` returns a refusal, and once the Harness or its
+//! unpolled `run` future is dropped; the recorder holds a sent message's
+//! `InboxMessage` event after the events of the answers that landed
+//! before it and ahead of the records of the step that applies it; a
+//! cancel ends a run that waits for input; a stop never reaches a
+//! message, whether it was sent before the stop, after it, or as the loop
+//! records it, so the next `tasks.receive()` returns it; a stop first seen
+//! right after the step that reissued a round drops the reissue unstarted
+//! and still starts the rounds that step issued for other tasks; a send
+//! while a round is out aborts it and asks again with the message, and one
+//! sent once a round's answer has landed leaves that answer standing and
+//! asks again; and every message a run never read comes back on its
+//! report, the ones the loop never delivered last.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
-use harness_runner::recorder::{MemoryRecorder, Record, RecordKind};
+use harness_runner::recorder::{
+    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
+};
 use harness_runner::{RunControl, RunSetup};
 use runvil::vfs::VfsRef;
+use runvil::{Error, ErrorCode};
 use serde_json::json;
 use tokio::sync::Notify;
 
@@ -25,7 +32,7 @@ use super::{
     plain_harness, run_beside, setup, until,
 };
 use crate::scripted::{Held, ScriptedBroker, calls_hold_once, held_broker, hold_host, reply};
-use crate::support::assert_canceled;
+use crate::support::{FailingRecorder, assert_canceled};
 
 /// A prompt that returns the first message its main chain reads.
 const RECEIVES: &str = "---\nname: receives\ndescription: d\nrunvil: 0\n---\n\n\
@@ -66,6 +73,51 @@ const LOOPS: &str = "---\nname: loops\ndescription: d\nrunvil: 0\n---\n\n\
     models.loop()\n\
     return messages[#messages].content\n```\n";
 
+/// A model loop under a `pcall`, then the next two messages the main chain
+/// reads, beside how the loop ended.
+const LOOPS_THEN_RECEIVES_TWICE: &str = "---\nname: loops-receives-twice\ndescription: d\n\
+    runvil: 0\n---\n\n\
+    # LoopsReceivesTwice\n\n## Only\n\n```lua\n\
+    messages:user('hold')\n\
+    local ok, err = pcall(models.loop)\n\
+    local first = tasks.receive()\n\
+    local second = tasks.receive()\n\
+    return tostring(ok) .. ':' .. err.kind .. '|' .. first .. '|' .. second\n```\n";
+
+/// A main section that spawns a child looping under a `pcall`, sends the
+/// child the first message the main chain reads, and returns the child's
+/// report of how its loop ended.
+const STEERS_A_CHILD: &str = "---\nname: steers-child\ndescription: d\nrunvil: 0\n---\n\n\
+    # SteersChild\n\n\
+    ## Main\n\n```lua\n\
+    local child = tasks.spawn('## Child')\n\
+    tasks.send(child, (tasks.receive()))\n\
+    local _t, _ok, report = tasks.join_any({ child })\n\
+    return report\n```\n\n\
+    ## Child\n\n```lua\n\
+    messages:user('hold')\n\
+    local ok, err = pcall(models.loop)\n\
+    return tostring(ok) .. ':' .. err.kind\n```\n";
+
+/// A main section that spawns a child looping under a `pcall`, sends the
+/// child the first message the main chain reads, runs its own model loop,
+/// and returns its final reply beside the child's report of how its loop
+/// ended.
+const STEERS_A_CHILD_THEN_LOOPS: &str = "---\nname: steers-child-loops\ndescription: d\n\
+    runvil: 0\n---\n\n\
+    # SteersChildLoops\n\n\
+    ## Main\n\n```lua\n\
+    local child = tasks.spawn('## Child')\n\
+    tasks.send(child, (tasks.receive()))\n\
+    messages:user('mine')\n\
+    models.loop()\n\
+    local _t, _ok, report = tasks.join_any({ child })\n\
+    return messages[#messages].content .. '|' .. report\n```\n\n\
+    ## Child\n\n```lua\n\
+    messages:user('hold')\n\
+    local ok, err = pcall(models.loop)\n\
+    return tostring(ok) .. ':' .. err.kind\n```\n";
+
 /// The text of each message whose `InboxMessage` event `records` hold, in
 /// record order.
 fn messages(records: &[Record]) -> Vec<String> {
@@ -102,6 +154,52 @@ fn sending_store(text: &'static str) -> (VfsRef, Arc<OnceLock<RunControl>>) {
         )
         .build();
     (vfs, slot)
+}
+
+/// What a [`HookedRecorder`] runs on each record the loop appends, beside
+/// the run's control.
+type Hook = dyn Fn(&Record, &RunControl) + Send + Sync;
+
+/// A recorder that keeps every record in `records` and, once the test
+/// puts the run's control in `control`, hands `hook` each record beside
+/// that control as the loop appends it.
+struct HookedRecorder {
+    records: Arc<MemoryRecorder>,
+    control: Arc<OnceLock<RunControl>>,
+    hook: Box<Hook>,
+}
+
+impl RunRecorder for HookedRecorder {
+    fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
+        self.records.begin_run(meta)
+    }
+
+    fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()> {
+        if let Some(control) = self.control.get() {
+            (self.hook)(&record, control);
+        }
+        self.records.append(run, record)
+    }
+
+    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+        self.records.end_run(run, result)
+    }
+}
+
+/// A recorder over `records` that runs `hook` on each record the loop
+/// appends, beside the run's control, once the test puts the control in
+/// the returned slot.
+fn hooked_recorder(
+    records: &Arc<MemoryRecorder>,
+    hook: impl Fn(&Record, &RunControl) + Send + Sync + 'static,
+) -> (Arc<HookedRecorder>, Arc<OnceLock<RunControl>>) {
+    let slot = Arc::new(OnceLock::new());
+    let recorder = HookedRecorder {
+        records: Arc::clone(records),
+        control: Arc::clone(&slot),
+        hook: Box::new(hook),
+    };
+    (Arc::new(recorder), slot)
 }
 
 /// A broker whose first round replies `first` once `gate` opens, and whose
@@ -207,6 +305,51 @@ async fn a_send_after_the_run_ends_returns_false_and_drops_the_text() {
         messages(&recorder.records(report.run_id)),
         ["only"],
         "the refused text reached no record"
+    );
+}
+
+#[tokio::test]
+async fn a_send_returns_false_once_run_returns_a_recorder_refusal() {
+    let harness = launch(
+        no_packs(),
+        PendingTimer::default(),
+        RECEIVES,
+        setup(
+            Arc::new(FailingRecorder::failing_on(2)),
+            ScriptedBroker::replying(),
+        ),
+    );
+    let control = harness.control();
+
+    let refusal = harness
+        .run()
+        .await
+        .expect_err("the recorder refused the run's first write");
+
+    assert_eq!(refusal.code, ErrorCode::RecorderFailed);
+    assert!(
+        !control.send("late".to_owned()),
+        "the refused run accepts no message"
+    );
+}
+
+#[test]
+fn a_send_returns_false_once_the_harness_or_its_unpolled_run_future_is_dropped() {
+    let recorder = Arc::new(MemoryRecorder::new());
+    let harness = plain_harness(&recorder, ScriptedBroker::replying(), RECEIVES);
+    let control = harness.control();
+    drop(harness);
+    assert!(
+        !control.send("late".to_owned()),
+        "the dropped Harness accepts no message"
+    );
+
+    let harness = plain_harness(&recorder, ScriptedBroker::replying(), RECEIVES);
+    let control = harness.control();
+    drop(harness.run());
+    assert!(
+        !control.send("late".to_owned()),
+        "the dropped run future accepts no message"
     );
 }
 
@@ -397,6 +540,195 @@ async fn a_stop_then_a_send_while_a_round_is_in_flight_raise_canceled_and_the_ne
         answers_to(&recorder.records(report.run_id), "Chat"),
         [json!("Dropped")],
         "one round, answered Dropped by the stop"
+    );
+}
+
+#[tokio::test]
+async fn a_stop_and_a_send_raised_as_the_loop_records_a_message_raise_canceled_and_the_reads_take_both()
+ {
+    let chat = Arc::new(Held::default());
+    let records = Arc::new(MemoryRecorder::new());
+    let (recorder, slot) = hooked_recorder(&records, |record, control| {
+        if is_event(record, "inbox_message") && record.payload["text"] == "A" {
+            control.stop_round();
+            assert!(control.send("B".to_owned()), "the live run accepts B");
+        }
+    });
+    let harness = launch(
+        no_packs(),
+        PendingTimer::default(),
+        LOOPS_THEN_RECEIVES_TWICE,
+        setup(recorder, held_broker(&chat)),
+    );
+    slot.set(harness.control()).unwrap();
+    let watched = Arc::clone(&chat);
+
+    // The loop delivers A while the round is held, and recording A's event
+    // raises the stop and sends B before the step that applies A.
+    let report = run_beside(harness, |control| async move {
+        until("the model round is in flight", || watched.started() == 1).await;
+        assert!(control.send("A".to_owned()));
+    })
+    .await
+    .expect("the run is reported");
+
+    assert_eq!(
+        report.result,
+        Ok("false:canceled|A|B".to_owned()),
+        "the stop raised canceled at the loop, and the next reads took A and then B"
+    );
+    assert_eq!(chat.started(), 1, "no reissued round started");
+    assert_eq!(chat.dropped(), 1, "the stop tore the round down");
+    assert_eq!(
+        answers_to(&records.records(report.run_id), "Chat"),
+        [json!("Dropped")],
+        "one round, answered Dropped by the stop"
+    );
+}
+
+#[tokio::test]
+async fn a_stop_first_seen_right_after_the_step_that_reissued_a_round_drops_the_reissue_unstarted()
+{
+    let chat = Arc::new(Held::default());
+    let records = Arc::new(MemoryRecorder::new());
+    // The step that applies the main chain's send to the child withdraws
+    // the child's round, reissues it, and reports the child's message,
+    // whose record raises the stop.
+    let (recorder, slot) = hooked_recorder(&records, |record, control| {
+        if is_event(record, "inbox_message") && record.task_id == "0.0" {
+            control.stop_round();
+        }
+    });
+    let harness = launch(
+        no_packs(),
+        PendingTimer::default(),
+        STEERS_A_CHILD,
+        setup(recorder, held_broker(&chat)),
+    );
+    slot.set(harness.control()).unwrap();
+    let watched = Arc::clone(&chat);
+
+    let report = run_beside(harness, |control| async move {
+        until("the child's round is in flight", || watched.started() == 1).await;
+        assert!(control.send("steer".to_owned()));
+    })
+    .await
+    .expect("the run is reported");
+
+    assert_eq!(
+        report.result,
+        Ok("false:canceled".to_owned()),
+        "the dropped reissue raised canceled at the child's loop"
+    );
+    assert_eq!(chat.started(), 1, "the reissued round never started");
+    assert_eq!(chat.dropped(), 1, "the stop tore the withdrawn round down");
+    assert_eq!(
+        answers_to(&records.records(report.run_id), "Chat"),
+        [json!("Dropped"), json!("Dropped")],
+        "the withdrawn round and its reissue, each answered Dropped"
+    );
+}
+
+#[tokio::test]
+async fn a_stop_first_seen_right_after_the_step_that_reissued_a_round_still_starts_another_tasks_round()
+ {
+    // The gate never opens, so the child's first round is held until the
+    // stop tears it down, and every later round replies at once. The step
+    // that applies the main chain's send to the child withdraws the child's
+    // round, reissues it, issues the main chain's own round, and reports
+    // the child's message, whose record raises the stop.
+    let gate = Arc::new(Notify::new());
+    let broker = gated_broker(&gate);
+    let rounds = broker.rounds();
+    let records = Arc::new(MemoryRecorder::new());
+    let (recorder, slot) = hooked_recorder(&records, |record, control| {
+        if is_event(record, "inbox_message") && record.task_id == "0.0" {
+            control.stop_round();
+        }
+    });
+    let harness = launch(
+        no_packs(),
+        PendingTimer::default(),
+        STEERS_A_CHILD_THEN_LOOPS,
+        setup(recorder, broker),
+    );
+    slot.set(harness.control()).unwrap();
+    let watched = Arc::clone(&rounds);
+
+    let report = run_beside(harness, |control| async move {
+        until("the child's round is in flight", || {
+            watched.lock().unwrap().len() == 1
+        })
+        .await;
+        assert!(control.send("steer".to_owned()));
+    })
+    .await
+    .expect("the run is reported");
+
+    assert_eq!(
+        report.result,
+        Ok("re: mine|false:canceled".to_owned()),
+        "the main chain's round ran to its reply, and the dropped reissue raised canceled at \
+         the child's loop"
+    );
+    assert_eq!(
+        rounds.lock().unwrap().len(),
+        2,
+        "only the child's first round and the main chain's round reached the broker"
+    );
+    assert_eq!(
+        answers_to(&records.records(report.run_id), "Chat")
+            .iter()
+            .filter(|answer| **answer == json!("Dropped"))
+            .count(),
+        2,
+        "the child's withdrawn round and its reissue, each answered Dropped"
+    );
+}
+
+#[tokio::test]
+async fn a_send_while_a_held_round_streams_aborts_it_and_the_loop_asks_again_with_the_message() {
+    let chat = Arc::new(Held::default());
+    let recorder = Arc::new(MemoryRecorder::new());
+    let harness = launch(
+        no_packs(),
+        PendingTimer::default(),
+        LOOPS,
+        setup(recorder.clone(), held_broker(&chat)),
+    );
+    let watched = Arc::clone(&chat);
+
+    let report = run_beside(harness, |control| async move {
+        until("the model round is in flight", || watched.started() == 1).await;
+        assert!(control.send("steer".to_owned()));
+        until("the loop asks again", || watched.started() == 2).await;
+        assert_eq!(watched.dropped(), 1, "the message aborted the first round");
+        control.cancel();
+    })
+    .await
+    .expect("the run is reported");
+
+    assert_canceled(&report.result);
+    let records = recorder.records(report.run_id);
+    assert_eq!(
+        answers_to(&records, "Chat").first(),
+        Some(&json!("Dropped")),
+        "the withdrawn round is answered Dropped"
+    );
+    let requests: Vec<_> = records
+        .iter()
+        .filter(|record| record.kind == RecordKind::Effect)
+        .filter_map(|record| record.payload.get("Chat"))
+        .collect();
+    assert_eq!(requests.len(), 2, "two rounds: {requests:?}");
+    let last = requests[1]["messages"]
+        .as_array()
+        .and_then(|messages| messages.last())
+        .and_then(|message| message["content"].as_str())
+        .unwrap_or_default();
+    assert!(
+        last.ends_with("This message arrived while you were working:\n\nsteer"),
+        "the model client merges the message into the user message before it: {last:?}"
     );
 }
 

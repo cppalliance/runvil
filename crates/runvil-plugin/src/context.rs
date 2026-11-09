@@ -18,10 +18,10 @@ use runvil_vfs::Access;
 /// Pack cannot store the access, move it into a spawned task or thread,
 /// or keep it past the call.
 ///
-/// A call gets no services. A Plugin's `install` keeps the Host-wide ones
-/// its Pack needs in the Pack's [`PackFactory`](crate::PackFactory), and
-/// each run's instance takes what it needs of the run's own at
-/// [`new_pack`](crate::PackFactory::new_pack).
+/// A call gets no services. A Plugin's `install` keeps the Host-wide
+/// services its Pack needs in the Pack's
+/// [`PackFactory`](crate::PackFactory), which hands them to each run's
+/// instance it makes at [`new_pack`](crate::PackFactory::new_pack).
 #[derive(Debug)]
 pub struct ToolContext<'a> {
     tool: &'a ToolId,

@@ -72,7 +72,7 @@ pub(crate) fn launch(
     Harness::new(host_over(packs, timer), parsed(source), setup)
 }
 
-/// A Host's Packs with none but the built-in.
+/// A Host's Packs with none but the built-ins.
 pub(crate) fn no_packs() -> Packs {
     Packs::new(PackRegistry::new())
 }

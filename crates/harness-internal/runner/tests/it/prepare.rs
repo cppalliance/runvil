@@ -77,7 +77,7 @@ fn assert_no_records(recorder: &MemoryRecorder, run_id: RunId) {
     );
 }
 
-/// A Host's Packs with none but the built-in.
+/// A Host's Packs with none but the built-ins.
 pub(crate) fn bare() -> Packs {
     Packs::new(registry(&[]))
 }
