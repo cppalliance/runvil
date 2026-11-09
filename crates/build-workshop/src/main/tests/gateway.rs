@@ -77,6 +77,8 @@ fn the_flag_wins_over_the_variable_which_wins_over_the_slot() {
                 .join(name)
                 .join("runvil-gateway.exe")
         };
+        write_file(&named("flag"), b"flag");
+        write_file(&named("variable"), b"variable");
         if variable {
             test_environment.environment.gateway_sidecar = Some(named("variable"));
         }
@@ -128,6 +130,16 @@ fn a_given_gateway_is_staged_for_a_windows_build_and_removed_after() {
     .expect("Workshop build");
 
     assert_eq!(runner.commands.len(), 1);
+    // The desktop build script copies what this variable names into the
+    // slot, and the child would otherwise inherit the caller's value.
+    assert!(
+        runner.commands[0].envs.contains(&(
+            OsString::from("RUNVIL_GATEWAY_SIDECAR"),
+            given.clone().into_os_string()
+        )),
+        "{:?}",
+        runner.commands[0].envs
+    );
     assert!(!slot.exists(), "a given Gateway's staging was left");
     assert!(given.is_file(), "staging moved the given Gateway");
 }

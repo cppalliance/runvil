@@ -144,12 +144,9 @@ pub(super) fn build_installer(
         "Workshop bundle",
         &source,
         |runner| {
-            run_checked(
-                runner,
-                &tauri_build_command(environment, &target, platform, request.sign),
-                "Workshop bundle",
-            )
-            .map(|_| ())
+            let mut bundle = tauri_build_command(environment, &target, platform, request.sign);
+            bundle.envs.extend(source.child_envs());
+            run_checked(runner, &bundle, "Workshop bundle").map(|_| ())
         },
     )?;
     let output = environment.target_root.join("installer").join(&target);

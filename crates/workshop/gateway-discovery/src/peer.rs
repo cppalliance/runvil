@@ -24,29 +24,6 @@ pub const GATEWAY_BUNDLE_NAME: &str = "Runvil Gateway.app";
 /// The Linux Workshop AppImage's file name.
 pub const WORKSHOP_APPIMAGE_NAME: &str = "Runvil.AppImage";
 
-/// The remedy for the macOS bundle `moved` running from an App
-/// Translocation copy, where the `peer` bundle beside the original is not
-/// visible. Gatekeeper stops translocating a bundle once the user moves it
-/// with Finder, and the installer's default folder is
-/// `Applications/Runvil`.
-#[must_use]
-pub fn translocation_remedy(moved: &str, peer: &str) -> String {
-    format!(
-        "move {moved} with Finder into the folder that holds {peer}, such as the default \
-         Applications/Runvil, or out of that folder and back in if it is already there, \
-         then open it from there"
-    )
-}
-
-/// Whether `exe` runs from a macOS App Translocation copy: macOS runs a
-/// quarantined app that Finder has not moved from a randomized read-only
-/// path, where the sibling bundle beside the original is not visible.
-#[must_use]
-pub fn translocated(exe: &Path) -> bool {
-    exe.components()
-        .any(|component| component.as_os_str() == "AppTranslocation")
-}
-
 /// The installer layout a lookup searches.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(
@@ -105,18 +82,11 @@ pub fn running_appimage(
 
 /// Locates the installed gateway executable for the Workshop running from
 /// `workshop_exe`, inside `appimage` when [`running_appimage`] found one.
-/// Returns the first existing path of [`gateway_search_paths`].
+/// Checks, in order: on Linux `runvil-gateway` beside the AppImage, then
+/// beside `workshop_exe`, then the sibling gateway bundle on macOS.
 #[must_use]
 pub fn installed_gateway(workshop_exe: &Path, appimage: Option<&Path>) -> Option<PathBuf> {
-    first_file(gateway_search_paths(workshop_exe, appimage))
-}
-
-/// The paths [`installed_gateway`] checks, in order: on Linux
-/// `runvil-gateway` beside the AppImage, then beside `workshop_exe`,
-/// then the sibling gateway bundle on macOS.
-#[must_use]
-pub fn gateway_search_paths(workshop_exe: &Path, appimage: Option<&Path>) -> Vec<PathBuf> {
-    gateway_candidates(Layout::CURRENT, workshop_exe, appimage)
+    first_file(gateway_candidates(Layout::CURRENT, workshop_exe, appimage))
 }
 
 fn first_file(candidates: Vec<PathBuf>) -> Option<PathBuf> {
@@ -167,8 +137,7 @@ fn gateway_candidates(
 /// `<name>.app/Contents/MacOS/<exe>`, or `None` for an unbundled executable
 /// such as a development build. Matches the path shape only and never
 /// touches the disk.
-#[must_use]
-pub fn app_bundle(exe: &Path) -> Option<&Path> {
+fn app_bundle(exe: &Path) -> Option<&Path> {
     let macos = exe.parent()?;
     let contents = macos.parent()?;
     let bundle = contents.parent()?;

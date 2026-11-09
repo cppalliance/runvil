@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use super::{
     GATEWAY_BUNDLE_NAME, Layout, WORKSHOP_APPIMAGE_NAME, WORKSHOP_BUNDLE_NAME, app_bundle,
-    bundle_exe, first_file, gateway_candidates, installed_gateway, running_appimage, translocated,
+    bundle_exe, first_file, gateway_candidates, installed_gateway, running_appimage,
 };
 
 /// Plants an empty executable file at `root/relative`, creating its
@@ -229,16 +229,6 @@ fn the_bundle_probe_rejects_unbundled_and_partial_paths() {
         "the parent two levels up must be a .app"
     );
     assert_eq!(app_bundle(Path::new("runvil-gateway")), None);
-}
-
-#[test]
-fn translocation_is_read_from_the_executable_path() {
-    assert!(translocated(Path::new(
-        "/private/var/folders/xy/T/AppTranslocation/0A1B/d/Runvil.app/Contents/MacOS/runvil-workshop"
-    )));
-    assert!(!translocated(Path::new(
-        "/Applications/Runvil/Runvil.app/Contents/MacOS/runvil-workshop"
-    )));
 }
 
 #[test]

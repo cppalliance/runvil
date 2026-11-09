@@ -280,4 +280,12 @@ fn the_installed_names_match_workshop_s_gateway_lookup() {
     ] {
         assert_eq!(declared(&text, name), ours, "{name} in {}", peer.display());
     }
+    // The lookup joins these onto the directories above; the payload must
+    // use the same Gateway file name and bundle folders.
+    for needle in [
+        format!("Self::MacOs | Self::Linux => \"{}\"", collect::GATEWAY),
+        "join(\"Contents\").join(\"MacOS\")".to_owned(),
+    ] {
+        assert!(text.contains(&needle), "`{needle}` in {}", peer.display());
+    }
 }

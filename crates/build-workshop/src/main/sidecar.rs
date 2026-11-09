@@ -8,6 +8,7 @@
 //! `tools/fetch-gateway-sidecar.mjs` stages the release
 //! `gateway-pin/pin.json` names for any target.
 
+use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -37,6 +38,21 @@ impl GatewaySource {
             Self::Staged { .. } => sidecar_path(workspace_root, target),
         }
     }
+
+    /// The environment a Workshop build gets for this source. The desktop
+    /// build script copies the file `RUNVIL_GATEWAY_SIDECAR` names into the
+    /// sidecar slot, and a child inherits that variable, so a given Gateway
+    /// is named there too: otherwise an inherited value would replace the
+    /// `--gateway-binary` file this run checked and staged.
+    pub(super) fn child_envs(&self) -> Vec<(OsString, OsString)> {
+        match self {
+            Self::Given(path) => vec![(
+                OsString::from(GATEWAY_SIDECAR_VARIABLE),
+                path.clone().into_os_string(),
+            )],
+            Self::Staged { .. } => Vec::new(),
+        }
+    }
 }
 
 /// Chooses the Gateway for `target`: `given` when a flag or the variable
@@ -48,7 +64,19 @@ pub(super) fn gateway_source(
     target: &str,
 ) -> Result<GatewaySource, String> {
     if let Some(path) = given {
-        return Ok(GatewaySource::Given(path.to_path_buf()));
+        // One absolute path serves every later use: the version check, the
+        // copies, and the desktop build script each run from a different
+        // directory, and a bare name would otherwise resolve through PATH.
+        let path = std::path::absolute(path)
+            .map_err(|error| format!("cannot resolve the Gateway {}: {error}", path.display()))?;
+        if !path.is_file() {
+            return Err(format!(
+                "--gateway-binary or {GATEWAY_SIDECAR_VARIABLE} names the Gateway {}, which is \
+                 not a file",
+                path.display()
+            ));
+        }
+        return Ok(GatewaySource::Given(path));
     }
     let staged = sidecar_path(workspace_root, target);
     if !staged.is_file() {

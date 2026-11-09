@@ -195,7 +195,8 @@ pub(super) fn placeholder_gateway_error(exe: &Path) -> anyhow::Error {
 pub(super) fn no_gateway_error() -> anyhow::Error {
     anyhow::anyhow!(
         "no gateway configured or running; install the Gateway component, which \
-         puts runvil-gateway where Workshop looks for it, or set \
+         puts runvil-gateway where Workshop looks for it (in a development tree, \
+         build with `cargo workshop`, which places it beside Workshop), or set \
          gateway.base_url and gateway.api_key in workshop.toml to attach to \
          a gateway over the network"
     )

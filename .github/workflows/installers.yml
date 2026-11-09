@@ -28,11 +28,14 @@ on:
       - .github/installers/**
       - crates/build-workshop/**
       - crates/workshop/desktop/installer.nsi
+      - crates/workshop/desktop/build.rs
+      - crates/workshop/desktop/src/gateway/**
+      - crates/workshop/desktop/*.plist
       - crates/workshop/desktop/tauri*.conf.json
       - crates/workshop/desktop/icons/**
       - crates/workshop/package.json
       - crates/workshop/package-lock.json
-      - crates/workshop/gateway-discovery/src/peer*.rs
+      - crates/workshop/gateway-discovery/src/**
       - gateway-pin/**
       - tools/fetch-gateway-sidecar.mjs
       - tools/gateway-archive.mjs

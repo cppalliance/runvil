@@ -87,8 +87,8 @@ pub use crate::paths::{
     lock_file_path, run_dir,
 };
 pub use crate::peer::{
-    GATEWAY_BUNDLE_NAME, WORKSHOP_APPIMAGE_NAME, WORKSHOP_BUNDLE_NAME, app_bundle,
-    gateway_search_paths, installed_gateway, running_appimage, translocated, translocation_remedy,
+    GATEWAY_BUNDLE_NAME, WORKSHOP_APPIMAGE_NAME, WORKSHOP_BUNDLE_NAME, installed_gateway,
+    running_appimage,
 };
 pub use crate::shutdown::{ShutdownError, request_shutdown, request_shutdown_before};
 #[cfg(any(test, feature = "test-fixtures"))]

@@ -146,7 +146,19 @@ fn a_given_gateway_wins_over_the_slot_and_the_marker_says_whether_it_is_a_stub()
     let test_environment = environment();
     let root = &test_environment.environment.workspace_root;
     let target = "aarch64-apple-darwin";
-    let given = Path::new("elsewhere").join("runvil-gateway");
+    let given = test_environment.given_gateway(target);
+    let missing = test_environment.temp.path().join("missing-gateway");
+    let error =
+        sidecar::gateway_source(Some(&missing), root, target).expect_err("a missing Gateway");
+    assert!(error.contains("which is not a file"), "{error}");
+    // A relative name is resolved once, against the current directory, and
+    // never through PATH.
+    let error = sidecar::gateway_source(Some(Path::new("no-such-runvil-gateway")), root, target)
+        .expect_err("a bare name");
+    let resolved = std::env::current_dir()
+        .expect("current directory")
+        .join("no-such-runvil-gateway");
+    assert!(error.contains(&resolved.display().to_string()), "{error}");
 
     assert_eq!(
         sidecar::gateway_source(Some(&given), root, target),

@@ -49,7 +49,7 @@ fn workshop_failure_is_primary_when_cleanup_also_fails() {
 }
 
 #[test]
-fn stage_failure_names_the_missing_source_skips_the_workshop_build_and_cleans_up() {
+fn a_missing_given_gateway_fails_before_any_build_and_stages_nothing() {
     let test_environment = environment();
     let environment = &test_environment.environment;
     let triple = "aarch64-pc-windows-msvc";
@@ -61,12 +61,9 @@ fn stage_failure_names_the_missing_source_skips_the_workshop_build_and_cleans_up
         environment,
         &mut runner,
     )
-    .expect_err("staging failure");
+    .expect_err("a missing Gateway");
 
-    assert!(
-        error.primary.contains("Gateway sidecar staging failed"),
-        "{error}"
-    );
+    assert!(error.primary.contains("which is not a file"), "{error}");
     assert!(
         error.primary.contains(&missing.display().to_string()),
         "{error}"

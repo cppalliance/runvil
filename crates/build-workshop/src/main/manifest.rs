@@ -283,7 +283,7 @@ fn public_key(
     Ok((key, against))
 }
 
-/// Checks `file`'s signature as the Gateway does before it applies an
+/// Checks `file`'s signature as the Tauri updater does before it applies an
 /// update, and returns the signature as `latest.json` carries it.
 fn verify(key: &minisign_verify::PublicKey, assets: &Path, file: &str) -> Result<String, String> {
     let signature_path = assets.join(format!("{file}{SIGNATURE_SUFFIX}"));

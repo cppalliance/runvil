@@ -6,6 +6,7 @@ use std::io;
 use std::path::Path;
 
 use super::args::valid_target_triple;
+use super::installer::collect::copy_executable;
 use super::sidecar::{self, GatewaySource};
 use super::{
     BuildEnvironment, BuildError, BuildRequest, CommandRunner, CommandSpec, OutputMode, Profile,
@@ -39,11 +40,9 @@ pub(super) fn build_workshop(
         "Workshop build",
         &source,
         |runner| {
-            run_checked(
-                runner,
-                &cargo_build_command(environment, request, "workshop"),
-                "Workshop build",
-            )?;
+            let mut build = cargo_build_command(environment, request, "workshop");
+            build.envs.extend(source.child_envs());
+            run_checked(runner, &build, "Workshop build")?;
             if sidecar::bundles_sidecar(&target) {
                 return Ok(());
             }
@@ -61,13 +60,25 @@ pub(super) fn build_workshop(
             {
                 return Ok(());
             }
-            fs::copy(&gateway, &beside).map(|_| ()).map_err(|error| {
-                StepError::failed(format!(
-                    "cannot copy the Gateway {} beside Workshop at {}: {error}",
-                    gateway.display(),
-                    beside.display()
-                ))
-            })
+            // A Gateway from an earlier run may still be running from
+            // `beside`, and writing into a running program's file fails on
+            // Linux. A rename replaces the name and leaves that file alone.
+            let fresh = beside.with_extension("new");
+            copy_executable(&gateway, &fresh)
+                .and_then(|()| {
+                    fs::rename(&fresh, &beside).map_err(|error| {
+                        format!(
+                            "cannot move {} to {}: {error}",
+                            fresh.display(),
+                            beside.display()
+                        )
+                    })
+                })
+                .map_err(|reason| {
+                    StepError::failed(format!(
+                        "cannot place the Gateway beside Workshop: {reason}"
+                    ))
+                })
         },
     )
 }

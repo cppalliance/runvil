@@ -13,8 +13,8 @@
 //! Two sources fill the slot, in order:
 //!
 //! 1. `RUNVIL_GATEWAY_SIDECAR`, an explicit file some other step staged.
-//!    CI sets it, and so does `cargo workshop` when it has a downloaded or
-//!    locally built Gateway. The named file is copied in as is.
+//!    `cargo workshop` sets it to the Gateway `--gateway-binary` or the
+//!    variable named. The named file is copied in as is.
 //! 2. Whatever `tools/fetch-gateway-sidecar.mjs` left in place: a stub for
 //!    compile-only jobs or the pinned release binary. Nothing here touches
 //!    it, so a downloaded Gateway survives every rebuild.
