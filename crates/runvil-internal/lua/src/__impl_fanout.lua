@@ -76,11 +76,13 @@ end
 -- refusal, such as the depth cap's, re-raises here as the retained typed
 -- error. The scheduler admits the arms under the chain's
 -- concurrency limit, and `join_any` over the live set delivers the arms
--- as they end. A `tool_loop_exhausted` arm
+-- as they end, or as they answer with `tasks.reply`, whose reply is then
+-- the arm's result. A `tool_loop_exhausted` arm
 -- becomes the incomplete stub and the fanout continues; any other arm
 -- failure cancels the live arms and re-raises. No arm outlives the call:
--- every arm is delivered or canceled before the function returns or
--- raises.
+-- an arm delivered with a result is canceled right after the `join_any`
+-- that delivers it, a failed arm has ended, and a failure cancels the live
+-- arms before the function raises.
 local function fanout(...)
   local argc = select("#", ...)
   local model, worker, collection
@@ -167,6 +169,16 @@ local function fanout(...)
     if not ok then
       cancel_live()
       fail(task)
+    end
+    -- An arm delivered with a result may be idle on its inbox after
+    -- `tasks.reply`, and only this cancel ends it; for an arm that returned
+    -- it does nothing. The cancel's answer is dropped: a cancel is refused
+    -- only for a task the caller does not own, and this chain owns every
+    -- arm. A failed arm has ended, and its failure must be re-raised in the
+    -- join's own resume to keep the arm's typed error, so no cancel is
+    -- yielded for it.
+    if arm_ok then
+      yield({ op = "cancel", task = task })
     end
     local index = slot_of[task]
     slot_of[task] = nil

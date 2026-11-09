@@ -62,6 +62,7 @@ The language guide and the Rust docs say what the code does.
   - From then on, an amend that stages the plan copy amends that `runvil` commit, and an amend of guide files amends the `runvil-docs` commit.
   - On resume, take step 4's commit from `runvil-docs`'s HEAD.
   - Before step 4 makes its first change, check that `runvil-docs` has a clean worktree; when it does not, stop and ask the user.
+- Known failure: `cargo test -p build-xtask` fails because step 1's `queued_for_test` hook in `crates/runvil-internal/engine/src/execute/scheduler/test_hooks.rs` put `Scheduler` at 83 inherent methods, past the 82 its entry in `crates/build-xtask/src/type_size.rs` records.
 
 ## Terms
 
@@ -206,14 +207,42 @@ impl Run {
 
 <step-2>
 
-2. **The idle cap's choice, replied fanout arms, and the empty stall** (points: 6) - Change which idle task the cap closes. The code is `Scheduler::close_past_idle_cap` (`crates/runvil-internal/engine/src/execute/scheduler/task_end.rs` lines 84 to 105) with `TaskArena::idle_longest_past` (`crates/runvil-internal/engine/src/execute/scheduler/tasks.rs` lines 383 to 399). Among the idle tasks other than the replier, close the one idle longest that owns no live tasks. When every candidate owns live tasks, close the one idle longest and abandon its live tasks as `owner_returned`. Don't go through the cancel path's `owner_aborted` (`abort_subtree`, `crates/runvil-internal/engine/src/execute/scheduler/chain.rs` line 293), so the closed task stays `done` with its latest reply and no `tasks_live` arises. Whichever path the close takes, it keeps the `tracing::debug!` line naming the closed task (`task_end.rs` lines 92 to 97) and drops the closed task's inbox queue. Widen `AbandonReason::OwnerReturned`'s doc (`crates/runvil-internal/types/src/ids.rs` lines 243 to 261) to an owner the idle cap closed. Name the cap's close in the docs of `end_backing` (`task_end.rs` lines 211 to 218) and `abort_subtree` (`chain.rs` lines 282 to 285). In the stall rule (`crates/runvil-internal/engine/src/execute/scheduler/drive.rs` lines 82 to 89), end the run with `make_internal_error("the scheduler stalled with no ready chain, no in-flight request, and no queued chain that can be admitted")` when `inbox_waiters()` is empty, and keep `Stalled` otherwise; drop `make_stalled_error`'s branch for an empty list (`crates/runvil-internal/engine/src/error.rs` lines 127 to 141). In the fanout shim (`crates/runvil-internal/lua/src/__impl_fanout.lua` lines 165 to 187), yield a `cancel` for each arm right after the `join_any` that delivers it. An ended arm's cancel does nothing and emits nothing (`cancel_task`, `crates/runvil-internal/engine/src/execute/scheduler/waits.rs` lines 235 to 247). An arm idle after `tasks.reply` ends canceled. Tests, using `run_with_idle_cap` (`crates/runvil-internal/engine/src/execute/run/tests-reply.rs` line 30) for the cap:
+2. [done] **The idle cap's choice, replied fanout arms, and the empty stall** (points: 6) - Change which idle task the cap closes. The code is `Scheduler::close_past_idle_cap` (`crates/runvil-internal/engine/src/execute/scheduler/task_end.rs` lines 84 to 105) with `TaskArena::idle_longest_past` (`crates/runvil-internal/engine/src/execute/scheduler/tasks.rs` lines 383 to 399). Among the idle tasks other than the replier, close the one idle longest that owns no live tasks. When every candidate owns live tasks, close the one idle longest and abandon its live tasks as `owner_returned`. Don't go through the cancel path's `owner_aborted` (`abort_subtree`, `crates/runvil-internal/engine/src/execute/scheduler/chain.rs` line 293), so the closed task stays `done` with its latest reply and no `tasks_live` arises. Whichever path the close takes, it keeps the `tracing::debug!` line naming the closed task (`task_end.rs` lines 92 to 97) and drops the closed task's inbox queue. Widen `AbandonReason::OwnerReturned`'s doc (`crates/runvil-internal/types/src/ids.rs` lines 243 to 261) to an owner the idle cap closed. Name the cap's close in the docs of `end_backing` (`task_end.rs` lines 211 to 218) and `abort_subtree` (`chain.rs` lines 282 to 285). In the stall rule (`crates/runvil-internal/engine/src/execute/scheduler/drive.rs` lines 82 to 89), end the run with `make_internal_error("the scheduler stalled with no ready chain, no in-flight request, and no queued chain that can be admitted")` when `inbox_waiters()` is empty, and keep `Stalled` otherwise; drop `make_stalled_error`'s branch for an empty list (`crates/runvil-internal/engine/src/error.rs` lines 127 to 141). In the fanout shim (`crates/runvil-internal/lua/src/__impl_fanout.lua` lines 165 to 187), yield a `cancel` for each arm right after the `join_any` that delivers it. An ended arm's cancel does nothing and emits nothing (`cancel_task`, `crates/runvil-internal/engine/src/execute/scheduler/waits.rs` lines 235 to 247). An arm idle after `tasks.reply` ends canceled. Tests, using `run_with_idle_cap` (`crates/runvil-internal/engine/src/execute/run/tests-reply.rs` line 30) for the cap:
    - With `max_idle_tasks` 1 and two idle tasks, where the one idle longer owns a live task and the other owns none, a third task's reply closes the one that owns none.
    - When task A spawns B, replies, and idles, and B then replies, A closes `done` with `TaskSucceeded`, and B is abandoned `owner_returned`.
    - When the closed task owns a running worker, the worker is abandoned `owner_returned` and its effect is withdrawn, while the closed task reads `done` and `ok` with no `tasks_live`.
+   - An idle task whose live task was spawned from one of its `call` children counts as owning it, so the cap passes it over for an idle task that owns none.
    - The queued task that can never be admitted (`crates/runvil-internal/engine/src/execute/tests/scheduler/concurrency-stepped.rs` lines 47 to 83) ends `internal` again, and the inbox-waiter stall (`crates/runvil-internal/engine/src/execute/run/tests-send.rs` lines 232 to 252) still ends `stalled` naming `0.0`.
    - A fanout arm that answers with `tasks.reply` hands the call its reply as its result and ends with one `TaskCanceled`, and `tasks.pending()` after the call lists nothing.
    - The fanout tests that pin event lists still pass: `crates/runvil-internal/engine/src/execute/tests/fanout_acceptance.rs`, `crates/runvil-internal/engine/src/execute/tests/scheduler/fanout/failure_semantics.rs`, and `crates/runvil-internal/engine/src/execute/tests/serial_driver.rs`.
-   - Score: Other changes: the cap's choice of task 3, its `owner_returned` fallback 1, the empty-stall `Internal` error 1, canceling each delivered arm 1, the docs 0.
+   - Score: `TaskArena::idle_longest_past` 0 (`task_of`, scored with the cap's choice). Other changes: the cap's choice of task 3, its `owner_returned` fallback 1, the empty-stall `Internal` error 1, canceling each delivered arm 1, the docs 0.
+
+`crates/runvil-internal/engine/src/execute/scheduler/tasks.rs`
+
+```rust
+impl TaskArena {
+    /// The task the idle cap closes once more than
+    /// `cap` tasks are idle: among the idle tasks
+    /// other than `except`, the one idle longest that
+    /// owns no live task, or the one idle longest when
+    /// each of them owns one. `task_of` names the task
+    /// an owner chain runs inside, so a task owns what
+    /// its `call` children spawned too. `None` while
+    /// the run is within the cap.
+    pub(super) fn idle_longest_past(
+        &self,
+        cap: NonZeroUsize,
+        except: &TaskId,
+        task_of: impl Fn(ChainIndex) -> TaskId,
+    ) -> Option<TaskId>;
+    // changed, was: idle_longest_past(&self,
+    //   cap: NonZeroUsize, except: &TaskId)
+    //   -> Option<TaskId>
+    // callers:
+    // crates/runvil-internal/engine/src/execute/
+    //   scheduler/task_end.rs (1)
+}
+```
 
 </step-2>
 

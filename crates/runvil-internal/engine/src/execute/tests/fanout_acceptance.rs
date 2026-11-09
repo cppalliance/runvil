@@ -2,7 +2,8 @@
 //! protocol: a queued arm is admitted when any arm frees its slot (not
 //! the
 //! lowest-index arm's), a fatal arm gives every started arm exactly one
-//! terminal task observation, a nested fanout nests its arm ids under the
+//! terminal task observation, an arm that replies hands the call its reply
+//! and ends canceled, a nested fanout nests its arm ids under the
 //! outer arm's chain, hierarchical ids are identical across two runs
 //! whose arms finish in different orders, and three arms each running
 //! `models.loop` hold three model rounds in flight at once. The exhausted
@@ -127,6 +128,43 @@ fn a_fatal_arm_gives_every_started_arm_exactly_one_terminal() {
             (task("0.1"), vec!["canceled"]),
         ]),
         "each started arm has exactly one terminal and the queued arm never started: {:?}",
+        task_lifecycle(&records)
+    );
+}
+
+#[test]
+fn an_arm_that_replies_hands_the_call_its_reply_and_ends_canceled() {
+    // The `reply` arm answers with `tasks.reply` and idles on its inbox; the
+    // `return` arm ends. The shim cancels each arm it takes a result from,
+    // so the idle arm ends canceled instead of outliving the call, and the
+    // ended arm's cancel reports nothing. An arm left live would show in
+    // `tasks.pending()` and be abandoned when the section ends.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # Fanout\n\n\
+        ## Parent\n\n\
+        ```lua\n\
+        local r = tasks.fanout('### Worker', {'reply', 'return'})\n\
+        return r[1].text .. '|' .. tostring(r[1].ok) .. '|' .. r[2].text .. '|' .. #tasks.pending()\n\
+        ```\n\n\
+        ### Worker\n\n\
+        ```lua\n\
+        if item == 'reply' then\n\
+          tasks.reply('replied')\n\
+          return 'unreachable'\n\
+        end\n\
+        return 'returned'\n\
+        ```\n";
+    let trace = scheduler_scenario(md).run();
+
+    assert_eq!(trace.text(), "replied|true|returned|0");
+    let records = TaskRecorder::replayed(&trace).records();
+    assert_eq!(
+        terminals_per_started_task(&records),
+        BTreeMap::from([
+            (task("0.0"), vec!["canceled"]),
+            (task("0.1"), vec!["succeeded"]),
+        ]),
+        "the replying arm ends canceled and the returning arm succeeds, once each: {:?}",
         task_lifecycle(&records)
     );
 }

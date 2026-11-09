@@ -28,7 +28,7 @@
 //! tasks in spawn order two ways: the author-visible tasks, and every live
 //! task with the internal timers included.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
@@ -73,7 +73,7 @@ pub(super) enum EntryState {
     /// The backing chain is live and idle: it replied through
     /// `tasks.reply` and waits on the task's inbox for its owner's next
     /// message. `since` orders the run's idle tasks by when each went
-    /// idle, so the idle cap closes the one idle longest.
+    /// idle, so the idle cap can tell which one is idle longest.
     Idle { since: u64 },
     /// The backing chain or request ended and left its outcome: the chain
     /// returned or failed, a timer fired, or the idle cap closed an idle
@@ -377,11 +377,19 @@ impl TaskArena {
         }
     }
 
-    /// The task idle longest other than `except`, once more than `cap`
-    /// tasks are idle: the task the idle cap closes. `None` while the run
-    /// is within the cap.
-    pub(super) fn idle_longest_past(&self, cap: NonZeroUsize, except: &TaskId) -> Option<TaskId> {
-        let idle: Vec<(u64, &TaskId)> = self
+    /// The task the idle cap closes once more than `cap` tasks are idle:
+    /// among the idle tasks other than `except`, the one idle longest that
+    /// owns no live task, or the one idle longest when each of them owns
+    /// one. `task_of` names the task an owner chain runs inside, so a task
+    /// owns what its `call` children spawned too. `None` while the run is
+    /// within the cap.
+    pub(super) fn idle_longest_past(
+        &self,
+        cap: NonZeroUsize,
+        except: &TaskId,
+        task_of: impl Fn(ChainIndex) -> TaskId,
+    ) -> Option<TaskId> {
+        let mut idle: Vec<(u64, &TaskId)> = self
             .entries
             .iter()
             .filter_map(|(task, entry)| match entry.state {
@@ -392,10 +400,13 @@ impl TaskArena {
         if idle.len() <= cap.get() {
             return None;
         }
-        idle.into_iter()
-            .filter(|(_, task)| *task != except)
-            .min_by_key(|(since, _)| *since)
-            .map(|(_, task)| task.clone())
+        idle.retain(|(_, task)| *task != except);
+        idle.sort_unstable_by_key(|(since, _)| *since);
+        let owning: BTreeSet<TaskId> = self.live_owners().into_iter().map(task_of).collect();
+        idle.iter()
+            .find(|(_, task)| !owning.contains(*task))
+            .or_else(|| idle.first())
+            .map(|(_, task)| (*task).clone())
     }
 
     /// Closes an idle task for the idle cap: its entry moves to `Ended`
@@ -684,10 +695,11 @@ mod tests {
     //! task, a completed task's outcome is delivered once, a reply's outcome
     //! is delivered once while its task stays live, a wait on an idle task
     //! whose reply was taken is refused, the idle cap names the task idle
-    //! longest, a close keeps an idle task's reply as its result, entries
-    //! are never removed, `owned` admits only the owner, `visible` adds the
-    //! chain running inside the task, and `live_author_tasks` lists an
-    //! owner's live tasks in spawn order without internal timers.
+    //! longest that owns no live task or else the one idle longest, a close
+    //! keeps an idle task's reply as its result, entries are never removed,
+    //! `owned` admits only the owner, `visible` adds the chain running inside
+    //! the task, and `live_author_tasks` lists an owner's live tasks in spawn
+    //! order without internal timers.
 
     use std::num::NonZeroUsize;
 
@@ -726,6 +738,16 @@ mod tests {
         let backing = chain_backing(100 + index);
         arena.insert(task(index), backing, owner, format!("worker {index}"), None);
         (task(index), backing)
+    }
+
+    /// The task a test chain runs inside: the chain at arena index
+    /// `100 + index` backs child task `index` of the root walk, as `spawn`
+    /// registers it, and every other chain runs the root walk.
+    fn task_of(owner: ChainIndex) -> TaskId {
+        match owner.index().checked_sub(100) {
+            Some(index) => task(u32::try_from(index).expect("a test index fits u32")),
+            None => TaskId::from(ChainId::root()),
+        }
     }
 
     /// Registers child task `index` of the root walk as an internal timer
@@ -862,19 +884,63 @@ mod tests {
         }
         let cap = |n| NonZeroUsize::new(n).expect("the cap is non-zero");
         assert_eq!(
-            arena.idle_longest_past(cap(3), &third),
+            arena.idle_longest_past(cap(3), &third, task_of),
             None,
             "within the cap"
         );
         assert_eq!(
-            arena.idle_longest_past(cap(2), &third),
+            arena.idle_longest_past(cap(2), &third, task_of),
             Some(second.clone()),
             "the second went idle first"
         );
         assert_eq!(
-            arena.idle_longest_past(cap(2), &second),
+            arena.idle_longest_past(cap(2), &second, task_of),
             Some(first),
             "the one replying is never the one closed"
+        );
+    }
+
+    #[test]
+    fn the_idle_cap_passes_over_a_task_that_owns_a_live_task_unless_each_one_does() {
+        let mut arena = TaskArena::default();
+        let (first, _) = spawn(&mut arena, chain(0), 0);
+        let (second, _) = spawn(&mut arena, chain(0), 1);
+        let (third, _) = spawn(&mut arena, chain(0), 2);
+        for task in [&first, &second, &third] {
+            assert!(arena.reply(task, "reply".to_owned()).is_some());
+            arena.idle(task);
+        }
+        let worker = |index: u32| TaskId::from(ChainId::root().child(index).child(0));
+        let cap = NonZeroUsize::new(2).expect("the cap is non-zero");
+        arena.insert(
+            worker(0),
+            chain_backing(200),
+            chain(100),
+            "w".to_owned(),
+            None,
+        );
+        assert_eq!(
+            arena.idle_longest_past(cap, &third, task_of),
+            Some(second.clone()),
+            "the first owns a live worker"
+        );
+        arena.insert(
+            worker(1),
+            chain_backing(201),
+            chain(101),
+            "w".to_owned(),
+            None,
+        );
+        assert_eq!(
+            arena.idle_longest_past(cap, &third, task_of),
+            Some(first.clone()),
+            "each owns a live worker, so the one idle longest"
+        );
+        assert!(arena.stop(&worker(0), Stop::Canceled).is_some());
+        assert_eq!(
+            arena.idle_longest_past(cap, &third, task_of),
+            Some(first),
+            "an ended worker is not live"
         );
     }
 

@@ -1,6 +1,7 @@
 //! Admission cases that pace the run's answers by hand: two tasks' `call`
 //! children finishing in any order under every answer batching, and a
-//! queue that can never be admitted reported as a stall.
+//! queue that can never be admitted reported as the scheduler's stall, an
+//! internal error.
 
 use super::*;
 use crate::test_support::rig::Rig;
@@ -50,7 +51,8 @@ fn a_queued_task_that_can_never_be_admitted_is_reported_as_a_stall() {
     // walk spawns its child and parks on the join: nothing is ready,
     // nothing is in flight, and no slot will ever admit the queued child.
     // The step must end the run with a stall report rather than return
-    // Pending with nothing to answer.
+    // Pending with nothing to answer. No task waits on its inbox, so only
+    // an Engine fault gets here, and the report is an internal error.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Limits\n\n\
         ## Main\n\n\
@@ -76,9 +78,12 @@ fn a_queued_task_that_can_never_be_admitted_is_reported_as_a_stall() {
     );
     let error = rig.trace().error();
     let message = error.located_message();
-    assert_eq!(error.code, ErrorCode::Stalled, "{message}");
+    assert_eq!(error.code, ErrorCode::Internal, "{message}");
     assert!(
-        message.contains("stalled"),
+        message.contains(
+            "the scheduler stalled with no ready chain, no in-flight request, and no queued \
+             chain that can be admitted"
+        ),
         "the run reports the stall: {message}"
     );
 }

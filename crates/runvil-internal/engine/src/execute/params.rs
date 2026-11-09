@@ -323,9 +323,10 @@ pub struct RunLimits {
     /// that arm's remaining share.
     pub max_concurrency: NonZeroUsize,
     /// The most tasks the run holds idle after a
-    /// reply. One more reply closes the task idle
-    /// longest, its latest reply its result.
-    /// Defaults to 8.
+    /// reply. One more reply closes another, its
+    /// latest reply its result: the one idle longest
+    /// that owns no live task, or else the one idle
+    /// longest. Defaults to 8.
     pub max_idle_tasks: NonZeroUsize,
     /// The memory ceiling for each Lua virtual machine, in bytes.
     pub lua_memory_bytes: NonZeroUsize,

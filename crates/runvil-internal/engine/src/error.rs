@@ -120,20 +120,18 @@ pub(crate) fn make_tasks_live_error(tasks: &[TaskId]) -> Error {
     )
 }
 
-/// A run that stalled: no chain can move, and the main chain does not wait
-/// on its inbox, the one wait a caller's message can end. It names, in id
-/// order, the tasks that wait on their inboxes, which only their owners
-/// could have filled. The `Tasks` fact holds their ids.
+/// A run that stalled: no chain can move, the main chain does not wait on
+/// its inbox, the one wait a caller's message can end, and `waiting` names,
+/// in id order, the tasks that wait on their inboxes, which only their
+/// owners could have filled. The `Tasks` fact holds their ids. A stall with
+/// no such task is the scheduler's own fault and ends the run with an
+/// internal error instead.
 pub(crate) fn make_stalled_error(waiting: &[TaskId]) -> Error {
     let ids: Vec<String> = waiting.iter().map(ToString::to_string).collect();
-    let message = if ids.is_empty() {
-        "the run stalled: no chain can move".to_owned()
-    } else {
-        format!(
-            "the run stalled: no chain can move, and these tasks wait on their inboxes: {}",
-            ids.join(", ")
-        )
-    };
+    let message = format!(
+        "the run stalled: no chain can move, and these tasks wait on their inboxes: {}",
+        ids.join(", ")
+    );
     with_fact(
         make_failure_error(ErrorCode::Stalled, message),
         ErrorFact::Tasks,

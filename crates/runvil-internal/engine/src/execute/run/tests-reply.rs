@@ -5,8 +5,10 @@
 //! its slot, is listed as pending, ends canceled when canceled, and is no
 //! leak when its owner ends. The main chain has no owner to reply to, and
 //! a `call` child replies for the task it runs inside. Past the run's idle
-//! cap, a reply closes the task idle longest as if it had returned its
-//! latest reply.
+//! cap, a reply closes the task idle longest that owns no live task,
+//! counting the tasks its `call` children spawned, or else the one idle
+//! longest, as if it had returned its latest reply, so the closed task's
+//! live tasks are abandoned as `owner_returned`.
 
 use std::num::NonZeroUsize;
 
@@ -15,7 +17,7 @@ use runvil_types::error::ErrorFact;
 use runvil_types::ids::{AbandonReason, ChainId, TaskId};
 use serde_json::json;
 
-use super::inbox::{answer_store, done, pending, run_of_sections};
+use super::inbox::{answer_store, done, main_task, pending, run_of_sections};
 use super::*;
 use crate::execute::RunLimits;
 use crate::lua::VfsOutcome;
@@ -448,6 +450,259 @@ fn a_wait_on_a_task_the_cap_closed_delivers_its_undelivered_reply_once() {
         result.expect("the closed task's reply is taken once"),
         "two done true true one false task_consumed",
         "the second reply closes the first task before any wait on it"
+    );
+}
+
+/// The id of the first task that task `0.index` spawned.
+fn spawned_by(index: u32) -> TaskId {
+    TaskId::from(ChainId::root().child(index).child(0))
+}
+
+/// The task of every `TaskSucceeded` and `TaskAbandoned` event in
+/// `events`, in order, each abandonment with its reason.
+fn successes_and_abandonments(events: &[Event]) -> Vec<(TaskId, Option<AbandonReason>)> {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            Event::TaskSucceeded { task, .. } => Some((task.clone(), None)),
+            Event::TaskAbandoned { task, reason, .. } => Some((task.clone(), Some(*reason))),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn past_the_idle_cap_a_reply_passes_over_the_task_idle_longest_when_it_owns_a_live_task() {
+    let mut run = run_with_idle_cap(
+        &[
+            (
+                "Main",
+                "local owner = tasks.spawn('## Owner')\n\
+                 local _, _, one = tasks.join_any({ owner })\n\
+                 local idle = tasks.spawn('## Idle')\n\
+                 local _, _, two = tasks.join_any({ idle })\n\
+                 local third = tasks.spawn('## Third')\n\
+                 local _, _, three = tasks.join_any({ third })\n\
+                 local states = tasks.status(owner).state .. ' ' .. tasks.status(idle).state \
+                 .. ' ' .. tasks.status(third).state\n\
+                 tasks.cancel(owner)\n\
+                 tasks.cancel(third)\n\
+                 return one .. two .. three .. ' ' .. states",
+            ),
+            (
+                "Owner",
+                "tasks.spawn('## Worker')\ntasks.reply('a')\nreturn 'unreachable'",
+            ),
+            ("Worker", "return tasks.receive()"),
+            ("Idle", "tasks.reply('b')\nreturn 'unreachable'"),
+            ("Third", "tasks.reply('c')\nreturn 'unreachable'"),
+        ],
+        2,
+    );
+    let (result, events) = finish(&mut run);
+    assert_eq!(
+        result.expect("the third reply closes the idle task that owns nothing"),
+        "abc running done running"
+    );
+    let succeeded: Vec<&TaskId> = events
+        .iter()
+        .filter_map(|event| match event {
+            Event::TaskSucceeded { task, .. } => Some(task),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        succeeded,
+        [&spawned(1)],
+        "the owner idle longest stays open while its worker runs: {events:?}"
+    );
+}
+
+#[test]
+fn past_the_idle_cap_a_reply_passes_over_a_task_whose_call_child_owns_a_live_task() {
+    let mut run = run_with_idle_cap(
+        &[
+            (
+                "Main",
+                "local owner = tasks.spawn('## Owner')\n\
+                 local _, _, one = tasks.join_any({ owner })\n\
+                 local idle = tasks.spawn('## Idle')\n\
+                 local _, _, two = tasks.join_any({ idle })\n\
+                 local third = tasks.spawn('## Third')\n\
+                 local _, _, three = tasks.join_any({ third })\n\
+                 local states = tasks.status(owner).state .. ' ' .. tasks.status(idle).state \
+                 .. ' ' .. tasks.status(third).state\n\
+                 tasks.cancel(owner)\n\
+                 tasks.cancel(third)\n\
+                 return one .. two .. three .. ' ' .. states",
+            ),
+            ("Owner", "return call('## Helper')"),
+            (
+                "Helper",
+                "tasks.spawn('## Worker')\ntasks.reply('a')\nreturn 'unreachable'",
+            ),
+            ("Worker", "return tasks.receive()"),
+            ("Idle", "tasks.reply('b')\nreturn 'unreachable'"),
+            ("Third", "tasks.reply('c')\nreturn 'unreachable'"),
+        ],
+        2,
+    );
+    let (result, events) = finish(&mut run);
+    assert_eq!(
+        result.expect("the third reply closes the idle task that owns nothing"),
+        "abc running done running"
+    );
+    let succeeded: Vec<&TaskId> = events
+        .iter()
+        .filter_map(|event| match event {
+            Event::TaskSucceeded { task, .. } => Some(task),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        succeeded,
+        [&spawned(1)],
+        "the owner's helper spawned the live worker, so the owner stays open: {events:?}"
+    );
+}
+
+#[test]
+fn past_the_idle_cap_closing_the_owner_of_the_replier_abandons_the_replier_as_owner_returned() {
+    let mut run = run_with_idle_cap(
+        &[
+            (
+                "Main",
+                "local a = tasks.spawn('## A')\n\
+                 local _, _, reply = tasks.join_any({ a })\n\
+                 store.exists('busy')\n\
+                 local status = tasks.status(a)\n\
+                 return reply .. ' ' .. status.state .. ' ' .. tostring(status.ok)",
+            ),
+            (
+                "A",
+                "tasks.spawn('## B')\ntasks.reply('a')\nreturn 'unreachable'",
+            ),
+            ("B", "tasks.reply('b')\nreturn 'unreachable'"),
+        ],
+        1,
+    );
+    let (effects, events, _) = pending(&mut run);
+    answer_store(&mut run, &effects, VfsOutcome::Bool(false));
+    let (result, _) = finish(&mut run);
+    assert_eq!(
+        result.expect("the closed task keeps its reply as its result"),
+        "a done true"
+    );
+    assert_eq!(
+        successes_and_abandonments(&events),
+        [
+            (spawned_by(0), Some(AbandonReason::OwnerReturned)),
+            (spawned(0), None),
+        ],
+        "B's reply closes A, the only other idle task, and B ends first, as A's return \
+         would end it: {events:?}"
+    );
+}
+
+#[test]
+fn past_the_idle_cap_closing_a_running_workers_owner_withdraws_its_effect_and_leaks_nothing() {
+    let mut run = run_with_idle_cap(
+        &[
+            (
+                "Main",
+                "local owner = tasks.spawn('## Owner')\n\
+                 local _, _, one = tasks.join_any({ owner })\n\
+                 store.exists('main')\n\
+                 local replier = tasks.spawn('## Replier')\n\
+                 local _, _, two = tasks.join_any({ replier })\n\
+                 local status = tasks.status(owner)\n\
+                 tasks.cancel(replier)\n\
+                 return one .. ' ' .. two .. ' ' .. status.state .. ' ' .. tostring(status.ok)",
+            ),
+            (
+                "Owner",
+                "tasks.spawn('## Worker')\ntasks.reply('a')\nreturn 'unreachable'",
+            ),
+            ("Worker", "store.exists('worker')\nreturn 'never'"),
+            ("Replier", "tasks.reply('b')\nreturn 'unreachable'"),
+        ],
+        1,
+    );
+    let (effects, _, _) = pending(&mut run);
+    let issued_by = |task: &TaskId| {
+        effects
+            .iter()
+            .find(|issued| issued.provenance.task == *task)
+            .unwrap_or_else(|| panic!("{task} waits on its store call: {effects:?}"))
+            .id
+    };
+    let (main, worker) = (issued_by(&main_task()), issued_by(&spawned_by(0)));
+    run.resume(main, EffectAnswer::Vfs(Ok(VfsOutcome::Bool(false))));
+    let Step::Pending {
+        effects,
+        events,
+        withdrawn,
+        ..
+    } = run.step()
+    else {
+        panic!("the worker's withdrawn store call still owes its answer");
+    };
+    assert!(effects.is_empty(), "{effects:?}");
+    assert_eq!(withdrawn, [worker], "the worker's store call is withdrawn");
+    assert_eq!(
+        successes_and_abandonments(&events),
+        [
+            (spawned_by(0), Some(AbandonReason::OwnerReturned)),
+            (spawned(0), None),
+        ],
+        "the closed owner's worker ends as the owner's return would end it: {events:?}"
+    );
+    run.resume(worker, EffectAnswer::Dropped);
+    let (result, _) = finish(&mut run);
+    assert_eq!(
+        result.expect("the closed owner keeps its reply, so no tasks_live arises"),
+        "a b done true"
+    );
+}
+
+#[test]
+fn past_the_idle_cap_closing_a_task_abandons_its_call_childs_worker_as_owner_returned() {
+    let mut run = run_with_idle_cap(
+        &[
+            (
+                "Main",
+                "local owner = tasks.spawn('## Owner')\n\
+                 local _, _, one = tasks.join_any({ owner })\n\
+                 local replier = tasks.spawn('## Replier')\n\
+                 local _, _, two = tasks.join_any({ replier })\n\
+                 local status = tasks.status(owner)\n\
+                 tasks.cancel(replier)\n\
+                 return one .. ' ' .. two .. ' ' .. status.state .. ' ' .. tostring(status.ok)",
+            ),
+            ("Owner", "return call('## Helper')"),
+            (
+                "Helper",
+                "tasks.spawn('## Worker')\ntasks.reply('a')\nreturn 'unreachable'",
+            ),
+            ("Worker", "return tasks.receive()"),
+            ("Replier", "tasks.reply('b')\nreturn 'unreachable'"),
+        ],
+        1,
+    );
+    let (result, events) = finish(&mut run);
+    assert_eq!(
+        result.expect("the closed owner keeps its reply, so no tasks_live arises"),
+        "a b done true"
+    );
+    let helpers_worker = TaskId::from(ChainId::root().child(0).child(0).child(0));
+    assert_eq!(
+        successes_and_abandonments(&events),
+        [
+            (helpers_worker, Some(AbandonReason::OwnerReturned)),
+            (spawned(0), None),
+        ],
+        "the worker the owner's helper spawned ends as the owner's return would end it: \
+         {events:?}"
     );
 }
 

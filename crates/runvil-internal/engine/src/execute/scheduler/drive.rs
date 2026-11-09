@@ -5,10 +5,11 @@
 //! call, drains the ready queue, and returns the effects the drain issued
 //! with the events it reported.
 //! An empty ready queue with no parked effect and no queued chain that can
-//! be admitted is a stall, which ends the run as `stalled`, naming the
-//! tasks that wait on their inboxes, rather than hangs, unless the main
-//! chain waits on its inbox: then the step reports `waiting_for_input`,
-//! since the caller's next message can move it.
+//! be admitted is a stall, which ends the run rather than hangs, unless the
+//! main chain waits on its inbox: then the step reports `waiting_for_input`,
+//! since the caller's next message can move it. A stall ends the run as
+//! `stalled`, naming the tasks that wait on their inboxes, or, when none
+//! does, with an internal error, since only a scheduler bug gets there.
 //! The run's `Done` is withheld until
 //! every issued effect has its answer, so every effect the caller was
 //! handed has exactly one answer, and it hands back the main chain's
@@ -74,10 +75,13 @@ impl Scheduler {
         // nothing can move (nothing ready, nothing parked, no slot that
         // will ever free, and whatever is waiting can never be woken, a
         // task's inbox included, which only its owner fills) - the run
-        // ends as stalled rather than hangs. A running drain returns only
-        // after `admit` left the ready queue empty, so no queued chain is
-        // admissible here. Those conditions are the whole guard; the
-        // admission queue needs no other, because a chain that can be
+        // ends rather than hangs. With tasks waiting on their inboxes it
+        // ends as stalled, naming them. With none, every wait bottoms out
+        // in a ready or parked chain, so only a scheduler bug gets here,
+        // and the run ends with an internal error. A running drain returns
+        // only after `admit` left the ready queue empty, so no queued
+        // chain is admissible here. Those conditions are the whole guard;
+        // the admission queue needs no other, because a chain that can be
         // admitted is a queued chain the drain already offered.
         let waiting_for_input = self.chains.inbox_reader(&main_task()).is_some();
         if matches!(self.phase, Phase::Running)
@@ -85,7 +89,16 @@ impl Scheduler {
             && !self.effects.has_awaited()
             && !waiting_for_input
         {
-            self.end(Err(error::make_stalled_error(&self.chains.inbox_waiters())));
+            let waiting = self.chains.inbox_waiters();
+            let error = if waiting.is_empty() {
+                error::make_internal_error(
+                    "the scheduler stalled with no ready chain, no in-flight request, \
+                     and no queued chain that can be admitted",
+                )
+            } else {
+                error::make_stalled_error(&waiting)
+            };
+            self.end(Err(error));
         }
         let (effects, withdrawn) = self.effects.take_step();
         let events = self.ctx.take_events();

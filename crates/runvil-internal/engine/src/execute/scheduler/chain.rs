@@ -282,7 +282,9 @@ impl Scheduler {
     /// teardown order (the suspended coroutine, then the frame unarmed - no
     /// `SECTION_FINISHED`). The chain's own task entry, if it is a task, is
     /// the caller's to settle: the owner's chain end abandons it, a cancel
-    /// arm cancels it.
+    /// arm cancels it, and the idle cap's close ends it with its latest
+    /// reply, having abandoned its live tasks as `owner_returned` first, so
+    /// none is left here to abandon as `owner_aborted`.
     pub(super) fn abort_subtree(&mut self, id: ChainIndex) {
         let children: Vec<ChainIndex> = self.chains.call_children(id).collect();
         for child in children {

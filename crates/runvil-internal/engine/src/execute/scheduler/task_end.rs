@@ -15,8 +15,10 @@
 //!
 //! The idle cap bounds the tasks a run holds idle, each keeping its Lua VM:
 //! a reply past [`RunLimits::max_idle_tasks`](crate::execute::RunLimits::max_idle_tasks)
-//! closes the task idle longest, which ends as if it had returned its
-//! latest reply.
+//! closes another idle task, the one idle longest that owns no live task,
+//! or else the one idle longest. The closed task ends as if it had
+//! returned its latest reply, so its live tasks are abandoned as
+//! `owner_returned`.
 //!
 //! However a task stops being live, its inbox goes with it, so a long run
 //! keeps no message that no chain can read.
@@ -79,16 +81,23 @@ impl Scheduler {
     }
 
     /// Holds the run to its idle cap once `replied` went idle: when more
-    /// tasks are idle than the cap allows, the one idle longest other than
-    /// `replied` closes. Its entry ends with its latest reply as its result,
-    /// as if it had returned it, its backing chain aborts with everything
-    /// it owns, and `TaskSucceeded` fires under its target. No owner waits
-    /// on the closed task, since a wait on an idle task takes its reply at
-    /// once or refuses it as consumed. The events do not name the cap as
-    /// the reason, so a debug trace line does.
+    /// tasks are idle than the cap allows, one idle task other than
+    /// `replied` closes, the one idle longest that owns no live task, or
+    /// the one idle longest when each of them owns one. The closed task
+    /// ends as if it had returned its latest reply: its entry ends with the
+    /// reply as its result, the live tasks its chains own are abandoned as
+    /// `owner_returned`, its backing chain aborts, and `TaskSucceeded`
+    /// fires under its target. A running task among the abandoned is no
+    /// `tasks_live` failure, since the closed task's result is its reply.
+    /// No owner waits on the closed task, since a wait on an idle task
+    /// takes its reply at once or refuses it as consumed. The events do not
+    /// name the cap as the reason, so a debug trace line does.
     pub(super) fn close_past_idle_cap(&mut self, replied: &TaskId) {
         let cap = self.ctx.limits().max_idle_tasks;
-        let Some(task) = self.tasks.idle_longest_past(cap, replied) else {
+        let Some(task) = self
+            .tasks
+            .idle_longest_past(cap, replied, |owner| self.chains[owner].task.clone())
+        else {
             return;
         };
         let Some((backing, target)) = self.tasks.close(&task) else {
@@ -98,8 +107,22 @@ impl Scheduler {
             closed = %task,
             %replied,
             max_idle_tasks = cap.get(),
-            "idle cap closed the task idle longest, its latest reply its result"
+            "idle cap closed an idle task, its latest reply its result"
         );
+        // A task's chains are its backing chain and the `call` children it
+        // is blocked on, pushed in call order, so in reverse the deepest
+        // chain's tasks end first, as their returns would end them. The
+        // abort below then finds none of them live to abandon as
+        // `owner_aborted`.
+        let chains: Vec<ChainIndex> = self
+            .chains
+            .iter()
+            .filter(|(_, chain)| chain.task == task)
+            .map(|(id, _)| id)
+            .collect();
+        for chain in chains.into_iter().rev() {
+            self.abandon_owned_tasks(chain, AbandonReason::OwnerReturned);
+        }
         self.end_backing(backing, &target, move |section, provenance| {
             Event::TaskSucceeded {
                 section,
@@ -213,13 +236,15 @@ impl Scheduler {
         leaked
     }
 
-    /// Ends the backing of a task the arena just stopped, the one path a
-    /// cancel, an abandonment, and the idle cap's close share: an internal
-    /// timer's effect is aborted and reports nothing; a chain's inbox is
-    /// dropped with any message still in it, the chain aborts with
-    /// everything it owns, then `terminal` fires under `target`. The
-    /// backing ends first, so anything it owned reports before the task's
-    /// own terminal event, which is the last word on it. A task still
+    /// Ends the backing of a task the arena just stopped or closed, the one
+    /// path a cancel, an abandonment, and the idle cap's close share: an
+    /// internal timer's effect is aborted and reports nothing; a chain's
+    /// inbox is dropped with any message still in it, the chain aborts with
+    /// everything it owns, then `terminal` fires under `target`. The idle
+    /// cap's close abandons the closed task's live tasks as
+    /// `owner_returned` before it gets here, so its abort abandons none.
+    /// The backing ends first, so anything it owned reports before the
+    /// task's own terminal event, which is the last word on it. A task still
     /// queued for a slot is silent: it has no start event, so it reports no
     /// terminal, and a message sent to it was never reported either.
     /// Returns whether the backing was a chain.

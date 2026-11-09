@@ -222,8 +222,8 @@ impl Scheduler {
     /// included, and an owner waiting on the task takes it at once. Then
     /// the oldest message in the task's inbox answers the reply at once, or,
     /// with the inbox empty, the task idles: the chain parks on the inbox as
-    /// a `receive` does, and a reply past the run's idle cap closes the
-    /// task idle longest. The main chain has no owner to reply to, so its
+    /// a `receive` does, and a reply past the run's idle cap closes another
+    /// idle task. The main chain has no owner to reply to, so its
     /// reply is refused with a `lua` error.
     ///
     /// # Errors
