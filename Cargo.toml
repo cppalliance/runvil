@@ -87,12 +87,13 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time",
 thiserror = "2"
 anyhow = "1"
 axum = { version = "0.8", features = ["multipart", "ws"] }
-# Pinned to 3.5.1, the release `plugin-mcp` was written against (its
-# `ClientConfig` handler, `send_cancellable_request`, and `RequestHandle`
-# fields). default-features off drops `server` and `macros`; `base64` still
-# arrives through `client-side-sse`, which `transport-streamable-http-client`
-# turns on. Each crate that uses it names the features it needs.
-rmcp = { version = "=3.5.1", default-features = false }
+# Pinned to 3.9.0, which fixes RUSTSEC-2026-0457, -0461, and -0462. `plugin-mcp`
+# was written against 3.5.1 (its `ClientConfig` handler,
+# `send_cancellable_request`, and `RequestHandle` fields). default-features off
+# drops `server` and `macros`; `base64` still arrives through `client-side-sse`,
+# which `transport-streamable-http-client` turns on. Each crate that uses it
+# names the features it needs.
+rmcp = { version = "=3.9.0", default-features = false }
 # 0.29 rather than the newer 0.30 so the resolver unifies with the copy axum's
 # `ws` feature already pulls in, instead of compiling two.
 tokio-tungstenite = "0.29"
