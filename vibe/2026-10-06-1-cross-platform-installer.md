@@ -1388,6 +1388,29 @@ Audit of everything published on 2026-10-07 (requested in the team thread): what
     - Noted, not failures: a Settings tab left open across a Gateway restart keeps the old port, because the Gateway binds a new port on each start; reopening "Runvil Gateway Settings" loads the new one.
   - The Windows pass moves to the build of the next upstream sync, because that sync changes Workshop's Gateway supervisor and `build-workshop`. Before it runs, the Windows tester doc gains the Context step, since check A otherwise stalls at the same error.
   - The next upstream sync is the decoupled port (2026-11-09, recorded under the Handoff above). Its build changes what the testers see: the Windows setup downloads no speech, the Gateway does at its first start, and the macOS and Linux installers offer no Speech to Text component. Both tester docs need that rewrite before the Windows pass and a short Linux smoke on its full `installers.yml` run.
+- As built (2026-11-09), the decoupled port on `installer/upstream-sync-3`, fork pull request [#25](https://github.com/gregjkal/promptforge/pull/25). It supersedes #23 and #24, both closed.
+  - Gates, at upstream `76f8ae41` plus the port, macOS ARM:
+    - Passed: `cargo fmt --all --check`; both clippy runs; both docs gates; `cargo test -p build-xtask`; `docs-claims.mjs`; the `tools/` tests (87 of 87); `build-workshop` (92 of 92).
+    - The Workshop nextest run: 320 of 321, with the same macOS-only `stalled_browser_cleanup_is_bounded_after_gateway_disconnect` failure as before.
+    - The workspace nextest run: one failure, `harness-test-plugin::it lifecycle::the_fixture_is_loaded_invoked_unloaded_once_and_closed` ("the library closed once the loader and this test both let go of it"). It fails the same way on a clean checkout of upstream `76f8ae41`. Left for upstream, not filed.
+    - `xtask api --check` was not run locally; #25's `api-surface` job passed.
+  - Dispatched full run [42695889495](https://github.com/gregjkal/promptforge/actions/runs/42695889495): green on the first attempt. All five builds, every install cell, and `manifest` passed; `publish-release` skipped, as in full mode. The cells cover the two points that were unverified: the pinned Gateway writes its config on first start on macOS and Linux, and on Windows that config has an `[[stt_model]]` exactly when Speech to Text was selected. Artifacts are kept until 2026-11-16.
+  - A container test of that run's Linux installers (Debian 13 ARM64 and x64, Arch x64 under emulation):
+    - Passed: the headless install offers two components and downloads nothing; both menu entries validate; the Gateway's `--version` matches the pin; its first start writes the default config and downloads speech by itself (608 MB in about 5.5 minutes) and a restart downloads nothing again; with no network it starts, serves, and logs the failure; the AppImage carries the GStreamer plugins and no Gateway; Workshop under `xvfb` starts the installed Gateway as its child, or attaches to a running one; a second install is refused; uninstall keeps `~/.runvil`.
+    - Gateway findings, for `runvil-gateway`, not installer bugs:
+      - On a minimal Debian 13 without `libgomp1`, speech setup fails after the whole download with "switch profile failed at load-speech" and no cause. `libwhisper.so` needs `libgomp.so.1`. With `libgomp1` installed the speech runtime loads.
+      - The speech download shows no progress in the log or on stdout.
+      - A blocked network gives the same "load-speech" error with no reason.
+    - Not covered: a real desktop session (the wizard, tray, and dictation), and recovery when the network returns without a restart.
+  - Both tester docs were rewritten for this build: no speech download during install, the Gateway's download at first start, two components on Linux, the Context step, and the new run's links. The Windows doc's failed-`init` check became a check that declining Speech to Text on a fresh install downloads no speech. The Linux doc is a short smoke.
+  - An independent review walked both docs against the build and the Gateway's source at `gateway-v0.3.0`, with more container runs. Its findings, all applied to the docs:
+    - Local chat models do not work on Linux with the pinned Gateway. Its tar extractor refuses symlinks (`crates/gateway/local/src/artifacts/archive.rs`), and the llama.cpp b10082 Linux tarballs hold 10. The fork's fix from #24 left with the Gateway tree and is not in the pin. A configured local model fails the boot load at `download-models`, and the speech load is then skipped, so dictation breaks too. The macOS tarballs have the same links. The Linux doc drops the model and chat steps this round and tells testers not to add one.
+    - Apply in the Gateway's Settings queues behind the boot load, so it waits for the whole speech download (321 seconds in the container). The Windows doc now waits for speech before opening Settings.
+    - Dictation no longer needs a chat model: upstream `51debc5a1` removed that gate. Both docs dictate before any model step. Read from the code, not run on a desktop.
+    - One restart is enough for a model: a model staged in Discover is already on the Local tab, so Context is set before the single Apply. Proven through the admin API, not by clicking.
+    - Speech files land in hash-named folders under `models`, so the Windows doc checks the folder's Properties (about 607 MB in 9 files and 3 folders). With a recent NVIDIA GPU a 0.5 GB CUDA speech runtime downloads first.
+    - On Windows the tray menu opens on right-click, and a setup run over a running install asks to kill Runvil and the Gateway.
+    - Not verified by anyone: the Windows local model path with the pinned Gateway, and dictation without a model on a real desktop.
 
 </step-12>
 
