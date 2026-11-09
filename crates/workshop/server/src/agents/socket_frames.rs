@@ -40,9 +40,10 @@ pub(super) async fn drain_events(attached: &mut Attached, socket: &mut WebSocket
 }
 
 /// Frames one transcript entry at or past the cursor and advances the
-/// cursor over it. An entry with no wire shape (lifecycle, task, and
-/// debug events, and a task's inbox events) advances the cursor without a
-/// frame or a wire index. A `false` return means the client is gone.
+/// cursor over it. An entry with no wire shape (every lifecycle event but
+/// the run's end, task and debug events, and a task's inbox events)
+/// advances the cursor without a frame or a wire index. A `false` return
+/// means the client is gone.
 pub(super) async fn frame_entry(
     attached: &mut Attached,
     entry: &SessionEvent,

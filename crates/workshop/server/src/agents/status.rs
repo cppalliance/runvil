@@ -8,6 +8,7 @@
 //! returns with it.
 
 use runvil::event::Event;
+use runvil::ids::{ChainId, TaskId};
 use tokio::sync::broadcast;
 use workshop_agents::{Conversation, Delta, DeltaKind, FailureKind, SessionEvent, SessionFailure};
 use workshop_protocol::Activity;
@@ -23,9 +24,12 @@ pub(super) fn spawn_reporter(conversation: &Conversation, push: Push, backoff: R
     tokio::spawn(report(events, deltas, errors, push, backoff));
 }
 
-/// Reports until the conversation's channels close. Deltas are drained
-/// ahead of events, so a round's activity pulses precede the idle its
-/// reply pushes when both sit queued.
+/// Reports until all of the conversation's channels have closed. They
+/// close together as the run ends, when its last reports, its success or
+/// its failure, can still be queued, so each channel is drained to its
+/// close. Deltas are drained ahead of events, so a round's activity
+/// pulses precede the idle the main chain's next wait or its run's
+/// success pushes when both sit queued.
 async fn report(
     mut events: broadcast::Receiver<SessionEvent>,
     mut deltas: broadcast::Receiver<Delta>,
@@ -33,30 +37,32 @@ async fn report(
     push: Push,
     backoff: ReconnectBackoff,
 ) {
+    let (mut deltas_open, mut events_open, mut errors_open) = (true, true, true);
     loop {
         tokio::select! {
             biased;
-            received = deltas.recv() => match received {
+            received = deltas.recv(), if deltas_open => match received {
                 Ok(delta) => on_delta(&delta, &push),
                 // Pulses are ephemeral: a lost chunk's LED state is
-                // repaired by the next one or by the reply's idle.
+                // repaired by the next one or by the next wait's idle.
                 Err(broadcast::error::RecvError::Lagged(_)) => {}
-                Err(broadcast::error::RecvError::Closed) => return,
+                Err(broadcast::error::RecvError::Closed) => deltas_open = false,
             },
-            received = events.recv() => match received {
+            received = events.recv(), if events_open => match received {
                 Ok(event) => on_event(&event, &push, &backoff),
                 // A lagged receiver missed at most a status transition the
                 // next event restates; the transcript still holds every event.
                 Err(broadcast::error::RecvError::Lagged(_)) => {}
-                Err(broadcast::error::RecvError::Closed) => return,
+                Err(broadcast::error::RecvError::Closed) => events_open = false,
             },
-            received = errors.recv() => match received {
+            received = errors.recv(), if errors_open => match received {
                 Ok(failure) => on_error(&failure, &push),
                 // Reports are ephemeral like the deltas; a lagged receiver
                 // missed a failure the error frame already reported.
                 Err(broadcast::error::RecvError::Lagged(_)) => {}
-                Err(broadcast::error::RecvError::Closed) => return,
+                Err(broadcast::error::RecvError::Closed) => errors_open = false,
             },
+            else => return,
         }
     }
 }
@@ -73,18 +79,27 @@ fn on_delta(delta: &Delta, push: &Push) {
     push.push_activity("Streaming response...", "an agent response chunk", activity);
 }
 
-/// The side effects the server wires to a completed reply: the backoff
-/// reset (an agent reply is useful gateway work) and the idle status
-/// that releases the turn-dispatch Thinking push.
+/// The side effects the server wires to the conversation's events: the
+/// backoff reset at a completed reply (an agent reply is useful gateway
+/// work), and the idle status that releases the turn-dispatch Thinking
+/// push once the main chain waits on its inbox or its run succeeds. A
+/// reply alone leaves the status busy, since a message that lands as it
+/// does makes the loop go on. A failed run's end pushes nothing, since
+/// its failure report sets the status.
 fn on_event(event: &SessionEvent, push: &Push, backoff: &ReconnectBackoff) {
     let Ok(event) = serde_json::from_value::<Event>(event.event.clone()) else {
         // An event payload this build cannot read: the status bar has
         // nothing to say about it.
         return;
     };
-    if let Event::AssistantReply { .. } = event {
-        backoff.record_useful_work();
-        push.push_idle();
+    match event {
+        Event::AssistantReply { .. } => backoff.record_useful_work(),
+        Event::InboxWaiting { provenance, .. } | Event::RunSucceeded { provenance, .. }
+            if provenance.task == TaskId::from(ChainId::root()) =>
+        {
+            push.push_idle();
+        }
+        _ => {}
     }
 }
 
@@ -97,10 +112,11 @@ const RUN_FAILED_LABEL: &str = "Agent failed";
 /// turn or tool call the program survived, a run that ended in error, or
 /// a run a close cut short - and the server labels it; the report's
 /// message passes through as the description, the same text the socket's
-/// error frame reports. Each kind is terminal for its turn and never
-/// reaches a reply, so this status is the one frame that releases the
-/// turn-dispatch Thinking push; without it the status bar's sustained
-/// amber LED never returns to idle.
+/// error frame reports. Each kind is terminal for its turn, so this status
+/// releases the turn-dispatch Thinking push at once. A run that failed or
+/// was cut short waits on its inbox no more, so for it this status is the
+/// one frame that does; without it the status bar's sustained amber LED
+/// never returns to idle.
 fn on_error(failure: &SessionFailure, push: &Push) {
     push.push_failure(
         failure_label(failure.kind),

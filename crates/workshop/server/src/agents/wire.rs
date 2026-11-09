@@ -10,10 +10,12 @@
 //! [`AgentDeltaFrame`]s, the ephemeral live chunks, each stamped with the
 //! `reply` id of the durable event that will supersede it. The event log
 //! says when the agent waits on its empty inbox for the operator
-//! (`awaiting_input`) and holds each message the operator sent
-//! (`user_message`). `{"type":"cancel"}` fires the session's turn-cancel:
-//! cancellation is a stop reason, never an error - no error frame
-//! follows, and the agent's chat loop returns to waiting on its inbox.
+//! (`awaiting_input`), holds each message the operator sent
+//! (`user_message`), and closes with `run_ended` once the run ends, after
+//! which the run takes no more messages. `{"type":"cancel"}` fires the
+//! session's turn-cancel: cancellation is a stop reason, never an error -
+//! no error frame follows, and the agent's chat loop returns to waiting
+//! on its inbox.
 //! Frames already in flight from the canceled round may still arrive
 //! after the cancel: a defined grace window, absorbed by the reply-id
 //! coalescing (the canceled round never settles, so its deltas fall to
@@ -165,10 +167,12 @@ impl AgentSessionFrame {
 /// | [`Thinking`](Self::Thinking) | `agent_thought` |
 /// | [`UserInput`](Self::UserInput) | `user_message` |
 /// | [`AwaitingInput`](Self::AwaitingInput) | `awaiting_input` |
+/// | [`RunEnded`](Self::RunEnded) | `run_ended` |
 ///
 /// Exactly the Engine's content [`Event`] variants a transcript renders,
-/// and the main chain's inbox events: lifecycle, task, and debug events,
-/// and a task's inbox events, never frame.
+/// the main chain's inbox events, and its run's end: every other
+/// lifecycle event, task and debug events, and a task's inbox events
+/// never frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[non_exhaustive]
 enum AgentEventKind {
@@ -190,6 +194,10 @@ enum AgentEventKind {
     /// The agent waits on its empty inbox for the operator's next message.
     #[serde(rename = "awaiting_input")]
     AwaitingInput,
+    /// The agent's run ended, succeeded or failed, from the run's
+    /// `RunSucceeded` or `RunFailed` event: it takes no more messages.
+    #[serde(rename = "run_ended")]
+    RunEnded,
 }
 
 /// One content [`Event`] in the shape the `/agents/ws` wire uses: the
@@ -232,11 +240,13 @@ fn on_main_chain(event: &Event) -> bool {
 
 impl AgentEvent {
     /// Projects one Engine event onto the wire shape, or `None` for a
-    /// variant the transcript does not render (lifecycle, task, and debug
-    /// events, and a task's inbox events). A message that entered the
-    /// main chain's inbox frames as the operator's `user_message`, since
-    /// only the operator fills that inbox, and the main chain parking on
-    /// its empty inbox frames as `awaiting_input`.
+    /// variant the transcript does not render (every lifecycle event but
+    /// the run's end, task and debug events, and a task's inbox events). A
+    /// message that entered the main chain's inbox frames as the
+    /// operator's `user_message`, since only the operator fills that
+    /// inbox, the main chain parking on its empty inbox frames as
+    /// `awaiting_input`, and the run's end under the main chain frames as
+    /// `run_ended` with empty content.
     #[must_use]
     fn from_event(event: &Event) -> Option<Self> {
         let base = |kind: AgentEventKind, turn: u32, content: String| AgentEvent {
@@ -284,6 +294,9 @@ impl AgentEvent {
             }
             Event::InboxWaiting { .. } if on_main_chain(event) => {
                 base(AgentEventKind::AwaitingInput, 0, String::new())
+            }
+            Event::RunSucceeded { .. } | Event::RunFailed { .. } if on_main_chain(event) => {
+                base(AgentEventKind::RunEnded, 0, String::new())
             }
             Event::ToolResult {
                 turn,

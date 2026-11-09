@@ -21,6 +21,16 @@
       "content": ""
     }
   },
+  "agent_event_run_ended": {
+    "type": "agent_event",
+    "index": 5,
+    "event": {
+      "kind": "run_ended",
+      "section": "chat",
+      "turn": 0,
+      "content": ""
+    }
+  },
   "agent_event_stamped": {
     "type": "agent_event",
     "index": 4,

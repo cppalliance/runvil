@@ -48,6 +48,22 @@ fn reply_event() -> Event {
     }
 }
 
+/// `task` parked on its empty inbox.
+fn waiting_event(task: TaskId) -> Event {
+    Event::InboxWaiting {
+        section: "chat".to_owned(),
+        provenance: Provenance::new(task, 0),
+    }
+}
+
+/// The main chain's program returning, which ends the run.
+fn run_succeeded() -> Event {
+    Event::RunSucceeded {
+        section: "chat".to_owned(),
+        provenance: Provenance::new(TaskId::from(ChainId::root()), 0),
+    }
+}
+
 /// The four failure kinds the session reports on its error channel: a
 /// failed model turn and a failed tool call the program survived, a run
 /// that ended in error, and the synthetic terminal of a cancel. Each
@@ -106,7 +122,7 @@ fn every_error_report_pushes_a_terminal_failure_status() {
 }
 
 #[test]
-fn a_completed_reply_pushes_idle_and_resets_the_backoff() {
+fn the_status_stays_busy_across_a_reply_and_goes_idle_at_the_main_chains_wait() {
     let (push, mut status_rx, _guards) = wired_push();
     let backoff = ReconnectBackoff::with_schedule(
         Duration::from_millis(1),
@@ -120,16 +136,92 @@ fn a_completed_reply_pushes_idle_and_resets_the_backoff() {
     );
 
     on_event(&session_event(&reply_event()), &push, &backoff);
-
-    let update = status_rx
-        .try_recv()
-        .expect("the reply pushes the idle status");
-    assert_eq!(update.severity, Severity::Info);
-    assert_eq!(update.activity, Activity::General);
-    assert_eq!(update.label, "Ready");
+    assert!(
+        status_rx.try_recv().is_err(),
+        "a reply does not end the turn: a message that lands as it does makes the loop go on"
+    );
     assert!(
         !backoff.is_escalated_for_test(),
         "an agent reply is useful gateway work and resets the backoff"
+    );
+
+    let task = TaskId::from(ChainId::root().child(0));
+    on_event(&session_event(&waiting_event(task)), &push, &backoff);
+    assert!(
+        status_rx.try_recv().is_err(),
+        "a task waiting on its inbox ends no turn of the operator's"
+    );
+
+    let main = TaskId::from(ChainId::root());
+    on_event(&session_event(&waiting_event(main)), &push, &backoff);
+    let update = status_rx
+        .try_recv()
+        .expect("the main chain's wait on its inbox pushes the idle status");
+    assert_eq!(update.severity, Severity::Info);
+    assert_eq!(update.activity, Activity::General);
+    assert_eq!(update.label, "Ready");
+}
+
+#[test]
+fn the_main_chains_run_success_pushes_the_idle_status() {
+    let (push, mut status_rx, _guards) = wired_push();
+    let backoff = ReconnectBackoff::new();
+    let failed = Event::RunFailed {
+        section: "chat".to_owned(),
+        provenance: Provenance::new(TaskId::from(ChainId::root()), 0),
+    };
+
+    on_event(&session_event(&failed), &push, &backoff);
+    assert!(
+        status_rx.try_recv().is_err(),
+        "a failed run's failure report sets its status, so its end pushes nothing"
+    );
+
+    on_event(&session_event(&run_succeeded()), &push, &backoff);
+    let update = status_rx
+        .try_recv()
+        .expect("a run that returned waits on no inbox, so its success pushes the idle status");
+    assert_eq!(update.severity, Severity::Info);
+    assert_eq!(update.activity, Activity::General);
+    assert_eq!(update.label, "Ready");
+}
+
+/// The conversation closes its three channels together as its run ends,
+/// when the run's last reports can still be queued: the final round's
+/// pulse, the run's success, a failure report. Each still reaches the
+/// status bar, deltas first, and the reporter returns once all three have
+/// closed.
+#[tokio::test]
+async fn the_reporter_drains_every_channel_after_they_close() {
+    let (push, mut status_rx, _guards) = wired_push();
+    let (events_tx, events) = broadcast::channel::<SessionEvent>(1);
+    let (deltas_tx, deltas) = broadcast::channel::<Delta>(1);
+    let (errors_tx, errors) = broadcast::channel::<SessionFailure>(1);
+    let delta: Delta = serde_json::from_str(r#"{"kind":"text","content":"po","reply":1}"#)
+        .expect("the delta fixture parses");
+    deltas_tx
+        .send(delta)
+        .expect("the reporter's receiver is subscribed");
+    events_tx
+        .send(session_event(&run_succeeded()))
+        .expect("the reporter's receiver is subscribed");
+    errors_tx
+        .send(SessionFailure {
+            kind: FailureKind::RunFailed,
+            message: "the run could not be recorded: disk full".to_owned(),
+        })
+        .expect("the reporter's receiver is subscribed");
+    drop((events_tx, deltas_tx, errors_tx));
+
+    report(events, deltas, errors, push, ReconnectBackoff::new()).await;
+
+    let labels: Vec<String> = std::iter::from_fn(|| status_rx.try_recv().ok())
+        .map(|update| update.label)
+        .collect();
+    assert_eq!(
+        labels,
+        ["Streaming response...", "Ready", "Agent failed"],
+        "every report queued at the close reaches the status bar, deltas first"
     );
 }
 

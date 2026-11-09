@@ -10,9 +10,14 @@ use super::*;
 async fn gate_cancel_mid_generation_returns_to_waiting_and_next_input_works() {
     let server = spawn_chat_server(&["test-model"]).await;
     let mut socket = connect_chat(&server.ws_base).await;
-    let _session = launch_chat(&mut socket).await;
+    let session = launch_chat(&mut socket).await;
 
-    let first = next_wait(&mut socket).await;
+    next_wait(&mut socket).await;
+    let run = server
+        .state
+        .agents()
+        .run_id(&session)
+        .expect("the chat's run has begun");
     answer(&mut socket, "hang").await;
     // Generation is provably live: a text chunk of the never-finishing
     // stream has reached the wire.
@@ -32,10 +37,11 @@ async fn gate_cancel_mid_generation_returns_to_waiting_and_next_input_works() {
     // A stop is a stop reason: the chat's pcall takes the dropped round,
     // and its loop waits on its inbox again, and next_wait refuses error
     // frames on the way - which asserts exactly the no-error contract.
-    let fresh = next_wait(&mut socket).await;
-    assert!(
-        fresh["index"].as_u64() > first["index"].as_u64(),
-        "the chat waits again, a fresh entry after the stopped round: {fresh}"
+    next_wait(&mut socket).await;
+    assert_eq!(
+        server.state.agents().run_id(&session),
+        Some(run),
+        "the chat waits again in the same run: the stop dropped only its round"
     );
     answer(&mut socket, "after cancel").await;
     let turn = collect_turn(&mut socket).await;

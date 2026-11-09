@@ -3,8 +3,9 @@
 //! and refusals, and both directions against the shared fixture the SPA
 //! suite (`crates/workshop/ui/test/agent-wire-fixtures.mjs`) asserts, so a
 //! wire drift on either side fails that side's fixture test. Only the main
-//! chain's inbox events frame: the operator's message as `user_message`
-//! and the wait for it as `awaiting_input`.
+//! chain's inbox events and its run's end frame: the operator's message as
+//! `user_message`, the wait for it as `awaiting_input`, and the end as
+//! `run_ended`.
 
 use std::path::Path;
 
@@ -51,6 +52,16 @@ fn operator_message(text: &str) -> Event {
 /// from.
 fn awaiting() -> Event {
     Event::InboxWaiting {
+        section: "chat".to_owned(),
+        provenance: provenance(),
+    }
+}
+
+/// The run's end in the `chat` section, reported under the main chain:
+/// the fixture's `agent_event_run_ended` entry as the Engine event it
+/// projects from.
+fn run_succeeded() -> Event {
+    Event::RunSucceeded {
         section: "chat".to_owned(),
         provenance: provenance(),
     }
@@ -171,6 +182,32 @@ fn the_main_chains_inbox_events_frame_as_the_operators_message_and_the_wait_for_
             "kind": "awaiting_input", "section": "chat", "turn": 0, "content": "",
         }),
         "the main chain parking on its empty inbox is the wait for the operator"
+    );
+}
+
+#[test]
+fn the_main_chains_run_end_frames_as_run_ended_with_empty_content() {
+    let failed = Event::RunFailed {
+        section: "chat".to_owned(),
+        provenance: provenance(),
+    };
+    for event in [run_succeeded(), failed] {
+        let frame = wire(&AgentEventFrame::new(5, None, &event).expect("the run's end frames"));
+        assert_eq!(
+            frame["event"],
+            serde_json::json!({
+                "kind": "run_ended", "section": "chat", "turn": 0, "content": "",
+            }),
+            "a run that returned or failed takes no more messages: {event:?}"
+        );
+    }
+    let foreign = Event::RunSucceeded {
+        section: "Worker".to_owned(),
+        provenance: task_provenance(),
+    };
+    assert!(
+        AgentEventFrame::new(0, None, &foreign).is_none(),
+        "only the main chain reports the run's end, as only its inbox frames"
     );
 }
 
@@ -393,6 +430,7 @@ fn the_shared_fixture_pins_exactly_the_agreed_case_list() {
             "agent_delta_text",
             "agent_event_awaiting",
             "agent_event_minimal",
+            "agent_event_run_ended",
             "agent_event_stamped",
             "agent_session",
             "agents",
@@ -422,6 +460,10 @@ fn server_to_client_agent_frames_match_the_shared_fixture() {
     assert_eq!(
         wire(&AgentEventFrame::new(2, None, &awaiting())),
         fixture["agent_event_awaiting"]
+    );
+    assert_eq!(
+        wire(&AgentEventFrame::new(5, None, &run_succeeded())),
+        fixture["agent_event_run_ended"]
     );
     assert_eq!(
         wire(&AgentEventFrame::new(4, Some(1), &stamped_fixture_event())),

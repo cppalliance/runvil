@@ -12,12 +12,14 @@
 // Beyond the items, the service keeps the turn's liveness: `generating`
 // (the agent is working, so the composer offers stop over an empty box and
 // the transcript shows a tail status), `started` (the session's run has
-// reported, so it takes the operator's messages), `reconnecting` (the
-// socket dropped and the reattach has not been acknowledged), and the
-// reasoning clock that times each thought. The agent waiting on its inbox
-// ends the working state and the operator's message starts it again, both
-// read from the durable log, so a replayed log ends in the right state.
-// The clock is injectable so tests stamp exact durations.
+// reported and not ended, so it takes the operator's messages),
+// `reconnecting` (the socket dropped and the reattach has not been
+// acknowledged), and the reasoning clock that times each thought. The
+// agent waiting on its inbox ends the working state and the operator's
+// message starts it again, both read from the durable log, so a replayed
+// log ends in the right state; the run's end (`run_ended`) turns off both
+// the working state and `started`. The clock is injectable so tests stamp
+// exact durations.
 
 import { Emitter, type Event } from "@workshop/platform/event";
 import { Disposable } from "@workshop/platform/lifecycle";
@@ -207,15 +209,26 @@ export class AgentSessionService extends Disposable {
    */
   private settled = -1;
   /**
-   * True from a sent cancel until the turn's work restarts (a message, the
-   * agent waiting on its inbox, or a session acknowledgment). A reasoning
-   * chunk that arrives in that window is a late straggler from the cancel
-   * grace period; it opens already ended, so the thought never reads as
-   * streaming under an idle composer.
+   * True from a sent cancel until the turn's work restarts or ends (a
+   * message, the agent waiting on its inbox, the run's end, or a session
+   * acknowledgment). A reasoning chunk that arrives in that window is a
+   * late straggler from the cancel grace period; it opens already ended,
+   * so the thought never reads as streaming under an idle composer.
    */
   private stopped = false;
   private begun = false;
   private working = false;
+  /**
+   * The working state the durable log alone leaves: what a same-session
+   * reattach returns to while a sent message has no echo yet.
+   */
+  private logWorking = false;
+  /**
+   * True from a sent message until a `user_message` echoes it. A socket
+   * drop in between may have lost the message, so only the log can say
+   * whether the agent works on it.
+   */
+  private unechoed = false;
   private dropped = false;
 
   private readonly _onDidChangeAgents = this._register(new Emitter<readonly string[]>());
@@ -287,7 +300,8 @@ export class AgentSessionService extends Disposable {
    * True once the acknowledged session's run has reported anything - a
    * durable event or a live chunk - so the agent has first waited on its
    * inbox or worked, and its run takes the operator's messages. Off until
-   * then, and again when a new session is acknowledged.
+   * then, from `run_ended` on, since an ended run takes no more messages,
+   * and again when a new session is acknowledged.
    */
   get started(): boolean {
     return this.begun;
@@ -296,9 +310,10 @@ export class AgentSessionService extends Disposable {
   /**
    * True while the agent is working: on after a send, at the operator's
    * message in the log, and at an answered model tool call; off when the
-   * agent waits on its inbox, an error arrives, or a cancel is sent. A
-   * reply alone leaves it on, since a message that lands as the reply does
-   * makes the agent go on.
+   * agent waits on its inbox, its run ends, an error arrives, or a cancel
+   * is sent. A reply alone leaves it on, since a message that lands as the
+   * reply does makes the agent go on. A same-session reattach before a
+   * send's echo returns it to what the log left.
    */
   get generating(): boolean {
     return this.working;
@@ -328,7 +343,10 @@ export class AgentSessionService extends Disposable {
    * durable `user_message` event renders it, so the view shows exactly
    * what the log holds. False when the socket is down; a failed send folds
    * a local error item, because a downed socket is the one failure the
-   * server can never report. A sent message turns `generating` on.
+   * server can never report, while a message the run refuses comes back
+   * as the server's error frame. A sent message turns `generating` on; a
+   * same-session reattach before its echo returns to the state the log
+   * left, since the drop may have lost the message.
    */
   respond(text: string): boolean {
     if (!this.wire.respond(text)) {
@@ -337,6 +355,7 @@ export class AgentSessionService extends Disposable {
     }
     // The message restarts the turn's work, so a stop no longer applies.
     this.stopped = false;
+    this.unechoed = true;
     this.setGenerating(true);
     return true;
   }
@@ -366,7 +385,11 @@ export class AgentSessionService extends Disposable {
    * different event log replaying from index zero, so the transcript
    * resets with it and the new session has not started; a same-session
    * reattach keeps the transcript (the socket's cursor already
-   * deduplicates the replay). The acknowledgment also ends a reconnect.
+   * deduplicates the replay). When the last send has no `user_message`
+   * echo yet, a same-session reattach returns to the working state the
+   * last durable event left: the drop may have lost the message, and an
+   * echo the replay brings turns working on again. The acknowledgment
+   * also ends a reconnect.
    */
   private acknowledge(frame: AgentSessionFrame): void {
     const changedSession =
@@ -376,9 +399,12 @@ export class AgentSessionService extends Disposable {
     if (changedSession) {
       this.transcript = [];
       this.settled = -1;
-      this.setGenerating(false);
+      this.unechoed = false;
+      this.setLogWorking(false);
       this.setStarted(false);
       this._onDidChangeTranscript.fire();
+    } else if (this.unechoed) {
+      this.setGenerating(this.logWorking);
     }
     this.setReconnecting(false);
     this._onDidChangeSession.fire(frame);
@@ -388,8 +414,11 @@ export class AgentSessionService extends Disposable {
   private foldEvent(frame: AgentEventFrame): void {
     const event = frame.event;
     const reply = frame.reply ?? null;
-    // Every durable entry is the session's run reporting, so it has begun.
-    this.setStarted(true);
+    // Every durable entry is the session's run reporting, so it has begun,
+    // except the entry reporting its end.
+    if (event.kind !== "run_ended") {
+      this.setStarted(true);
+    }
     switch (event.kind) {
       case "awaiting_input": {
         // The agent waits on its empty inbox for the operator: no thinking
@@ -397,7 +426,20 @@ export class AgentSessionService extends Disposable {
         // and the cancel grace window is over.
         const closed = this.closeThinking(null);
         this.stopped = false;
-        this.setGenerating(false);
+        this.setLogWorking(false);
+        if (closed) {
+          this._onDidChangeTranscript.fire();
+        }
+        return;
+      }
+      case "run_ended": {
+        // The run ended and takes no more messages: no thinking is still
+        // running, nothing is generating, and the cancel grace window is
+        // over.
+        const closed = this.closeThinking(null);
+        this.stopped = false;
+        this.setLogWorking(false);
+        this.setStarted(false);
         if (closed) {
           this._onDidChangeTranscript.fire();
         }
@@ -405,9 +447,11 @@ export class AgentSessionService extends Disposable {
       }
       case "user_message": {
         this.transcript.push({ kind: "user", text: event.content });
-        // The operator's message sets the agent working, live or replayed.
+        // The operator's message sets the agent working, live or replayed,
+        // and echoes a sent one.
         this.stopped = false;
-        this.setGenerating(true);
+        this.unechoed = false;
+        this.setLogWorking(true);
         break;
       }
       case "agent_message": {
@@ -461,7 +505,7 @@ export class AgentSessionService extends Disposable {
         // only the calls.
         const toolCallId = event.tool_call_id ?? null;
         if (toolCallId !== null && this.answersModelCall(toolCallId)) {
-          this.setGenerating(true);
+          this.setLogWorking(true);
         }
         this.transcript.push({
           kind: "tool-result",
@@ -639,6 +683,12 @@ export class AgentSessionService extends Disposable {
     }
     this.begun = value;
     this._onDidChangeStarted.fire(value);
+  }
+
+  /** Sets `generating` from a durable event, as the working state the log leaves. */
+  private setLogWorking(value: boolean): void {
+    this.logWorking = value;
+    this.setGenerating(value);
   }
 
   /** Sets `generating`, firing only on a real change. */

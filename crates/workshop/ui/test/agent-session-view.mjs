@@ -917,6 +917,49 @@ await assertNoLeaks(lifecycle, async () => {
     dispose();
   }
 
+  {
+    // A run that ends in error: the error opens the popup, and the run's
+    // end leaves nothing to try again or send to.
+    const { wire, view, input, send, ask, dispose } = setup();
+    const retry = () => view.element.querySelector(".ws-chat-error .ws-chat-error__retry");
+    ask("go");
+    wire.fire.error("agent run failed: kaboom");
+    check(
+      "while the run still takes messages, Try again is enabled",
+      retry()?.hidden === false && retry().disabled === false,
+    );
+    wire.fire.event("run_ended", "");
+    check(
+      "after a run-ending error and run_ended, Try again stays offered but disabled",
+      retry()?.hidden === false && retry().disabled === true,
+    );
+    input.setText("too late");
+    check(
+      "after run_ended, send is idle",
+      send.getAttribute("data-state") === "send" &&
+        send.getAttribute("data-action") === "idle" &&
+        send.disabled === true,
+    );
+    send.click();
+    retry()?.click();
+    check("nothing goes to the ended run", isDeepStrictEqual(wire.responses, ["go"]));
+    dispose();
+  }
+
+  {
+    // The run's end may reach the socket ahead of its error frame.
+    const { wire, view, ask, dispose } = setup();
+    const retry = () => view.element.querySelector(".ws-chat-error .ws-chat-error__retry");
+    ask("go");
+    wire.fire.event("run_ended", "");
+    wire.fire.error("agent run failed: kaboom");
+    check(
+      "an error after run_ended offers Try again disabled",
+      retry()?.hidden === false && retry().disabled === true,
+    );
+    dispose();
+  }
+
   // --- The human message: clip, expand, sticky ---------------------------------------------
 
   {

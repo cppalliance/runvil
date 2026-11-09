@@ -1,7 +1,8 @@
 //! Session lifecycle over `/agents/ws`: session isolation, status-bus
 //! ordering with the backoff reset, a close ending a waiting session, a
-//! terminal agent failure and a parse failure each surfacing as an error
-//! frame, and the run log under the state directory.
+//! program that returns framing its run's end and refusing a later
+//! message, a terminal agent failure and a parse failure each surfacing
+//! as an error frame, and the run log under the state directory.
 
 use workshop_run_log::{RunId, RunLog};
 
@@ -69,7 +70,8 @@ async fn status_frames_fire_in_order_and_a_completed_reply_resets_the_backoff() 
     assert_eq!(delta_text(&turn), "echo:ping");
 
     // Thinking on turn dispatch, Generating on the first answer delta,
-    // idle on completion - scanned in order through the status stream.
+    // idle at the agent's next wait on its inbox - scanned in order
+    // through the status stream.
     let deadline = Duration::from_secs(10);
     let thinking = status
         .recv_until(deadline, |frame| {
@@ -125,6 +127,44 @@ async fn a_close_ends_a_waiting_session_and_cancels_its_run() {
     assert!(
         !state.agents().close(&session),
         "closing an already-closed session is a no-op"
+    );
+    socket.close().await;
+}
+
+#[tokio::test]
+async fn a_program_that_returns_frames_run_ended_and_a_later_message_is_refused() {
+    let (base, _dir, _state) = spawn_agent_server().await;
+    let mut socket = connect(&base).await;
+    let _session = launch_echo(&mut socket).await;
+    next_wait(&mut socket).await;
+
+    answer(&mut socket, "quit").await;
+    let ended = socket
+        .recv_until(Duration::from_secs(10), |frame| {
+            assert_ne!(
+                frame["type"], "error",
+                "a program that returns ends its run without an error: {frame}"
+            );
+            frame["type"] == "agent_event" && frame["event"]["kind"] == "run_ended"
+        })
+        .await;
+    assert_eq!(
+        ended,
+        json!({
+            "type": "agent_event",
+            "index": 2,
+            "event": { "kind": "run_ended", "section": "Echo", "turn": 0, "content": "" },
+        }),
+        "the run's end frames right after the message it returned on, under the prompt's title"
+    );
+
+    answer(&mut socket, "too late").await;
+    let refusal = socket
+        .recv_until(Duration::from_secs(10), |frame| frame["type"] == "error")
+        .await;
+    assert_eq!(
+        refusal["message"], "The agent's run has ended, so your message was not sent.",
+        "a message after the run's end is refused out loud: {refusal}"
     );
     socket.close().await;
 }

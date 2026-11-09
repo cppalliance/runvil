@@ -14,11 +14,13 @@
 //! repair via the superseding event), and ephemeral `error` frames
 //! reporting a failed model round the program survived or a run that
 //! ended in error. `{"type":"input_response","text":"..."}` sends the
-//! operator's message to the run whenever the operator sends it, and an
-//! accepted message dispatches the turn (the Thinking status push);
-//! `{"type":"cancel"}` stops the round in flight - a stop reason, never
-//! an error: a message already sent stays queued for the agent, and the
-//! frames that follow are the same run's own.
+//! operator's message to the run whenever the operator sends it: an
+//! accepted message dispatches the turn (the Thinking status push), and a
+//! refused one is answered with an error frame saying whether the run has
+//! ended or not started yet; `{"type":"cancel"}` stops the round in
+//! flight - a stop reason, never an error: a message already sent stays
+//! queued for the agent, and the frames that follow are the same run's
+//! own.
 //!
 //! One task owns the socket: a single `select!` loop reads and writes
 //! the same handle, per the server's socket rule; the conversation table
@@ -32,7 +34,7 @@ use harness::display_chain;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 
-use workshop_agents::{Conversation, Delta, SessionEvent, SessionFailure};
+use workshop_agents::{Conversation, Delta, SessionEvent, SessionFailure, SessionState};
 use workshop_protocol::{Activity, ErrorFrame, InputResponse};
 use workshop_support::recv_or_pending;
 
@@ -299,7 +301,8 @@ enum OpenRequest {
 
 /// Handles an `input_response` frame: sends the operator's message to the
 /// attached conversation's run and, when the run accepts it, reports the
-/// dispatched turn.
+/// dispatched turn; a message the run refuses is answered with an error
+/// frame.
 async fn answer_input(
     state: &SessionsState,
     frame: serde_json::Value,
@@ -326,12 +329,19 @@ async fn answer_input(
             Activity::Thinking,
         );
     } else {
-        // A message racing the run's start or its end is normal: the run
-        // either has no Harness yet or has ended, and drops the text.
-        tracing::debug!(
-            conversation = %conversation.id(),
-            "input_response for a run that takes no message; text dropped"
-        );
+        send_error(socket, None, refused_input_text(conversation)).await;
+    }
+}
+
+/// The text of the error frame answering a message the run refused: the
+/// run either has no Harness yet or has ended. A run that has started
+/// takes every message until it ends, so a refusal after its start means
+/// it ended, even before the conversation is `Closed`.
+fn refused_input_text(conversation: &Conversation) -> &'static str {
+    if conversation.state() == SessionState::Closed || conversation.run_id().is_some() {
+        "The agent's run has ended, so your message was not sent."
+    } else {
+        "The agent is not taking messages yet, so your message was not sent."
     }
 }
 

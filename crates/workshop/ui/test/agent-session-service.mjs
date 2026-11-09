@@ -8,9 +8,11 @@
 // injected clock stamps each thought's start and end, `generating` turns
 // off at `awaiting_input` and on at the next `user_message`, so a replayed
 // log ends in the right state, `started` turns on with the session's
-// first report, `reconnecting` follows its rule, `cancelTurn` settles the
-// service's own view, tool rows carry their bound tool id, and errors
-// carry their popup title. Run: node test/agent-session-service.mjs
+// first report, `run_ended` turns both off, a same-session reattach
+// before a send's echo returns to the state the log left, `reconnecting`
+// follows its rule, `cancelTurn` settles the service's own view, tool rows
+// carry their bound tool id, and errors carry their popup title.
+// Run: node test/agent-session-service.mjs
 import { writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -332,6 +334,66 @@ await assertNoLeaks(lifecycle, () => {
     service.dispose();
   }
 
+  // --- run_ended: the run takes no more messages ------------------------------
+
+  {
+    const wire = makeWire();
+    const clock = { now: 10 };
+    const service = new AgentSessionService(wire, () => clock.now);
+    wire.fire.session("s1");
+    wire.fire.awaiting();
+    service.respond("bye");
+    wire.fire.event("user_message", "bye");
+    wire.fire.delta("reasoning", "wrapping up", 0);
+    const started = [];
+    const generating = [];
+    let transcriptFires = 0;
+    service.onDidChangeStarted((value) => started.push(value));
+    service.onDidChangeGenerating((value) => generating.push(value));
+    service.onDidChangeTranscript(() => transcriptFires++);
+    clock.now = 40;
+    wire.fire.event("run_ended", "");
+    check(
+      "run_ended turns generating off",
+      service.generating === false && isDeepStrictEqual(generating, [false]),
+    );
+    check(
+      "run_ended turns started off: the run takes no more messages",
+      service.started === false && isDeepStrictEqual(started, [false]),
+    );
+    check("run_ended ends the open thinking", service.items[1].endedAt === 40);
+    check(
+      "run_ended renders no item, and announces the ended thinking once",
+      service.items.length === 2 && transcriptFires === 1,
+    );
+    service.dispose();
+  }
+
+  {
+    const wire = makeWire();
+    const clock = { now: 10 };
+    const service = new AgentSessionService(wire, () => clock.now);
+    const started = [];
+    service.onDidChangeStarted((value) => started.push(value));
+    wire.fire.session("s1");
+    wire.fire.event("run_ended", "");
+    check(
+      "a run whose end is its first report never reads as started",
+      service.started === false && isDeepStrictEqual(started, []),
+    );
+    wire.fire.awaiting();
+    service.respond("go");
+    service.cancelTurn();
+    wire.fire.event("run_ended", "");
+    clock.now = 20;
+    wire.fire.delta("reasoning", "after the end", 0);
+    check(
+      "run_ended clears the stop, so a first chunk after it streams",
+      service.items[0].startedAt === 20 && service.items[0].endedAt === null,
+    );
+    service.dispose();
+  }
+
   // --- Session acknowledgments: transcript reset on a new id -----------------
 
   {
@@ -598,6 +660,63 @@ await assertNoLeaks(lifecycle, () => {
     check(
       "a same-session reattach acknowledgment also clears it",
       service.reconnecting === false && isDeepStrictEqual(seen, [true, false, true, false]),
+    );
+    service.dispose();
+  }
+
+  // --- A same-session reattach before a send's echo -----------------------------
+
+  {
+    const wire = makeWire();
+    const service = new AgentSessionService(wire);
+    wire.fire.session("s1");
+    wire.fire.awaiting();
+    service.respond("maybe lost");
+    check("the send turns generating on", service.generating === true);
+    wire.fire.disconnect();
+    wire.fire.session("s1");
+    check(
+      "a reattach with the send unechoed returns to waiting, the state awaiting_input left",
+      service.generating === false,
+    );
+    wire.fire.event("user_message", "maybe lost");
+    check("an echo the replay brings turns working on again", service.generating === true);
+    service.dispose();
+  }
+
+  {
+    const wire = makeWire();
+    const service = new AgentSessionService(wire);
+    wire.fire.session("s1");
+    wire.fire.awaiting();
+    service.respond("echoed");
+    wire.fire.event("user_message", "echoed");
+    wire.fire.disconnect();
+    wire.fire.session("s1");
+    check(
+      "a reattach after the send's echo keeps the agent working",
+      service.generating === true,
+    );
+    service.respond("steer");
+    wire.fire.disconnect();
+    wire.fire.session("s1");
+    check(
+      "a reattach before a steering message's echo keeps working, the state the log left",
+      service.generating === true,
+    );
+    // A new session's log echoes none of the old session's sends: after a
+    // cancel there, a reattach keeps the stop instead of restoring the
+    // working state its log left.
+    wire.fire.awaiting();
+    service.respond("then lost");
+    wire.fire.session("s2");
+    wire.fire.event("tool_call", '[{"id":"c1","name":"read","arguments":{}}]', { reply: 0 });
+    wire.fire.event("tool_call_update", "body", { tool_call_id: "c1" });
+    service.cancelTurn();
+    wire.fire.session("s2");
+    check(
+      "a new session forgets the old session's unechoed send",
+      service.generating === false,
     );
     service.dispose();
   }

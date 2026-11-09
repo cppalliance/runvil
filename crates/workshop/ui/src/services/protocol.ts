@@ -110,7 +110,8 @@ export interface ErrorFrame {
 
 /**
  * The kind of one agent event. `awaiting_input`: the agent waits for the
- * operator's message. Follows the Agent Client Protocol `sessionUpdate`
+ * operator's message. `run_ended`: the run's end, after which it takes no
+ * more messages. Follows the Agent Client Protocol `sessionUpdate`
  * names and mirrors `AgentEventKind` in workshop-server
  * (src/agents/wire.rs). Future kinds (`plan`, tool-status updates) may
  * arrive as labels outside this union, so renderers matching on kinds
@@ -122,7 +123,8 @@ export type AgentEventKind =
   | "tool_call_update"
   | "agent_thought"
   | "user_message"
-  | "awaiting_input";
+  | "awaiting_input"
+  | "run_ended";
 
 /** Token accounting for one model call, as the backend reported it. */
 export interface Usage {

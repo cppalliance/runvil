@@ -12,7 +12,7 @@ use super::*;
 async fn gate_the_operators_message_frames_as_a_user_message_between_wait_frames() {
     let server = spawn_chat_server(&["test-model"]).await;
     let mut socket = connect_chat(&server.ws_base).await;
-    let _session = launch_chat(&mut socket).await;
+    let session = launch_chat(&mut socket).await;
 
     let typed = "two  words\r\n\"quoted\" 🦀";
     let first = next_wait(&mut socket).await;
@@ -54,9 +54,14 @@ async fn gate_the_operators_message_frames_as_a_user_message_between_wait_frames
     }
 
     // A stop while the chat waits leaves that wait: the next message
-    // answers it, and the turn it starts frames like the first.
-    let open = next_wait(&mut socket).await;
-    assert_ne!(open, first, "each read of the empty inbox is its own wait");
+    // answers it in the same run, and the turn it starts frames like the
+    // first.
+    next_wait(&mut socket).await;
+    let run = server
+        .state
+        .agents()
+        .run_id(&session)
+        .expect("the chat's run has begun");
     socket.send_json(&json!({ "type": "cancel" })).await;
     answer(&mut socket, "after stop").await;
     let turn = collect_turn(&mut socket).await;
@@ -65,6 +70,11 @@ async fn gate_the_operators_message_frames_as_a_user_message_between_wait_frames
         "the wait the stop left answered the next message"
     );
     assert!(turn.waits.is_empty(), "the stop never woke the wait");
+    assert_eq!(
+        server.state.agents().run_id(&session),
+        Some(run),
+        "the stop keeps the chat's one run"
+    );
     socket.close().await;
 }
 

@@ -11,7 +11,8 @@
 //
 // Errors don't take rows. An error opens the composer's error popup
 // (title, message, and Try again), which re-sends the last user message
-// through the service.
+// through the service; Try again is enabled only while the run takes
+// messages.
 //
 // The composer is the ChatBox component, which this view embeds. It maps
 // service state to the box's props (the box is always editable, the
@@ -24,10 +25,10 @@
 // button is the mic while the box is empty and stays pressable whatever
 // the state, so a click while blocked names the blocker on the status bar
 // instead of the control silently disappearing. Until the agent first
-// waits or works, its run takes no message, so send stays disabled. A
-// take follows the session it dictates into: a send or a new session
-// discards the live take, since the new session's agent takes no message
-// until it starts.
+// waits or works, and once its run has ended, its run takes no message,
+// so send stays disabled. A take follows the session it dictates into: a
+// send or a new session discards the live take, since the new session's
+// agent takes no message until it starts.
 
 import "./agent-session.css";
 
@@ -78,11 +79,11 @@ interface PopupError {
  * toolbar (mode chip, model picker, context ring) mounts into the box's
  * controls slot only when the composition root threads a ModelService
  * through; a view built without one mounts none. The box is always
- * editable; send stays disabled until the agent first waits or works,
- * and a configured model service marks the send action blocked until its
- * current selection is non-empty. A send hands the operator's message to
- * the service, clears the box on success, and pins the feed to the
- * bottom.
+ * editable; send stays disabled until the agent first waits or works and
+ * again once its run ends, and a configured model service marks the send
+ * action blocked until its current selection is non-empty. A send hands
+ * the operator's message to the service, clears the box on success, and
+ * pins the feed to the bottom.
  * The status sink receives dictation's local messages, selection
  * blockers, and recording LED state. While this view dictates, the
  * capture service names it by its session title and agent, and reveals
@@ -263,11 +264,12 @@ export class AgentSessionView extends Disposable {
 
   /**
    * Maps the agent's state onto the box: always editable, the send action
-   * idle until the agent first waits or works, since its run takes no
-   * message before then, and blocked (still clickable, so the press can
-   * say why) while a configured model service has no selection. While the
-   * agent generates the action is Stop, which the box shows over an empty
-   * box and turns into send for a follow-up once the box holds text.
+   * idle until the agent first waits or works and again once its run
+   * ends, since its run takes no message then, and blocked (still
+   * clickable, so the press can say why) while a configured model service
+   * has no selection. While the agent generates the action is Stop, which
+   * the box shows over an empty box and turns into send for a follow-up
+   * once the box holds text.
    */
   private renderInputState(): void {
     const generating = this.service.generating;
@@ -375,7 +377,11 @@ export class AgentSessionView extends Disposable {
     return null;
   }
 
-  /** Pushes the popup to the box: Try again is offered, enabled, once the operator has sent a message. */
+  /**
+   * Pushes the popup to the box: Try again is offered once the operator has
+   * sent a message, and enabled only while the run takes messages
+   * (`started`), so the run's end disables it.
+   */
   private renderError(): void {
     if (this.popup === null) {
       this.chatBox.update({ error: null });
@@ -388,7 +394,7 @@ export class AgentSessionView extends Disposable {
       error.title = this.popup.title;
     }
     if (this.lastUserText() !== null) {
-      error.tryAgain = "enabled";
+      error.tryAgain = this.service.started ? "enabled" : "disabled";
     }
     this.chatBox.update({ error });
   }

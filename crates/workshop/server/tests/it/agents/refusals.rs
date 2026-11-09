@@ -1,6 +1,7 @@
 //! Protocol refusals over `/agents/ws`: every malformed or out-of-turn
-//! frame is an error frame, the socket survives its refusals, and a launch
-//! with no usable gateway is refused.
+//! frame is an error frame, the socket survives its refusals, a message
+//! before the run starts is refused, and a launch with no usable gateway
+//! is refused.
 
 use super::*;
 
@@ -24,6 +25,31 @@ async fn a_launch_with_no_usable_gateway_is_refused_with_the_refusal_text() {
                 "agent sessions need a usable gateway binding; check the gateway base URL and key"
             )),
         "a gateway with an empty key refuses the launch: {frame}"
+    );
+    socket.close().await;
+}
+
+#[tokio::test]
+async fn a_message_before_the_run_starts_is_refused_with_an_error_frame() {
+    let (base, _dir, state) = spawn_agent_server().await;
+    // With no chat-capable model in the catalog, the launched run waits in
+    // the server's broker, so it has no Harness to take a message yet.
+    state.catalog().publish(vec![]);
+    let mut socket = connect(&base).await;
+    let session = launch_echo(&mut socket).await;
+    assert_eq!(
+        state.agents().run_id(&session),
+        None,
+        "the run waits for a chat-capable model"
+    );
+
+    answer(&mut socket, "too early").await;
+    let refusal = socket
+        .recv_until(Duration::from_secs(10), |frame| frame["type"] == "error")
+        .await;
+    assert_eq!(
+        refusal["message"], "The agent is not taking messages yet, so your message was not sent.",
+        "a message before the run starts is refused out loud: {refusal}"
     );
     socket.close().await;
 }

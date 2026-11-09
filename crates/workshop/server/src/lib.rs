@@ -84,5 +84,4 @@ pub use app::{AppState, router};
 pub use serve::{ServerHandle, SpawnError, Termination, spawn};
 pub use workshop_gateway::discovery;
 pub use workshop_gateway::{GatewayPublicationError, GatewayUpdater, ResolvedGateway};
-pub use workshop_protocol::InputResponse;
 pub use workshop_support::{AgentsConfig, Config, GatewayConfig, ServerConfig};

@@ -69,6 +69,7 @@ const CASES = [
   "agent_delta_text",
   "agent_event_awaiting",
   "agent_event_minimal",
+  "agent_event_run_ended",
   "agent_event_stamped",
   "agent_session",
   "agents",
@@ -124,6 +125,7 @@ const INBOUND = {
   agent_session: [],
   agent_event_minimal: [],
   agent_event_awaiting: [],
+  agent_event_run_ended: [],
   agent_event_stamped: ["reply"],
   agent_delta_text: [],
   agent_delta_reasoning: [],
@@ -172,6 +174,7 @@ await assertNoLeaks(lifecycle, async () => {
   wire.message(fixture.agent_event_awaiting);
   wire.message(fixture.agent_event_minimal);
   wire.message(fixture.agent_event_stamped);
+  wire.message(fixture.agent_event_run_ended);
   wire.message(fixture.agent_delta_text);
   wire.message(fixture.agent_delta_reasoning);
 
@@ -189,11 +192,16 @@ await assertNoLeaks(lifecycle, async () => {
       fixture.agent_event_awaiting,
       fixture.agent_event_minimal,
       fixture.agent_event_stamped,
+      fixture.agent_event_run_ended,
     ]),
   );
   check(
     "the agent's wait on its inbox is an agent_event of kind awaiting_input",
     events[0]?.event.kind === "awaiting_input",
+  );
+  check(
+    "the run's end is an agent_event of kind run_ended with empty content",
+    events[3]?.event.kind === "run_ended" && events[3].event.content === "",
   );
   check(
     "the minimal event omits reply and the stamped event includes it, as the fixture does",
