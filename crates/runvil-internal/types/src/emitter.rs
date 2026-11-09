@@ -3,9 +3,9 @@
 //! The Engine reports as values: every boundary, content report, and
 //! debug capture becomes one [`Event`] pushed into the run's buffer,
 //! stamped with a [`Provenance`] - the nearest enclosing task and that
-//! task's next sequence number - and drained by the run's `step` through
-//! the [`EventSink`]. The caller reads each drained batch, the one path
-//! by which an event leaves this module.
+//! task's next sequence number - and drained by the run's `step` and
+//! `deliver` through the [`EventSink`]. The caller reads each drained
+//! batch, the one path by which an event leaves this module.
 //!
 //! An [`Emitter`] is one chain's handle onto the buffer: it knows its task
 //! (the main walk is task `0`; a `call` child shares its caller's emitter,

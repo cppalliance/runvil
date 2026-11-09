@@ -44,7 +44,8 @@ pub enum Step {
         /// waits on effects an earlier step issued, or, when
         /// `waiting_for_input` is set, on the main chain's next message.
         effects: Vec<IssuedEffect>,
-        /// The events the step reported, in order.
+        /// The events reported since the previous step, in order, less
+        /// those [`Run::deliver`] already returned.
         events: Vec<Event>,
         /// The effects this step withdrew, in effect-id order. Their
         /// answers will be discarded, so the caller may drop each one
@@ -66,7 +67,8 @@ pub enum Step {
     /// Carries the run's result and its last events. A step returns `Done`
     /// only after every issued effect has been answered. The event that
     /// marks the run's end comes with `Done`, or with an earlier `Pending`
-    /// step when effects were still outstanding as the run ended.
+    /// step when effects were still outstanding as the run ended, or from
+    /// a [`Run::deliver`] made after an answer ended the run.
     Done {
         /// The run's result. `Ok` holds the run's final text, which for a
         /// prompt that declines its task is its reason for declining. `Err`
@@ -74,7 +76,8 @@ pub enum Step {
         /// code is `ErrorCode::Canceled`, and any other error is a failure.
         /// An `Err` never holds a caller code, one in the 8xx family.
         result: Result<String, Error>,
-        /// The events reported since the previous step.
+        /// The events reported since the previous step, in order, less
+        /// those [`Run::deliver`] already returned.
         events: Vec<Event>,
         /// The main chain's unread messages, oldest first: still in its
         /// inbox when the run ended.
@@ -187,8 +190,8 @@ impl Run {
     ///
     /// The chain waiting on the effect resumes with the answer at the next
     /// `step`. For [`EffectAnswer::Dropped`], it resumes with a
-    /// cancellation error. Any events the answer produces are reported by
-    /// that next step.
+    /// cancellation error. Any events the answer produces come back from
+    /// that next step, or from a [`deliver`](Self::deliver) made before it.
     ///
     /// Each answer must match the kind of its effect: a chat answer for a
     /// `Chat` effect, a tool answer for a `ToolCall` effect, and so on. A
@@ -203,16 +206,19 @@ impl Run {
         self.scheduler.resume(id, answer);
     }
 
-    /// Queues `text` for the main chain's inbox and returns the
-    /// [`Event::InboxMessage`] that reports it, which the caller records
-    /// before its next `step`. The next `step` applies it: a
-    /// `tasks.receive()` waiting on the inbox resumes with it, and
-    /// otherwise it waits behind the messages delivered before it. A
+    /// Queues `text` for the main chain's inbox and returns the events to
+    /// record before the next `step`, in order: those the answers resumed
+    /// since the last step produced, then the [`Event::InboxMessage`] that
+    /// reports the message. The next `step` applies it: a waiting
+    /// `tasks.receive()` resumes with it; a `models.loop` request with no
+    /// answer yet is withdrawn, listed in `withdrawn`, and sent again with
+    /// it; otherwise it waits, and a running loop takes it before its next
+    /// request or before it returns, unless its round cap is spent. A
     /// message the run never reads comes back in [`Step::Done`]'s
     /// `unread`.
     ///
     /// Call it only before `step` returns `Done`.
-    pub fn deliver(&mut self, text: String) -> Event {
+    pub fn deliver(&mut self, text: String) -> Vec<Event> {
         self.scheduler.deliver_message(text)
     }
 

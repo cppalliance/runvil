@@ -1,8 +1,9 @@
 //! The main chain's inbox through `RunControl::send`: each send while the
 //! run waits on its inbox resumes it, a send before the run starts is
 //! delivered before its first step, and a send after the run ends returns
-//! false; the recorder holds a sent message's `InboxMessage` event ahead
-//! of the records of the step that applies it; a cancel ends a run that
+//! false; the recorder holds a sent message's `InboxMessage` event after
+//! the events of the answers that landed before it and ahead of the
+//! records of the step that applies it; a cancel ends a run that
 //! waits for input; a stop never reaches a message, whether it was sent
 //! before the stop or after it, so the next `tasks.receive()` returns it;
 //! a message sent once a round's answer has landed leaves that answer
@@ -434,6 +435,48 @@ async fn a_send_once_a_rounds_answer_has_landed_keeps_that_answer_and_asks_again
         "the loop asked again with the message after the first reply"
     );
     assert!(report.unread.is_empty(), "{:?}", report.unread);
+}
+
+#[tokio::test]
+async fn a_send_as_the_final_reply_lands_is_recorded_after_that_replys_assistant_reply() {
+    let gate = Arc::new(Notify::new());
+    let broker = gated_broker(&gate);
+    let rounds = broker.rounds();
+    let recorder = Arc::new(MemoryRecorder::new());
+    let harness = plain_harness(&recorder, broker, LOOPS);
+
+    let report = run_beside(harness, |control| async move {
+        until("the model round is in flight", || {
+            rounds.lock().unwrap().len() == 1
+        })
+        .await;
+        gate.notify_one();
+        assert!(control.send("more".to_owned()));
+    })
+    .await
+    .expect("the run is reported");
+
+    assert!(report.result.is_ok(), "{:?}", report.result);
+    let records = recorder.records(report.run_id);
+    let replied = position(&records, "the first reply", |record| {
+        is_event(record, "assistant_reply") && record.payload["text"] == "first"
+    });
+    let sent = position(&records, "the message", |record| {
+        is_event(record, "inbox_message")
+    });
+    assert!(
+        replied < sent,
+        "the reply that landed before the message is recorded before it: {records:?}"
+    );
+    let seqs: Vec<u32> = records
+        .iter()
+        .filter(|record| record.kind == RecordKind::Event && record.task_id == "0")
+        .map(|record| record.task_seq)
+        .collect();
+    assert!(
+        seqs.windows(2).all(|pair| pair[0] < pair[1]),
+        "the main chain's events are recorded in stamp order: {seqs:?}"
+    );
 }
 
 #[tokio::test]

@@ -276,8 +276,9 @@ impl ChainState {
     }
 
     /// Drains the run's event buffer: every event pushed since the last
-    /// drain, in push order. The run's `step` calls this once per step and
-    /// returns the batch to the caller.
+    /// drain, in push order. The run's `step` calls this once per step,
+    /// and its `deliver` once per message, and each returns the batch to
+    /// the caller.
     pub(super) fn take_events(&self) -> Vec<Event> {
         self.shared.events.take()
     }

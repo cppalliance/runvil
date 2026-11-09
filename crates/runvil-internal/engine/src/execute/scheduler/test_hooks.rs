@@ -98,6 +98,12 @@ impl Scheduler {
         self.tasks.state_of(task)
     }
 
+    /// How many messages wait in `task`'s inbox, so a test can prove a
+    /// task's end dropped them.
+    pub(crate) fn queued_for_test(&self, task: &TaskId) -> usize {
+        self.inboxes.queued(task).count()
+    }
+
     /// The run's tool set: the Packs the prompt declares, the roster, and
     /// the run catalog.
     pub(crate) fn tool_set_for_test(&self) -> &ToolSet {

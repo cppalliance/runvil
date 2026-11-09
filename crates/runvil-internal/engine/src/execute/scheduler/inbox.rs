@@ -7,12 +7,16 @@
 //! inbox.
 //!
 //! Only `Run::deliver` fills the main chain's inbox. It queues a message
-//! between steps and returns the `InboxMessage` event that reports it,
-//! stamped with the main chain's next provenance, and the next step applies
-//! the message before any chain runs, so the answers the caller resumed
-//! before that step are applied first. Only a task's owner fills the
-//! task's inbox, through `tasks.send`, whose step reports the message
-//! under the task's provenance; a send to a task that has ended drops it.
+//! between steps and returns the events the answers resumed since the last
+//! step produced, then the `InboxMessage` event that reports the message,
+//! stamped with the main chain's next provenance, so a record that keeps
+//! them in that order keeps every task's stamps in order. The next step
+//! applies the message before any chain runs, so the answers the caller
+//! resumed before that step are applied first. Only a task's owner fills
+//! the task's inbox, through `tasks.send`, whose step reports the message
+//! under the task's provenance; a message sent to a task still waiting for
+//! admission is reported right after the task's `TaskStarted`, and a send
+//! to a task that has ended drops it.
 //!
 //! A message applies by the delivery rules, and reaches no other chain: a
 //! chain waiting in `tasks.receive()` resumes with it; a chain whose
@@ -21,7 +25,7 @@
 //! and otherwise it waits in the inbox, which a running tool batch leaves
 //! it in. The loop's next `chat` request takes every queued message
 //! before its round goes out, and the loop reads the inbox once more
-//! before it returns.
+//! before it returns, unless its round cap is spent.
 //!
 //! A `tasks.reply` publishes the task's latest result for its owner, then
 //! reads the inbox as `tasks.receive()` does, and a task that parks there
@@ -30,10 +34,10 @@
 //! A chain that finds its inbox empty parks on it, reports `InboxWaiting`,
 //! and gives back its admission slots as a task wait does, and the wake
 //! that delivers a message requeues it for them the same way. A message
-//! stays queued until a chain reads it or the run ends, and `Step::Done`
-//! hands back the main chain's unread messages, oldest first, the ones a
-//! woken reader never resumed with included: the teardown puts those back
-//! first.
+//! stays queued until a chain reads it, its task stops being live, which
+//! drops the task's inbox, or the run ends, and `Step::Done` hands back
+//! the main chain's unread messages, oldest first, the ones a woken reader
+//! never resumed with included: the teardown puts those back first.
 
 use std::collections::{BTreeMap, VecDeque};
 
@@ -60,7 +64,7 @@ pub(super) fn main_task() -> TaskId {
 #[derive(Debug, Default)]
 pub(super) struct Inboxes {
     /// Each task's unread messages, oldest first. An inbox no message has
-    /// entered has no entry.
+    /// entered has no entry, and neither has a task that is no longer live.
     queues: BTreeMap<TaskId, VecDeque<String>>,
     /// The main chain's messages `Run::deliver` queued since the last
     /// step, oldest first, for the next step to apply.
@@ -90,9 +94,24 @@ impl Inboxes {
         self.queues.get_mut(task)?.pop_front()
     }
 
+    /// The messages waiting in `task`'s inbox, oldest first, left in it.
+    pub(super) fn queued(&self, task: &TaskId) -> impl Iterator<Item = &str> {
+        self.queues
+            .get(task)
+            .into_iter()
+            .flatten()
+            .map(String::as_str)
+    }
+
     /// Takes every message in `task`'s inbox, oldest first.
     fn take_all(&mut self, task: &TaskId) -> Vec<String> {
         self.queues.remove(task).map(Vec::from).unwrap_or_default()
+    }
+
+    /// Drops `task`'s inbox with every message still in it, once the task
+    /// stops being live and no chain can read them.
+    pub(super) fn discard(&mut self, task: &TaskId) {
+        self.queues.remove(task);
     }
 
     /// Takes the main chain's unread messages, oldest first, for `Done`:
@@ -104,11 +123,13 @@ impl Inboxes {
 
 impl Scheduler {
     /// Queues `text` for the main chain's inbox, for the next step to
-    /// apply, and returns the `InboxMessage` event that reports it. The
-    /// event takes the main chain's next provenance and reports under the
-    /// section the main chain is in, or the prompt's title while no main
-    /// chain is live, before the run starts and after it ends.
-    pub(crate) fn deliver_message(&mut self, text: String) -> Event {
+    /// apply, and returns the events to record before that step, in
+    /// order: those the answers resumed since the last step produced, then
+    /// the `InboxMessage` event that reports the message. That event takes
+    /// the main chain's next provenance and reports under the section the
+    /// main chain is in, or the prompt's title while no main chain is
+    /// live, before the run starts and after it ends.
+    pub(crate) fn deliver_message(&mut self, text: String) -> Vec<Event> {
         let section = self
             .chains
             .leaf_of(&main_task())
@@ -117,15 +138,17 @@ impl Scheduler {
                 |leaf| self.chains[leaf].section_name(),
             )
             .to_owned();
-        // Returned, never pushed: the caller records it before the step
-        // that applies the message, in the place its stamp gives it.
-        let event = Event::InboxMessage {
+        // The buffered events were stamped before the message, so they
+        // drain first; the message's event is returned, never pushed, so
+        // the caller records it before the step that applies the message.
+        let mut events = self.ctx.take_events();
+        events.push(Event::InboxMessage {
             section,
             provenance: self.ctx.emitter().stamp_effect(),
             text: text.clone(),
-        };
+        });
         self.inboxes.delivered.push(text);
-        event
+        events
     }
 
     /// Applies the main chain's messages `Run::deliver` queued since the
@@ -256,10 +279,11 @@ impl Scheduler {
     /// Dispatches a `send` request: `text` enters the inbox of a live task
     /// the chain owns, by the delivery rules, under an `InboxMessage` event
     /// stamped with the task's provenance in the section that reads it,
-    /// and the send answers true; a task that has ended drops it and
-    /// answers false. A task the chain does not own, and the internal
-    /// timer behind a timed wait, which has no inbox, refuse it with
-    /// `task_not_owned`.
+    /// and the send answers true; a task still waiting for admission has
+    /// the message queued unreported, for its admission to report, and a
+    /// task that has ended drops it and answers false. A task the chain
+    /// does not own, and the internal timer behind a timed wait, which has
+    /// no inbox, refuse it with `task_not_owned`.
     pub(super) fn dispatch_send(
         &mut self,
         id: ChainIndex,
@@ -278,6 +302,10 @@ impl Scheduler {
             Ok(None) => return self.answer_inline(id, Ok(Answer::Send(false))),
             Err(refused) => return self.answer_inline(id, Err(refused)),
         };
+        if self.admission.is_queued(chain) {
+            self.inboxes.push(task, text);
+            return self.answer_inline(id, Ok(Answer::Send(true)));
+        }
         let reader = self.chains.leaf_of(task).unwrap_or(chain);
         let section = self.chains[reader].section_name().to_owned();
         let reported = text.clone();

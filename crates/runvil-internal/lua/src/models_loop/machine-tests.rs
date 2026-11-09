@@ -2,7 +2,7 @@
 //! place of the Lua values it passes along, and a plain list read back
 //! through `records()`. Messages that reach the chain's inbox append
 //! under their arrival line, and the loop reads its inbox once more before
-//! it returns.
+//! it returns, unless its round cap is spent.
 
 use runvil_types::error::ErrorFact;
 
@@ -460,8 +460,11 @@ fn messages_that_answer_a_chat_append_under_the_main_chains_line_and_send_again_
         [from_operator("one"), from_operator("two")],
         "each message is its own user record under its arrival line"
     );
-    assert_eq!(show(&machine.step(reply("done"))), "arrivals");
-    settle(&mut machine);
+    assert_eq!(
+        show(&machine.step(reply("done"))),
+        "return",
+        "the reply spent the cap of 1, so the loop returns without the last read"
+    );
     assert_eq!(
         records(&list).last().map(String::as_str),
         Some("assistant done||")
@@ -494,15 +497,18 @@ fn the_final_check_appends_late_messages_after_the_reply_and_starts_a_counted_ro
         records(&list),
         ["assistant done||".to_owned(), from_operator("late")]
     );
-    assert_eq!(show(&machine.step(reply("again"))), "arrivals");
-    settle(&mut machine);
-    let mut capped = chatting(1, &MessageList::default());
-    assert_eq!(show(&capped.step(reply("done"))), "arrivals");
     assert_eq!(
-        show(&capped.step(arrived(&["late"]))),
-        "new tool_loop_exhausted|tool-call loop did not converge",
-        "the round a late message starts counts against the cap"
+        show(&machine.step(reply("again"))),
+        "return",
+        "the late message's round spent the cap of 2, so no read follows its reply"
     );
+    let mut capped = chatting(1, &MessageList::default());
+    assert_eq!(
+        show(&capped.step(reply("done"))),
+        "return",
+        "the round a late message would start counts, so a spent cap skips the read"
+    );
+    assert!(matches!(capped.phase(), Phase::Done));
 }
 
 #[test]

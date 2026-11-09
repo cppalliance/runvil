@@ -333,7 +333,7 @@ pub fn runvil::Prompt::frontmatter(&self) -> &runvil::prompt::Frontmatter
 pub fn runvil::Prompt::parse(finder: &dyn runvil::PromptFinder, name: &str) -> (core::result::Result<runvil::Prompt, runvil::Error>, alloc::vec::Vec<runvil::event::Event>)
 pub fn runvil::Prompt::title(&self) -> &str
 pub fn runvil::PromptFinder::find(&self, name: &str) -> core::result::Result<alloc::string::String, runvil::Error>
-pub fn runvil::Run::deliver(&mut self, text: alloc::string::String) -> runvil::event::Event
+pub fn runvil::Run::deliver(&mut self, text: alloc::string::String) -> alloc::vec::Vec<runvil::event::Event>
 pub fn runvil::Run::new(prompt: alloc::sync::Arc<runvil::Prompt>, args: &str, params: runvil::RunParams) -> runvil::Run
 pub fn runvil::Run::resume(&mut self, id: runvil::effect::EffectId, answer: runvil::effect::EffectAnswer)
 pub fn runvil::Run::step(&mut self) -> runvil::Step

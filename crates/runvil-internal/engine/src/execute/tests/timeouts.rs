@@ -4,7 +4,8 @@
 //! timed_out` with the unfinished members absent. When a member wins the
 //! shim cancels the timer and its leaf work is dropped. The timer is an
 //! effect-backed entry the author never sees: `tasks.pending` and a status
-//! table's `tasks` list omit it, and it reports no task observations.
+//! table's `tasks` list omit it, it reports no task observations, and it
+//! has no inbox, so a send to it is refused.
 //!
 //! A slow member parks on a model round the rig holds while it answers the
 //! timer, then releases; a timer that must not win is held instead.
@@ -97,6 +98,61 @@ fn join_any_cancels_the_timer_when_a_member_wins() {
         recorder.observations_of(&task("0.1")).is_empty(),
         "the internal timer reports no task observations: {:?}",
         recorder.records()
+    );
+}
+
+#[test]
+fn a_send_to_the_internal_timer_of_a_timed_join_any_raises_task_not_owned() {
+    // The timer has no inbox, whether the member won and the shim
+    // canceled it or it fired first and the wait returned nil.
+    let send = "local ok, err = pcall(tasks.send, '0.1', 'x')\n";
+    let md = tasks_prompt(
+        &format!(
+            "local t = tasks.spawn('## Child')\n\
+             tasks.join_any({{ t }}, {{ timeout = 30 }})\n\
+             {send}\
+             return tostring(ok) .. ' ' .. err.kind"
+        ),
+        &[("Child", "return 'quick'")],
+    );
+    let mut rig = Rig::run(scheduler_scenario(md).hold(is_timer));
+    assert_eq!(
+        rig.trace().text(),
+        "false task_not_owned",
+        "the canceled timer refuses the send"
+    );
+    assert_eq!(
+        rig.task_state_for_test(&task("0.1")),
+        Some(TaskState::Canceled)
+    );
+
+    let gateway = ScriptedChat::new(vec![text("slow answer")]);
+    let md = tasks_prompt(
+        &format!(
+            "local t = tasks.spawn('## Child')\n\
+             tasks.join_any({{ t }}, {{ timeout = 0.05 }})\n\
+             {send}\
+             tasks.join_any({{ t }})\n\
+             return tostring(ok) .. ' ' .. err.kind"
+        ),
+        &[("Child", "return models.infer('slow please')")],
+    );
+    let mut rig = Rig::start(
+        scheduler_scenario(md)
+            .chat(&gateway)
+            .hold(asks("slow please")),
+    );
+    rig.settle();
+    rig.release(asks("slow please"));
+    let mut rig = rig.finish();
+    assert_eq!(
+        rig.trace().text(),
+        "false task_not_owned",
+        "the fired timer refuses the send"
+    );
+    assert_eq!(
+        rig.task_state_for_test(&task("0.1")),
+        Some(TaskState::Delivered { ok: true })
     );
 }
 

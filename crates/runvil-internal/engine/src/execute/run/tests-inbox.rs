@@ -1,6 +1,7 @@
 //! The main chain's inbox at the run's boundary: `Run::deliver` queues a
-//! message and returns the `InboxMessage` event that reports it, the next
-//! step applies it, and `tasks.receive()` takes the oldest message or waits
+//! message and returns the events to record before the next step, the
+//! `InboxMessage` event that reports the message last, the next step
+//! applies it, and `tasks.receive()` takes the oldest message or waits
 //! for one, in the main chain, the H1 pass, and their `call` children.
 //! `waiting_for_input` reports that wait, and `Step::Done` hands back every
 //! message the run never read.
@@ -63,6 +64,16 @@ pub(super) fn answer_store(run: &mut Run, effects: &[IssuedEffect], outcome: Vfs
         "the one effect is a store call: {effects:?}"
     );
     run.resume(id, EffectAnswer::Vfs(Ok(outcome)));
+}
+
+/// The one event `delivered` holds: a delivery with no answer resumed
+/// since the last step returns its message's event alone.
+#[track_caller]
+fn only_event(delivered: &[Event]) -> &Event {
+    let [event] = delivered else {
+        panic!("deliver returns the message's event alone: {delivered:?}");
+    };
+    event
 }
 
 /// The sequence numbers of the events in `events` stamped under task `0`.
@@ -134,12 +145,13 @@ fn deliver_returns_the_inbox_message_event_and_the_applying_step_reports_no_seco
     );
     let (_, before, waiting) = pending(&mut run);
     assert!(waiting, "the main chain waits on its inbox");
-    let event = run.deliver("hello".to_owned());
+    let delivered = run.deliver("hello".to_owned());
+    let event = only_event(&delivered);
     let Event::InboxMessage {
         section,
         provenance,
         text,
-    } = &event
+    } = event
     else {
         panic!("deliver reports the message: {event:?}");
     };
@@ -175,9 +187,10 @@ fn deliver_returns_the_inbox_message_event_and_the_applying_step_reports_no_seco
 #[test]
 fn deliver_before_the_run_starts_reports_under_the_prompts_title() {
     let mut run = run_of("return tasks.receive()", run_params());
-    let event = run.deliver("early".to_owned());
+    let delivered = run.deliver("early".to_owned());
+    let event = only_event(&delivered);
     assert!(
-        matches!(&event, Event::InboxMessage { section, text, .. } if section == "Run" && text == "early"),
+        matches!(event, Event::InboxMessage { section, text, .. } if section == "Run" && text == "early"),
         "no section runs yet, so the event reports under the title: {event:?}"
     );
     assert_eq!(event.provenance().task, main_task());
@@ -294,7 +307,8 @@ fn a_receive_in_a_call_child_reads_the_main_chains_inbox() {
     let (effects, _, waiting) = pending(&mut run);
     assert!(effects.is_empty(), "{effects:?}");
     assert!(waiting, "the call child waits on the main chain's inbox");
-    let event = run.deliver("hello".to_owned());
+    let delivered = run.deliver("hello".to_owned());
+    let event = only_event(&delivered);
     assert_eq!(event.provenance().task, main_task());
     assert_eq!(
         event.section(),

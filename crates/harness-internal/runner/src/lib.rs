@@ -37,9 +37,10 @@
 //! - The recorder is written in loop order: a step's events before the
 //!   step's effects are issued, each effect before its performer starts,
 //!   each answer before the run resumes with it, and each sent message's
-//!   `InboxMessage` event as the loop delivers it, before the step that
-//!   applies it. Every effect record has exactly one answer record; a
-//!   dropped effect's answer is `Dropped`.
+//!   `InboxMessage` event as the loop delivers it, after the events of
+//!   the answers resumed before it and before the step that applies it.
+//!   Every effect record has exactly one answer record; a dropped
+//!   effect's answer is `Dropped`.
 //! - The loop never reads an event to decide anything; control comes
 //!   from the run's own word (`Step` and the effects it withdraws), the
 //!   cancel flag, the Host's stop, and the messages the Host sends.

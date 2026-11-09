@@ -24,8 +24,9 @@
 //! and sends again without counting a round, and a compacted retry's
 //! snapshot keeps them, so a restore cannot lose them. After the final
 //! reply the loop reads the inbox once more: messages it finds start
-//! another round, and none returns, so the loop never returns with a
-//! message unread.
+//! another round, and none returns. A spent round cap skips that read, so
+//! the loop returns its reply and a late message stays queued for the
+//! chain's next read.
 
 use runvil_model_client::model::make_completion_error;
 use runvil_types::error::{ErrorCode, ErrorFact};
@@ -298,9 +299,10 @@ impl<V: Clone> Machine<V> {
     /// Judges a round's answer: an overflow goes to [`Machine::overflow`]
     /// with the snapshot a compacted round holds, tool calls start a
     /// batch, a reply is appended and the loop reads its inbox once more
-    /// before it returns, an empty reply that finished with `stop` after an
-    /// answered call is the clean exit, which reads it too, and anything
-    /// else raises `empty_model_reply`.
+    /// before it returns unless its cap is spent, an empty reply that
+    /// finished with `stop` after an answered call is the clean exit,
+    /// which reads it the same way, and anything else raises
+    /// `empty_model_reply`.
     fn judge(&mut self, round: ChatResult, compacted: Option<Snapshot>) -> Then<V> {
         let detail = match round.outcome {
             ChatOutcome::Overflow(reason) => return self.overflow(reason, compacted),
@@ -331,9 +333,14 @@ impl<V: Clone> Machine<V> {
         Then::RaiseNew(empty)
     }
 
-    /// Reads the chain's inbox once more after the final reply, so the
-    /// loop never returns with a message unread.
+    /// Reads the chain's inbox once more after the final reply, so a
+    /// message that arrived meanwhile starts another round. Once the cap's
+    /// rounds have all started, no round can follow, so the loop returns
+    /// at once and leaves any message queued for the chain's next read.
     fn check(&mut self) -> Then<V> {
+        if self.rounds >= self.max_rounds {
+            return Then::Return;
+        }
         self.phase = Phase::Checking;
         Then::Arrivals
     }

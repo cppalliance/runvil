@@ -5,9 +5,12 @@
 //! as neither a round nor a turn; one that arrives while tool calls run,
 //! or while the render before the first request has no answer, waits for
 //! them and is appended before the next request; and one that lands as
-//! the final request answers keeps the loop going. A stop still raises
-//! `canceled`, and leaves the message queued for the next reader, and a
-//! canceled run hands back the messages its loop took and never read.
+//! the final request answers keeps the loop going, unless its round cap is
+//! spent, which leaves the message queued. `Run::deliver` returns the
+//! events the answers resumed before it produced, ahead of the message. A
+//! stop still raises `canceled`, and leaves the message queued for the
+//! next reader, and a canceled run hands back the messages its loop took
+//! and never read.
 
 use std::collections::BTreeMap;
 
@@ -17,7 +20,7 @@ use runvil_types::models::{ModelRole, ThinkingMode};
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use serde_json::json;
 
-use super::inbox::done;
+use super::inbox::{done, main_task};
 use super::*;
 use crate::lua::VfsOutcome;
 use crate::model::{Completion, CompletionResult, ToolCall};
@@ -157,6 +160,16 @@ fn one_call() -> EffectAnswer {
     EffectAnswer::Chat(Ok(Box::new(completion)))
 }
 
+/// Where the first of `events` that `wanted` takes sits, failing naming
+/// `what` when none does.
+#[track_caller]
+fn position(events: &[Event], what: &str, wanted: impl Fn(&Event) -> bool) -> usize {
+    events
+        .iter()
+        .position(wanted)
+        .unwrap_or_else(|| panic!("the events hold {what}: {events:?}"))
+}
+
 /// The turns of the assistant replies among `events`.
 fn reply_turns(events: &[Event]) -> Vec<u32> {
     events
@@ -294,7 +307,7 @@ fn a_message_that_lands_as_the_final_request_answers_makes_the_loop_go_on() {
     let first = step(&mut run);
     let (round, _) = only_round(&first.effects);
     run.resume(round, chat_answer(&text("first")));
-    let _ = run.deliver("late".to_owned());
+    let delivered = run.deliver("late".to_owned());
     let second = step(&mut run);
     assert!(
         second.withdrawn.is_empty(),
@@ -316,10 +329,95 @@ fn a_message_that_lands_as_the_final_request_answers_makes_the_loop_go_on() {
         )
     );
     assert_eq!(
-        [reply_turns(&second.events), reply_turns(&events)].concat(),
+        [
+            reply_turns(&delivered),
+            reply_turns(&second.events),
+            reply_turns(&events)
+        ]
+        .concat(),
         [1, 2],
         "both rounds were answered, so each took a turn"
     );
+}
+
+#[test]
+fn deliver_returns_the_events_a_resumed_answer_produced_ahead_of_the_message() {
+    let mut run = loop_run(
+        "",
+        &format!("messages:user('hi')\nmodels.loop()\n{RECORDS}"),
+    );
+    let first = step(&mut run);
+    let (round, _) = only_round(&first.effects);
+    run.resume(round, chat_answer(&text("first")));
+    let delivered = run.deliver("late".to_owned());
+    let completed = position(&delivered, "the round's turn", |event| {
+        matches!(event, Event::ModelTurnCompleted { .. })
+    });
+    let replied = position(
+        &delivered,
+        "the round's reply",
+        |event| matches!(event, Event::AssistantReply { text, .. } if text == "first"),
+    );
+    let message = position(
+        &delivered,
+        "the message",
+        |event| matches!(event, Event::InboxMessage { text, .. } if text == "late"),
+    );
+    assert!(
+        completed < replied && replied < message && message + 1 == delivered.len(),
+        "the round's events come first and the message last: {delivered:?}"
+    );
+    let second = step(&mut run);
+    let (next, _) = only_round(&second.effects);
+    run.resume(next, chat_answer(&text("second")));
+    let (result, events) = finish(&mut run);
+    result.expect("the loop returns");
+    let recorded = [first.events, delivered, second.events, events].concat();
+    let seqs: Vec<u32> = recorded
+        .iter()
+        .filter(|event| event.provenance().task == main_task())
+        .map(|event| event.provenance().seq)
+        .collect();
+    assert!(
+        seqs.windows(2).all(|pair| pair[0] < pair[1]),
+        "task 0's events in record order are in seq order: {seqs:?}"
+    );
+}
+
+#[test]
+fn at_a_spent_round_cap_a_message_that_lands_with_the_final_reply_stays_queued() {
+    let mut run = loop_run(
+        "max_tool_iterations: 1",
+        &format!("messages:user('hi')\nmodels.loop()\n{RECORDS}"),
+    );
+    let first = step(&mut run);
+    let (round, _) = only_round(&first.effects);
+    run.resume(round, chat_answer(&text("reply")));
+    let _ = run.deliver("late".to_owned());
+    let (result, unread) = done(&mut run);
+    assert_eq!(
+        result.expect("the loop returns its reply, and nothing raises"),
+        "user:hi|assistant:reply",
+        "the spent cap leaves the message out of `messages`"
+    );
+    assert_eq!(unread, ["late"], "the message stays queued, unread");
+
+    let mut run = loop_run(
+        "max_tool_iterations: 1",
+        "messages:user('hi')\n\
+         local ok = pcall(models.loop)\n\
+         return tostring(ok) .. '|' .. messages[#messages].content .. '|' .. tasks.receive()",
+    );
+    let first = step(&mut run);
+    let (round, _) = only_round(&first.effects);
+    run.resume(round, chat_answer(&text("reply")));
+    let _ = run.deliver("late".to_owned());
+    let (result, unread) = done(&mut run);
+    assert_eq!(
+        result.expect("the next read returns the message at once"),
+        "true|reply|late"
+    );
+    assert!(unread.is_empty(), "{unread:?}");
 }
 
 #[test]

@@ -383,8 +383,10 @@ events! {
         },
         /// A message entered a chain's inbox, from `Run::deliver` or
         /// `tasks.send`, under the receiving chain's provenance.
-        /// `Run::deliver` returns it; the step that applies a `tasks.send`
-        /// message emits it.
+        /// `Run::deliver` returns it last; the step that applies a
+        /// `tasks.send` message emits it, or, for a task still waiting for
+        /// admission, the step that admits the task, right after its
+        /// `TaskStarted`.
         InboxMessage {
             /// The message as sent: untrusted text from whoever sent it.
             text: String,

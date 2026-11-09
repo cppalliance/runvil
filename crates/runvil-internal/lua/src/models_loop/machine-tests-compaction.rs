@@ -82,8 +82,11 @@ fn a_compaction_that_shrank_retries_without_counting_and_keeps_its_records() {
         "the retry is not counted against a cap of 1"
     );
     assert!(!list.compacting());
-    assert_eq!(show(&machine.step(reply("done"))), "arrivals");
-    settle(&mut machine);
+    assert_eq!(
+        show(&machine.step(reply("done"))),
+        "return",
+        "the round spent the cap, so the loop returns without the last read"
+    );
     assert_eq!(records(&list), ["user short||", "assistant done||"]);
 }
 
@@ -117,7 +120,7 @@ fn a_second_overflow_restores_the_snapshot_and_a_failed_retry_keeps_the_compacti
 #[test]
 fn a_retry_answered_with_tool_calls_drops_the_snapshot_so_a_later_round_compacts_again() {
     let list = long_list();
-    let mut machine = chatting(2, &list);
+    let mut machine = chatting(3, &list);
     machine.step(overflow(OverflowReason::Precheck));
     short(&list);
     machine.step(called(Ok("returned"), false));

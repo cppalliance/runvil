@@ -17,6 +17,9 @@
 //! a reply past [`RunLimits::max_idle_tasks`](crate::execute::RunLimits::max_idle_tasks)
 //! closes the task idle longest, which ends as if it had returned its
 //! latest reply.
+//!
+//! However a task stops being live, its inbox goes with it, so a long run
+//! keeps no message that no chain can read.
 
 use std::sync::Arc;
 
@@ -33,9 +36,10 @@ use super::{ChainIndex, Scheduler};
 impl Scheduler {
     /// Applies a task chain's end to its entry: the outcome lands in the
     /// entry, the entry moves to `Ended`, the task's terminal observation
-    /// fires under its target section, and an owner parked on a set
-    /// containing the task is woken with it delivered. Otherwise the entry
-    /// holds the outcome until a wait takes it.
+    /// fires under its target section, its inbox is dropped with any
+    /// message still in it, and an owner parked on a set containing the
+    /// task is woken with it delivered. Otherwise the entry holds the
+    /// outcome until a wait takes it.
     ///
     /// # Errors
     /// Returns an `Internal` failure when the chain has no live entry - every
@@ -70,6 +74,7 @@ impl Scheduler {
                 }
             }
         });
+        self.inboxes.discard(&task);
         self.wake_waiter(owner, &task)
     }
 
@@ -209,13 +214,15 @@ impl Scheduler {
     }
 
     /// Ends the backing of a task the arena just stopped, the one path a
-    /// cancel and an abandonment share: an internal timer's effect is
-    /// aborted and reports nothing; a chain aborts with everything it owns,
-    /// then `terminal` fires under `target`. The backing ends first, so
-    /// anything it owned reports before the task's own terminal event,
-    /// which is the last word on it. A task still queued for a slot is
-    /// silent: it has no start event, so it reports no terminal, and the
-    /// abort is all that happens. Returns whether the backing was a chain.
+    /// cancel, an abandonment, and the idle cap's close share: an internal
+    /// timer's effect is aborted and reports nothing; a chain's inbox is
+    /// dropped with any message still in it, the chain aborts with
+    /// everything it owns, then `terminal` fires under `target`. The
+    /// backing ends first, so anything it owned reports before the task's
+    /// own terminal event, which is the last word on it. A task still
+    /// queued for a slot is silent: it has no start event, so it reports no
+    /// terminal, and a message sent to it was never reported either.
+    /// Returns whether the backing was a chain.
     pub(super) fn end_backing(
         &mut self,
         backing: TaskBacking,
@@ -235,6 +242,7 @@ impl Scheduler {
         // a slot) has no start event, so it reports no terminal either.
         let admitted = !self.admission.is_queued(chain);
         let emitter = Arc::clone(self.chains[chain].ctx.emitter());
+        self.inboxes.discard(&self.chains[chain].task);
         self.abort_subtree(chain);
         if admitted {
             emitter.emit(target, terminal);

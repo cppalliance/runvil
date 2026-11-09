@@ -51,10 +51,12 @@
 //! panics is caught where it runs and answered `Dropped` the same way.
 //!
 //! The loop delivers each message a Host sends to the run's main chain
-//! through `Run::deliver`, and records the `InboxMessage` event that
-//! returns before the step that applies the message. A message sent
-//! before the run starts is delivered before its first step, and a later
-//! one the next time the loop waits, and then the loop steps again. A stop
+//! through `Run::deliver`, and records the events that return before the
+//! step that applies the message: those of the answers resumed since the
+//! last step, so a reply that landed first is recorded first, then the
+//! message's `InboxMessage` event. A message sent before the run starts
+//! is delivered before its first step, and a later one the next time the
+//! loop waits, and then the loop steps again. A stop
 //! raised before a send is handled first, and so is every answer that
 //! landed beside it, so a round whose answer arrived is not withdrawn for
 //! the message. A message the loop never delivers before the run ends
@@ -484,12 +486,13 @@ impl Driver {
     }
 
     /// Delivers each of `texts`, oldest first, to the run's main chain
-    /// for the next step to apply, and records the `InboxMessage` event
-    /// each delivery returns as it is made.
+    /// for the next step to apply, and records the events each delivery
+    /// returns, in order, as it is made: those of the answers resumed
+    /// since the last step, then the message's `InboxMessage` event.
     async fn deliver(&mut self, texts: Vec<String>) -> Result<(), Error> {
         for text in texts {
-            let event = self.run.deliver(text);
-            self.commit_event(&event).await?;
+            let events = self.run.deliver(text);
+            self.commit_events(events).await?;
         }
         Ok(())
     }

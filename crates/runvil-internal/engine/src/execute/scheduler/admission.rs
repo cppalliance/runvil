@@ -3,18 +3,20 @@
 //!
 //! Admission bounds the run: every task chain takes a slot at its owner
 //! and at every enclosing ancestor, held until the task ends - except
-//! while it, or a `call` chain it is blocked on, is parked on a task
-//! wait, which gives the slot back so its descendants can run - and a
-//! chain admits at most its effective limit at once. Each chain's limit
-//! is its [`Chain::concurrency`](super::Chain::concurrency). Queue
+//! while it, or a `call` chain it is blocked on, is parked on a task wait
+//! or an inbox wait, which gives the slot back so other tasks under the
+//! same limits can run, such as its descendants while it waits on them -
+//! and a chain admits at most its effective limit at once. Each chain's
+//! limit is its [`Chain::concurrency`](super::Chain::concurrency). Queue
 //! order is spawn order, with resumptions first. The task's start event
-//! fires at admission, when the task first runs.
+//! fires at admission, when the task first runs, and the messages its
+//! owner sent it before then are reported right after it.
 //!
 //! [`Admission`] owns the admission state and enforces these rules. It
 //! reads the chain tree only through [`ChainTree`], a read-only view of
 //! the chain arena and the task arena, and writes neither: the scheduler
 //! applies each admission it plans - the chain's parked state, the ready
-//! queue, and the start event.
+//! queue, the start event, and the messages reported after it.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::NonZeroUsize;
@@ -48,8 +50,8 @@ pub(super) struct SpawnRecord {
 /// One chain an admission pass admitted, for the scheduler to apply.
 #[derive(Debug)]
 enum Admit {
-    /// A chain parked on a task wait took its slots back: it resumes with
-    /// the answer its wake delivered.
+    /// A chain parked on a task wait or an inbox wait took its slots back:
+    /// it resumes with the answer its wake delivered.
     Resumed(ChainIndex),
     /// A queued task chain took its slots for the first time, with the
     /// spawn record its start event reports.
@@ -111,23 +113,25 @@ impl ChainTree<'_> {
 /// can drift from them.
 #[derive(Debug, Default)]
 pub(super) struct Admission {
-    /// Chains parked on a task wait that gave their admission slots back,
-    /// waiting to take them again: a task chain, or a call chain that gave
-    /// back its nearest holding ancestor's slots. Each keeps its Lua VM and
-    /// holds its delivered answer. Admitted ahead of every fresh spawn.
+    /// Chains parked on a task wait or an inbox wait that gave their
+    /// admission slots back, waiting to take them again: a task chain, or
+    /// a call chain that gave back its nearest holding ancestor's slots.
+    /// Each keeps its Lua VM and holds its delivered answer. Admitted ahead
+    /// of every fresh spawn.
     resuming: VecDeque<ChainIndex>,
     /// Freshly spawned task chains waiting for admission, in spawn order,
     /// each with its spawn record; admitted after every resuming chain. A
     /// queued spawn holds no Lua VM yet: admission is what starts it.
     spawned: VecDeque<(ChainIndex, SpawnRecord)>,
     /// The task chains holding their admission slots now: from admission
-    /// until they end or park on a task wait. A task blocked on a `call`
-    /// child gives them back while that child parks on a task wait.
+    /// until they end or park on a task wait or an inbox wait. A task
+    /// blocked on a `call` child gives them back while that child parks on
+    /// either.
     holding: HashSet<ChainIndex>,
-    /// Each call chain parked on a task wait that gave back its nearest
-    /// holding ancestor's slots, with that ancestor: the map of chains that
-    /// gave slots back, not of the slots, so the chain's wake takes the
-    /// ancestor's slots back before the chain continues.
+    /// Each call chain parked on a task wait or an inbox wait that gave
+    /// back its nearest holding ancestor's slots, with that ancestor: the
+    /// map of chains that gave slots back, not of the slots, so the chain's
+    /// wake takes the ancestor's slots back before the chain continues.
     gave_back: HashMap<ChainIndex, ChainIndex>,
 }
 
@@ -212,15 +216,17 @@ impl Admission {
         Ok(admitted)
     }
 
-    /// Parks `id` on a task wait. A wait that holds real tasks gives
-    /// admission slots back - a timer-only wait keeps them, since nothing
-    /// it waits for needs a slot - so the chain's descendants can run
-    /// under its limit. A task chain gives back its own. A call chain
-    /// holds no slots of its own, so it gives back those of its nearest
-    /// holding ancestor through its call parents (the task it runs inside,
-    /// blocked on the call) and records which chain gave them. A call
-    /// chain in the main walk finds no holding ancestor, and the main walk
-    /// holds no slots to give.
+    /// Parks `id` on a task wait or an inbox wait. An inbox wait gives
+    /// admission slots back, and so does a task wait that holds real
+    /// tasks, so other tasks under the same limits can run, such as the
+    /// chain's descendants while it waits on them; a timer-only wait keeps
+    /// them, since nothing it waits for needs a slot, and is the one park
+    /// with `waits_on_tasks` unset. A task chain gives back its own. A call
+    /// chain holds no slots of its own, so it gives back those of its
+    /// nearest holding ancestor through its call parents (the task it runs
+    /// inside, blocked on the call) and records which chain gave them. A
+    /// call chain in the main walk finds no holding ancestor, and the main
+    /// walk holds no slots to give.
     pub(super) fn park(&mut self, id: ChainIndex, tree: &ChainTree<'_>, waits_on_tasks: bool) {
         if !waits_on_tasks {
             return;
@@ -238,11 +244,11 @@ impl Admission {
         }
     }
 
-    /// Wakes `id` from a task wait, and reports whether it was queued to
-    /// take its slots back: a task chain that gave its slots back, and a
-    /// call chain that gave back its ancestor's, are admitted again ahead
-    /// of fresh starts, while the main walk and a chain that kept its
-    /// slots (a timer-only wait) resume at once.
+    /// Wakes `id` from a task wait or an inbox wait, and reports whether it
+    /// was queued to take its slots back: a task chain that gave its slots
+    /// back, and a call chain that gave back its ancestor's, are admitted
+    /// again ahead of fresh starts, while the main walk and a chain that
+    /// kept its slots (a timer-only wait) resume at once.
     fn wake(&mut self, id: ChainIndex, tree: &ChainTree<'_>) -> bool {
         let requeue = match tree.kind(id) {
             ChainKind::Call { .. } => self.gave_back.contains_key(&id),
@@ -351,7 +357,10 @@ impl Scheduler {
     /// event with the spawn record on its owner's sequence (its spawner, or
     /// the root walk for a task the H1 pass spawned) under the spawning
     /// section (the spawn-time capture, so a task admitted after its
-    /// spawner moved on still reports where it was spawned).
+    /// spawner moved on still reports where it was spawned). Right after
+    /// it, each message the owner sent while the task waited for admission
+    /// is reported, oldest first, as an `InboxMessage` on the task's own
+    /// sequence under the section it starts at.
     ///
     /// # Errors
     /// Returns an `Internal` failure when its task has no entry: a spawn
@@ -382,13 +391,27 @@ impl Scheduler {
             index,
             var,
         });
+        let chain = &self.chains[id];
+        for text in self.inboxes.queued(&chain.task) {
+            chain
+                .ctx
+                .emitter()
+                .emit(chain.section_name(), |section, provenance| {
+                    Event::InboxMessage {
+                        section,
+                        provenance,
+                        text: text.to_owned(),
+                    }
+                });
+        }
         self.ready.push_back(id);
         Ok(())
     }
 
-    /// Delivers its answer to a chain parked on a task wait: the chain is
-    /// parked on [`Parked::Queued`] when [`Admission::wake`] requeues it for
-    /// its slots, else pushed onto the ready queue at once.
+    /// Delivers its answer to a chain parked on a task wait or an inbox
+    /// wait: the chain is parked on [`Parked::Queued`] when
+    /// [`Admission::wake`] requeues it for its slots, else pushed onto the
+    /// ready queue at once.
     ///
     /// # Errors
     /// Returns an `Internal` failure when the chain has no suspended block
