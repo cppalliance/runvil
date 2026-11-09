@@ -63,6 +63,7 @@ The language guide and the Rust docs say what the code does.
   - On resume, take step 4's commit from `runvil-docs`'s HEAD.
   - Before step 4 makes its first change, check that `runvil-docs` has a clean worktree; when it does not, stop and ask the user.
 - Known failure: `cargo test -p build-xtask` fails because step 1's `queued_for_test` hook in `crates/runvil-internal/engine/src/execute/scheduler/test_hooks.rs` put `Scheduler` at 83 inherent methods, past the 82 its entry in `crates/build-xtask/src/type_size.rs` records.
+- Stale guide passage: `runvil-docs` file `src/language/01-what-a-prompt-is.md` line 452 says every Pack a Plugin adds "is built then and shared across runs", but each run makes its own instance with the Pack's factory (`Packs::snapshot` in `crates/harness-internal/runner/src/packs.rs`).
 
 ## Terms
 
@@ -266,7 +267,7 @@ impl TaskArena {
 
 <step-4>
 
-4. **Guide: the fixed rules and the stale passages** (points: 10) - In `runvil-docs`, describe the rules steps 1 to 3 built, and fix the passages that are false at HEAD `1b19d20`.
+4. [done] **Guide: the fixed rules and the stale passages** (points: 10) - In `runvil-docs`, describe the rules steps 1 to 3 built, and fix the passages that are false at HEAD `1b19d20`.
 
    In `src/language/15-tasks.md`:
    - Rewrite the cancel paragraph at line 799. A cancel withdraws every effect the task still has unanswered: a model round, a render, a store call, a timed wait's timer, and every tool call. The Harness stops the work already running and drops the rest unstarted. A store call the task made in the cancel's own step is dropped unperformed, and a write the Harness already performed stays.
