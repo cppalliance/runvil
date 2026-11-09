@@ -78,7 +78,7 @@ async fn refusals_are_error_frames_and_the_socket_survives() {
     );
 
     socket
-        .send_json(&json!({ "type": "input_response", "token": "t", "text": "hi" }))
+        .send_json(&json!({ "type": "input_response", "text": "hi" }))
         .await;
     let frame = socket.recv_json().await;
     assert_eq!(frame["type"], "error");
@@ -108,7 +108,7 @@ async fn refusals_are_error_frames_and_the_socket_survives() {
 
     // Attached, an input_response still validates its shape.
     socket
-        .send_json(&json!({ "type": "input_response", "token": 7 }))
+        .send_json(&json!({ "type": "input_response", "text": 7 }))
         .await;
     let frame = socket
         .recv_until(Duration::from_secs(10), |frame| frame["type"] == "error")

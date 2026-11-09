@@ -23,8 +23,7 @@ use crate::search::WebSearch;
 /// The Pack's `PackInfo`.
 ///
 /// Its FQN is `runvil/web`, so its Pack id is `web`. It has no prelude,
-/// and its factory reads none of the run's services; its `install` reads
-/// [`SEARCH_PROVIDER`] and the Plugin contract's
+/// and its `install` reads [`SEARCH_PROVIDER`] and the Plugin contract's
 /// [`runvil_plugin::TOKIO_RUNTIME`] service from the Host-wide services
 /// and takes no configuration but `null` or `{}`.
 const WEB: PackInfo = PackInfo::new("runvil/web").description("Search the web and fetch pages");
@@ -106,7 +105,7 @@ impl Clients {
 impl PackFactory for Clients {
     /// Makes the Pack under the Pack id `id` over clones of the shared
     /// clients, naming the tools `<id>/fetch` and `<id>/search`.
-    fn new_pack(&self, id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+    fn new_pack(&self, id: &PackId) -> Result<Arc<dyn Pack>, Error> {
         let web = Web::new(id, self.fetch.clone(), self.search.clone())?;
         Ok(Arc::new(web))
     }

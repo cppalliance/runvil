@@ -4,10 +4,10 @@
 
 use super::*;
 
-/// GATE 11 - the operator's message. The chat asks through `input.ask()`:
-/// the broker's wait frames show the wait and clear it when it dies, the
-/// answer frames as the operator's `user_message` rather than a tool
-/// result, and the model receives the text as typed.
+/// GATE 11 - the operator's message. The chat reads it through
+/// `tasks.receive()`: the log shows each wait on its inbox as
+/// `awaiting_input`, the message frames as the operator's `user_message`
+/// rather than a tool result, and the model receives the text as typed.
 #[tokio::test]
 async fn gate_the_operators_message_frames_as_a_user_message_between_wait_frames() {
     let server = spawn_chat_server(&["test-model"]).await;
@@ -15,8 +15,13 @@ async fn gate_the_operators_message_frames_as_a_user_message_between_wait_frames
     let _session = launch_chat(&mut socket).await;
 
     let typed = "two  words\r\n\"quoted\" 🦀";
-    let token = next_wait_token(&mut socket).await;
-    answer(&mut socket, &token, typed).await;
+    let first = next_wait(&mut socket).await;
+    assert_eq!(
+        first["event"],
+        json!({ "kind": "awaiting_input", "section": "Conversation", "turn": 0, "content": "" }),
+        "the chat's first read of its empty inbox frames as the wait for the operator"
+    );
+    answer(&mut socket, typed).await;
     let turn = collect_turn(&mut socket).await;
     let kinds: Vec<&str> = turn
         .events
@@ -26,7 +31,7 @@ async fn gate_the_operators_message_frames_as_a_user_message_between_wait_frames
     assert_eq!(
         kinds,
         ["user_message", "agent_thought", "agent_message"],
-        "the ask shows as the operator's message, never as a tool call update"
+        "the message shows as the operator's own, never as a tool call update"
     );
     assert_eq!(
         turn.events[0]["event"],
@@ -48,17 +53,18 @@ async fn gate_the_operators_message_frames_as_a_user_message_between_wait_frames
         );
     }
 
-    // A stop with only the next ask open leaves that wait open: its own
-    // token answers it, and the turn it starts frames like the first.
-    let open = wait_after(&mut socket, &turn).await;
-    assert_ne!(open, token, "each ask opens its own wait");
+    // A stop while the chat waits leaves that wait: the next message
+    // answers it, and the turn it starts frames like the first.
+    let open = next_wait(&mut socket).await;
+    assert_ne!(open, first, "each read of the empty inbox is its own wait");
     socket.send_json(&json!({ "type": "cancel" })).await;
-    answer(&mut socket, &open, "after stop").await;
+    answer(&mut socket, "after stop").await;
     let turn = collect_turn(&mut socket).await;
     assert_eq!(
         turn.events[0]["event"]["content"], "after stop",
-        "the open wait's own token answered it"
+        "the wait the stop left answered the next message"
     );
+    assert!(turn.waits.is_empty(), "the stop never woke the wait");
     socket.close().await;
 }
 
@@ -73,12 +79,11 @@ async fn gate_history_accumulates_across_three_turns_byte_exact() {
 
     let gnarly = "line1\r\nline2 \"quoted\" {\"text\":\"decoy\"} \\slash 🦀";
     let inputs = ["first ping", gnarly, "third"];
-    let mut token = next_wait_token(&mut socket).await;
     for input in inputs {
-        answer(&mut socket, &token, input).await;
+        next_wait(&mut socket).await;
+        answer(&mut socket, input).await;
         let turn = collect_turn(&mut socket).await;
         assert_eq!(delta_text(&turn), format!("echo:{input}"));
-        token = wait_after(&mut socket, &turn).await;
     }
 
     {
@@ -122,8 +127,8 @@ async fn gate_a_conversation_round_advertises_the_file_tools() {
     let mut socket = connect_chat(&server.ws_base).await;
     let _session = launch_chat(&mut socket).await;
 
-    let token = next_wait_token(&mut socket).await;
-    answer(&mut socket, &token, "ping").await;
+    next_wait(&mut socket).await;
+    answer(&mut socket, "ping").await;
     let turn = collect_turn(&mut socket).await;
     assert_eq!(delta_text(&turn), "echo:ping");
     {
@@ -154,8 +159,8 @@ async fn gate_a_conversation_round_advertises_the_web_tools() {
     let mut socket = connect_chat(&server.ws_base).await;
     let _session = launch_chat(&mut socket).await;
 
-    let token = next_wait_token(&mut socket).await;
-    answer(&mut socket, &token, "ping").await;
+    next_wait(&mut socket).await;
+    answer(&mut socket, "ping").await;
     let turn = collect_turn(&mut socket).await;
     assert_eq!(delta_text(&turn), "echo:ping");
     {

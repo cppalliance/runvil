@@ -1,7 +1,7 @@
 //! The agent conversations' Harness setup: after the server calls the
-//! three Plugins and builds its Host, every run holds the `web`,
-//! `user-input`, `subagents`, and `mcp` Packs, and the ask is the fixed
-//! `user-input/ask` of vendor `runvil`. A prompt declaring `web` or the built-in
+//! three Plugins and builds its Host, every run of a conversation, which
+//! has a user, holds the `web`, `subagents`, `mcp`, `std`, and `user`
+//! Packs. A prompt declaring `web` or the built-in
 //! `subagents` prepares over the server's installed Packs, a Host without
 //! the search provider installs web unavailable and refuses the prompt as
 //! it parses, naming that service, and outside a runtime the services leave
@@ -21,7 +21,6 @@ use harness::record::MemoryRecorder;
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Host, InferenceBroker, RunSetup};
 use plugin_web::SEARCH_PROVIDER;
-use runvil::ToolId;
 use runvil::effect::Round;
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
@@ -33,7 +32,6 @@ use serde_json::json;
 use workshop_agents::{Conversations, SessionState, TokioTimer, load_agent};
 use workshop_registry::Registry;
 
-use super::wire::AskTool;
 use super::{agent_finder, host_packs, read_mcp_servers, services, with_plugins};
 
 /// The runtime's key, built from the Plugin contract's name as any Host
@@ -77,11 +75,11 @@ async fn run_prompt(packs: Packs, source: String) -> Result<Result<String, Error
     run_prompt_over(packs, source, VfsRef::default()).await
 }
 
-/// Runs the prompt `source` as one conversation on a Host over `packs`
-/// and the filesystem `vfs`, then reads the conversation's state and how
-/// it ended: the result of its one run, or the message of the run-failed
-/// report when the Host refused the prompt as it parsed it and no run
-/// began.
+/// Runs the prompt `source` as one conversation, which has a user, on a
+/// Host over `packs` and the filesystem `vfs`, then reads the
+/// conversation's state and how it ended: the result of its one run, or
+/// the message of the run-failed report when the Host refused the prompt
+/// as it parsed it and no run began.
 pub(super) async fn run_prompt_over(
     packs: Packs,
     source: String,
@@ -96,8 +94,8 @@ pub(super) async fn run_prompt_over(
         timer: Arc::new(TokioTimer),
     });
     let setup = RunSetup {
-        services: conversation.run_services(),
         vfs,
+        has_user: true,
         ..RunSetup::new(
             conversation.recorder(recorder.clone()),
             Arc::new(OfflineBroker),
@@ -132,25 +130,26 @@ fn mcp_file(text: &str) -> (tempfile::TempDir, std::path::PathBuf) {
 }
 
 #[tokio::test]
-async fn every_run_holds_the_packs_the_three_plugins_add_and_the_builtin() {
+async fn every_run_holds_the_packs_the_three_plugins_add_and_the_builtins() {
     let lists = "---\nname: lists\ndescription: reads its Packs\nrunvil: 0\n---\n\n\
         # Lists\n\n## Only\n\n```lua\n\
         local names = {}\n\
-        for _, id in ipairs({ 'web', 'user-input', 'subagents', 'mcp', 'std' }) do\n\
+        for _, id in ipairs({ 'web', 'subagents', 'mcp', 'std', 'user' }) do\n\
           names[#names + 1] = tools.packs.get(id).name\n\
         end\n\
-        return table.concat(names, ',')\n```\n";
-    let (host, _ask) = host_packs(&Registry::new(), None);
+        return table.concat(names, ',') .. '|' .. tostring(tools.packs.get('user-input'))\n```\n";
+    let host = host_packs(&Registry::new(), None);
     assert_eq!(
         run_prompt(host, lists.to_owned()).await,
-        Ok(Ok("web,user-input,subagents,mcp,std".to_owned())),
-        "a run that declares nothing holds every runvil Pack the server installed"
+        Ok(Ok("web,subagents,mcp,std,user|nil".to_owned())),
+        "a run that declares nothing holds every runvil Pack the server installed, the \
+         built-ins, and the user Pack its user brings, and no user-input Pack"
     );
 }
 
 #[tokio::test]
 async fn a_prompt_declaring_web_prepares_on_the_servers_built_packs() {
-    let (host, _ask) = host_packs(&Registry::new(), None);
+    let host = host_packs(&Registry::new(), None);
     assert_eq!(
         run_prompt(host, requiring("web")).await,
         Ok(Ok("browsed".to_owned())),
@@ -160,7 +159,7 @@ async fn a_prompt_declaring_web_prepares_on_the_servers_built_packs() {
 
 #[tokio::test]
 async fn a_prompt_declaring_subagents_prepares_on_the_servers_built_packs() {
-    let (host, _ask) = host_packs(&Registry::new(), None);
+    let host = host_packs(&Registry::new(), None);
     assert_eq!(
         run_prompt(host, requiring("subagents")).await,
         Ok(Ok("browsed".to_owned())),
@@ -174,7 +173,7 @@ async fn a_host_without_the_search_provider_refuses_a_prompt_requiring_web() {
     runtime_only
         .provide(&RUNTIME, Arc::new(tokio::runtime::Handle::current()))
         .expect("an empty map takes the runtime");
-    let (host, _ask) = with_plugins(&runtime_only, json!({}));
+    let host = with_plugins(&runtime_only, json!({}));
 
     let result = run_prompt(host, requiring("web")).await;
     let Err(message) = result else {
@@ -185,19 +184,6 @@ async fn a_host_without_the_search_provider_refuses_a_prompt_requiring_web() {
             "- web is unavailable: web needs runvil/search-provider, and this host provides none"
         ),
         "the refusal names the Pack and the missing service: {message}"
-    );
-}
-
-#[test]
-fn the_ask_is_the_runvil_vendors_fixed_user_input_ask_tool() {
-    let (_host, ask) = host_packs(&Registry::new(), None);
-    assert_eq!(
-        ask,
-        Some(AskTool {
-            vendor: "runvil".to_owned(),
-            id: ToolId::parse("user-input/ask").expect("the id parses"),
-        }),
-        "the user-input Plugin added runvil/user-input, whose Pack id is user-input"
     );
 }
 
@@ -233,7 +219,7 @@ async fn a_prompt_declaring_mcp_prepares_on_the_runtime_the_server_provides() {
     // The server's own `services` provides the runtime, and `plugin-mcp`
     // reads it through a key of its own even with no servers, so only a
     // run over both shows the two keys name the same service.
-    let (host, _ask) = host_packs(&Registry::new(), None);
+    let host = host_packs(&Registry::new(), None);
     assert_eq!(
         run_prompt(host, requiring("mcp")).await,
         Ok(Ok("browsed".to_owned())),
@@ -245,7 +231,7 @@ async fn a_prompt_declaring_mcp_prepares_on_the_runtime_the_server_provides() {
 async fn the_servers_value_is_the_mcp_packs_configuration() {
     // A value that is neither null nor an object is the one configuration
     // the install refuses, so only that value reaching it fails the run.
-    let (host, _ask) = with_plugins(&services(&Registry::new()), json!([]));
+    let host = with_plugins(&services(&Registry::new()), json!([]));
 
     let result = run_prompt(host, requiring("mcp")).await;
     let Err(message) = result else {

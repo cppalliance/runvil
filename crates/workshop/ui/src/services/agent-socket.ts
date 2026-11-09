@@ -19,10 +19,9 @@
 //   never buffered here; each names the `reply` id of the durable event
 //   that will supersede it, so the renderer coalesces chunks by that id
 //   and the completed-reply event is the repair path.
-// - `input_required` / `input_canceled` are durable through the server's
-//   wait registry: unresolved waits are resent on every attach, so a
-//   consumer re-pins from the resent set after each session acknowledgment
-//   and a stale prompt vanishes by its token's absence.
+//
+// When the agent waits for the operator is a durable `agent_event` of kind
+// `awaiting_input`, so it rides the event cursor like every other entry.
 //
 // This socket skips the boot queue: WorkshopSocket's queue guards the app-boot
 // race where the server's first pushes beat handler wiring, but this
@@ -52,10 +51,9 @@ function defaultUrl(): string {
  * The client of one /agents/ws socket. Sessions outlive sockets: after a
  * dropout the socket reconnects with backoff and, when a session was
  * acknowledged, reattaches to it - the server replays the event log from
- * index zero (deduplicated here by the event cursor) and re-announces
- * unresolved waits. A reattach refused because the session ended while
- * disconnected surfaces as an `onError` message, exactly as the server
- * sent it.
+ * index zero, deduplicated here by the event cursor. A reattach refused
+ * because the session ended while disconnected surfaces as an `onError`
+ * message, exactly as the server sent it.
  */
 export class AgentSocket extends Disposable {
   private socket: WebSocket | null = null;
@@ -72,8 +70,7 @@ export class AgentSocket extends Disposable {
   private readonly _onSession = this._register(new Emitter<AgentSessionFrame>());
   /**
    * Fires for every session acknowledgment, including the one a reconnect's
-   * reattach earns. Consumers reset wait pinning here and re-pin from the
-   * `input_required` frames the server resends after it.
+   * reattach earns.
    */
   readonly onSession: Event<AgentSessionFrame> = this._onSession.event;
 
@@ -88,14 +85,6 @@ export class AgentSocket extends Disposable {
    * superseding durable event when it arrives on `onEvent`.
    */
   readonly onDelta: Event<AgentDeltaFrame> = this._onDelta.event;
-
-  private readonly _onInputRequired = this._register(new Emitter<string>());
-  /** Fires with the wait token an `input_response` must echo. */
-  readonly onInputRequired: Event<string> = this._onInputRequired.event;
-
-  private readonly _onInputCanceled = this._register(new Emitter<string>());
-  /** Fires with the token of a wait that died unresolved. */
-  readonly onInputCanceled: Event<string> = this._onInputCanceled.event;
 
   private readonly _onError = this._register(new Emitter<string>());
   /** Fires for every server error frame, message as sent. */
@@ -171,18 +160,18 @@ export class AgentSocket extends Disposable {
   }
 
   /**
-   * Answers an `input_required` prompt: the operator's text, byte-exact,
-   * echoing the wait's token. False when the socket is down.
+   * Sends the operator's message; false when the socket is not open. The
+   * text goes byte-exact, at any time: it answers the waiting agent or
+   * steers its running turn.
    */
-  respond(token: string, text: string): boolean {
-    return this.sendFrame({ type: "input_response", token, text } satisfies InputResponseFrame);
+  respond(text: string): boolean {
+    return this.sendFrame({ type: "input_response", text } satisfies InputResponseFrame);
   }
 
   /**
    * Fires the session's turn-cancel. The server answers with nothing -
    * cancellation is a stop reason, not an error - so the caller settles
-   * its own view; pending waits announce their deaths as
-   * `input_canceled`. False when the socket is down.
+   * its own view. False when the socket is down.
    */
   cancelTurn(): boolean {
     return this.sendFrame({ type: "cancel" } satisfies AgentCancelFrame);
@@ -245,12 +234,6 @@ export class AgentSocket extends Disposable {
         return;
       case "agent_delta":
         this._onDelta.fire(frame);
-        return;
-      case "input_required":
-        this._onInputRequired.fire(frame.token);
-        return;
-      case "input_canceled":
-        this._onInputCanceled.fire(frame.token);
         return;
       case "error":
         this._onError.fire(frame.message !== "" ? frame.message : "the agent session failed");

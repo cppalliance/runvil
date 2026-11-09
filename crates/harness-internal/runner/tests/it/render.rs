@@ -14,8 +14,8 @@ use harness_runner::{Harness, Packs};
 use runvil::Error;
 use runvil::model::{Completion, CompletionResult, ToolCall};
 use runvil_plugin::{
-    HostServices, ModelInfo, Pack, PackFactory, PackFuture, PackId, PackInfo, PackRegistry,
-    RenderContext, ToolContext, ToolId, ToolInfo, ToolOutput,
+    ModelInfo, Pack, PackFactory, PackFuture, PackId, PackInfo, PackRegistry, RenderContext,
+    ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
@@ -129,7 +129,7 @@ struct RenderPack {
 /// render panic.
 fn renderer(seen: &Arc<Seen>, config: Value) -> impl PackFactory + use<> {
     let seen = Arc::clone(seen);
-    move |_name: &PackId, _run: &HostServices| -> Result<Arc<dyn Pack>, Error> {
+    move |_name: &PackId| -> Result<Arc<dyn Pack>, Error> {
         let surviving = config["surviving"]
             .as_array()
             .into_iter()

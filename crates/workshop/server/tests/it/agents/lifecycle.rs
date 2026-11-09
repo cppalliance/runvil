@@ -1,7 +1,7 @@
 //! Session lifecycle over `/agents/ws`: session isolation, status-bus
-//! ordering with the backoff reset, teardown wait cleanup, a terminal
-//! agent failure and a parse failure each surfacing as an error frame,
-//! and the run log under the state directory.
+//! ordering with the backoff reset, a close ending a waiting session, a
+//! terminal agent failure and a parse failure each surfacing as an error
+//! frame, and the run log under the state directory.
 
 use workshop_run_log::{RunId, RunLog};
 
@@ -16,10 +16,10 @@ async fn two_sessions_do_not_cross_talk() {
     let second_id = launch_echo(&mut second).await;
     assert_ne!(first_id, second_id, "every launch is its own session");
 
-    let first_token = next_wait_token(&mut first).await;
-    let second_token = next_wait_token(&mut second).await;
-    answer(&mut first, &first_token, "alpha").await;
-    answer(&mut second, &second_token, "beta").await;
+    next_wait(&mut first).await;
+    next_wait(&mut second).await;
+    answer(&mut first, "alpha").await;
+    answer(&mut second, "beta").await;
     let first_turn = collect_turn(&mut first).await;
     let second_turn = collect_turn(&mut second).await;
 
@@ -33,8 +33,9 @@ async fn two_sessions_do_not_cross_talk() {
             .collect();
         assert_eq!(
             indices,
-            [0, 1, 2],
-            "each session's log is its own: no foreign entries shift the indices"
+            [1, 2, 3],
+            "each session's log is its own: after its own wait at 0, no foreign entries \
+             shift the indices"
         );
     }
     assert_eq!(
@@ -62,8 +63,8 @@ async fn status_frames_fire_in_order_and_a_completed_reply_resets_the_backoff() 
     let mut status = JsonSocket::connect(&format!("{base}/ws")).await;
     let mut socket = connect(&base).await;
     let _session = launch_echo(&mut socket).await;
-    let token = next_wait_token(&mut socket).await;
-    answer(&mut socket, &token, "ping").await;
+    next_wait(&mut socket).await;
+    answer(&mut socket, "ping").await;
     let turn = collect_turn(&mut socket).await;
     assert_eq!(delta_text(&turn), "echo:ping");
 
@@ -97,30 +98,29 @@ async fn status_frames_fire_in_order_and_a_completed_reply_resets_the_backoff() 
 }
 
 #[tokio::test]
-async fn teardown_cancels_pending_waits_and_leaks_none() {
+async fn a_close_ends_a_waiting_session_and_cancels_its_run() {
     let (base, _dir, state) = spawn_agent_server().await;
     let mut socket = connect(&base).await;
     let session = launch_echo(&mut socket).await;
-    let token = next_wait_token(&mut socket).await;
-    assert_eq!(
-        state.agents().unresolved_waits(&session),
-        Some(vec![token.clone()]),
-        "the wait is retained while the session runs"
+    next_wait(&mut socket).await;
+    assert!(
+        state.agents().run_id(&session).is_some(),
+        "the session waiting on its inbox holds its begun run"
     );
 
     assert!(state.agents().close(&session), "the session closes");
-    let canceled = socket
-        .recv_until(Duration::from_secs(10), |frame| {
-            frame["type"] == "input_canceled"
-        })
-        .await;
-    assert_eq!(
-        canceled["token"], *token,
-        "teardown announces the dying wait instead of leaking it"
-    );
     assert!(
-        state.agents().unresolved_waits(&session).is_none(),
-        "a closed session leaves the registry"
+        state.agents().run_id(&session).is_none(),
+        "a closed session leaves the registry at once"
+    );
+    let canceled = socket
+        .recv_until(Duration::from_secs(10), |frame| frame["type"] == "error")
+        .await;
+    assert!(
+        canceled["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("canceled")),
+        "the client learns the waiting run was canceled: {canceled}"
     );
     assert!(
         !state.agents().close(&session),
@@ -141,7 +141,7 @@ name: boom
 description: The terminally failing test agent.
 runvil: 0
 uses:
-  - user-input
+  - user
 ---
 
 # Boom
@@ -149,7 +149,7 @@ uses:
 ## Conversation
 
 ```lua
-input.ask()
+tasks.receive()
 error('kaboom')
 ```
 ",
@@ -171,8 +171,8 @@ error('kaboom')
         .expect("the acknowledgment includes the session id")
         .to_owned();
 
-    let token = next_wait_token(&mut socket).await;
-    answer(&mut socket, &token, "go").await;
+    next_wait(&mut socket).await;
+    answer(&mut socket, "go").await;
     let error = socket
         .recv_until(Duration::from_secs(10), |frame| frame["type"] == "error")
         .await;
@@ -185,7 +185,7 @@ error('kaboom')
     );
     // The failed run ends the session; the registry lets it go.
     tokio::time::timeout(Duration::from_secs(10), async {
-        while state.agents().unresolved_waits(&session).is_some() {
+        while state.agents().run_id(&session).is_some() {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
@@ -235,8 +235,8 @@ async fn a_launched_run_is_recorded_in_the_run_log_under_the_state_directory() {
     );
     let mut socket = connect(&base).await;
     let session = launch_echo(&mut socket).await;
-    let token = next_wait_token(&mut socket).await;
-    answer(&mut socket, &token, "ping").await;
+    next_wait(&mut socket).await;
+    answer(&mut socket, "ping").await;
     let turn = collect_turn(&mut socket).await;
     assert_eq!(delta_text(&turn), "echo:ping");
     assert!(state.agents().close(&session), "the session closes");

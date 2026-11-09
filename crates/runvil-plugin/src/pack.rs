@@ -10,7 +10,7 @@ use runvil_types::error::Error;
 use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolInfo, ToolOutput};
 
-use crate::{HostServices, RenderContext, ToolContext};
+use crate::{RenderContext, ToolContext};
 
 /// A boxed future that may borrow for `'a`, the same type as
 /// `futures::future::BoxFuture`.
@@ -71,8 +71,8 @@ pub trait Pack: Send + Sync {
     /// Performs one tool call.
     ///
     /// `cx` names the called tool and lends the call's filesystem access
-    /// and its origin. What the call needs from the run's own services,
-    /// the instance took at [`new_pack`](PackFactory::new_pack). `args` is
+    /// and its origin. What the call needs from the Host's services, its
+    /// factory took at `install` and shares with the instance. `args` is
     /// the JSON the model or the script passed.
     ///
     /// # Invariants
@@ -144,8 +144,7 @@ pub trait Pack: Send + Sync {
 /// services, and keeps in it what every run's instance shares, such as a
 /// connection pool.
 pub trait PackFactory: Send + Sync {
-    /// Makes this run's instance named `id`, taking what it needs from
-    /// the run's own services in `run`.
+    /// Makes this run's instance named `id`.
     ///
     /// It runs inside the run's future, so it must not block, do I/O, or
     /// panic. The Harness calls it once for each run that holds the Pack,
@@ -153,10 +152,9 @@ pub trait PackFactory: Send + Sync {
     ///
     /// # Errors
     /// Returns an [`Error`], whose prose is safe to show the model, when
-    /// the factory cannot make the instance, such as when `run` lacks a
-    /// service it needs. The Pack is then unavailable to this run, with
-    /// the error's message as the reason.
-    fn new_pack(&self, id: &PackId, run: &HostServices) -> Result<Arc<dyn Pack>, Error>;
+    /// the factory cannot make the instance. The Pack is then unavailable
+    /// to this run, with the error's message as the reason.
+    fn new_pack(&self, id: &PackId) -> Result<Arc<dyn Pack>, Error>;
 }
 
 /// A plain function or closure with `new_pack`'s parameters and return
@@ -164,10 +162,10 @@ pub trait PackFactory: Send + Sync {
 /// own.
 impl<Func> PackFactory for Func
 where
-    Func: Fn(&PackId, &HostServices) -> Result<Arc<dyn Pack>, Error> + Send + Sync,
+    Func: Fn(&PackId) -> Result<Arc<dyn Pack>, Error> + Send + Sync,
 {
-    fn new_pack(&self, id: &PackId, run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
-        self(id, run)
+    fn new_pack(&self, id: &PackId) -> Result<Arc<dyn Pack>, Error> {
+        self(id)
     }
 }
 

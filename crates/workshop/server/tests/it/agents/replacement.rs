@@ -1,6 +1,6 @@
 //! Gateway replacement against a live agent conversation: the Harness
-//! holds no gateway, so a replacement published while `chat` waits for
-//! input retires nothing, and the waiting turn's round reaches the
+//! holds no gateway, so a replacement published while `chat` waits on its
+//! inbox retires nothing, and the next message's round reaches the
 //! replacement.
 
 use super::*;
@@ -21,7 +21,7 @@ fn recording_gateway(requests: Arc<Mutex<Vec<serde_json::Value>>>) -> Router {
 }
 
 #[tokio::test]
-async fn a_replacement_published_while_chat_waits_keeps_the_wait_and_answers_on_the_replacement() {
+async fn a_replacement_published_while_chat_waits_leaves_the_wait_and_answers_on_the_replacement() {
     let original_requests = Arc::new(Mutex::new(Vec::new()));
     let original = spawn_gateway(recording_gateway(Arc::clone(&original_requests))).await;
     let (base, _dir, state) = spawn_agent_server_for_gateway(original).await;
@@ -31,23 +31,23 @@ async fn a_replacement_published_while_chat_waits_keeps_the_wait_and_answers_on_
         .expect("the retained catalog holds test-model");
     let mut socket = connect(&base).await;
     let session = launch(&mut socket, "chat").await;
-    let token = next_wait_token(&mut socket).await;
+    next_wait(&mut socket).await;
 
     let replacement_requests = Arc::new(Mutex::new(Vec::new()));
     let replacement = spawn_gateway(recording_gateway(Arc::clone(&replacement_requests))).await;
     replace_gateway(&state, &replacement, 1_757_000_000);
 
-    // The original token still answers: nothing canceled the wait.
-    answer(&mut socket, &token, "after replacement").await;
+    // The chat still waits on its inbox, so the next message answers it.
+    answer(&mut socket, "after replacement").await;
     let reply = socket
         .recv_until(Duration::from_secs(10), |frame| {
             assert_ne!(
-                frame["type"], "input_canceled",
-                "a replacement retires no wait: {frame}"
-            );
-            assert_ne!(
                 frame["type"], "error",
                 "no error frame may come between: {frame}"
+            );
+            assert!(
+                !is_awaiting(frame),
+                "the chat answers the message before it waits again: {frame}"
             );
             frame["type"] == "agent_event" && frame["event"]["kind"] == "agent_message"
         })
@@ -67,7 +67,7 @@ async fn a_replacement_published_while_chat_waits_keeps_the_wait_and_answers_on_
         assert_eq!(
             requests.len(),
             1,
-            "the waiting turn's round reaches the replacement"
+            "the next message's round reaches the replacement"
         );
         assert_eq!(requests[0]["model"], "test-model");
     }

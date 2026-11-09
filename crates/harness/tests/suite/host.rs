@@ -1,7 +1,7 @@
-//! What a Host does around a run: it answers `input.ask()` through its
-//! input broker, stops an in-flight round or cancels a run through the
-//! Harness's control, and streams a section round from its own broker
-//! under the round id the run records.
+//! What a Host does around a run: it sends the run's main chain a
+//! message that `tasks.receive()` reads, stops an in-flight round or
+//! cancels a run through the Harness's control, and streams a section
+//! round from its own broker under the round id the run records.
 
 use std::error::Error;
 use std::num::NonZeroU32;
@@ -9,7 +9,6 @@ use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Poll, Waker};
 
-use async_trait::async_trait;
 use harness::record::{MemoryRecorder, RecordKind};
 use harness::{BoxFuture, Harness, InferenceBroker, RunSetup};
 use runvil::effect::Round;
@@ -19,15 +18,14 @@ use runvil::model::{
     ModelInfo, ThinkingMode, ToolSchema,
 };
 
-use crate::asker::{AskBroker, asker_packs, broker_services};
 use crate::support::{Offline, launch, no_packs};
 
-/// Asks the operator once and returns the answer.
-const ASKS: &str = concat!(
-    "---\nname: asks\ndescription: Asks the operator once\nrunvil: 0\n",
-    "uses:\n  - tests/user-input\n",
-    "---\n\n# Asks\n\n## Only\n\n```lua\n",
-    "return input.ask()\n",
+/// Reads the operator's next message and returns it.
+const RECEIVES: &str = concat!(
+    "---\nname: receives\ndescription: Reads the operator's next message\nrunvil: 0\n",
+    "uses:\n  - user\n",
+    "---\n\n# Receives\n\n## Only\n\n```lua\n",
+    "return tasks.receive()\n",
     "```\n",
 );
 
@@ -62,16 +60,6 @@ fn stub_catalog() -> Result<ModelCatalog, Box<dyn Error>> {
         ThinkingMode::Never,
     );
     Ok(ModelCatalog::new([model])?)
-}
-
-/// The Host's input broker: the operator always types the same text.
-struct Operator(&'static str);
-
-#[async_trait]
-impl AskBroker for Operator {
-    async fn wait(&self) -> Result<String, runvil::Error> {
-        Ok(self.0.to_owned())
-    }
 }
 
 /// Raised once a round reaches the stuck broker, waking whoever waits.
@@ -179,17 +167,21 @@ impl InferenceBroker for Streaming {
 }
 
 #[tokio::test]
-async fn input_ask_returns_what_the_hosts_input_broker_answers_byte_for_byte() {
+async fn tasks_receive_returns_the_message_the_host_sends_byte_for_byte() {
+    let typed = "Hello, desk.\r\n\"quoted\" 🦀";
     let setup = RunSetup {
-        services: broker_services(Arc::new(Operator("Hello, desk."))),
+        has_user: true,
         ..RunSetup::new(Arc::new(MemoryRecorder::new()), Arc::new(Offline))
     };
+    let harness = launch(no_packs(), RECEIVES, setup);
+    assert!(
+        harness.control().send(typed.to_owned()),
+        "a run that has not started accepts the message"
+    );
 
-    let report = launch(asker_packs(), ASKS, setup)
-        .run()
-        .await
-        .expect("the run is reported");
-    assert_eq!(report.result, Ok("Hello, desk.".to_owned()));
+    let report = harness.run().await.expect("the run is reported");
+    assert_eq!(report.result, Ok(typed.to_owned()));
+    assert!(report.unread.is_empty(), "{:?}", report.unread);
 }
 
 #[tokio::test]

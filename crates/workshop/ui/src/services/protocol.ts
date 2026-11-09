@@ -101,17 +101,17 @@ export interface ErrorFrame {
 
 // --- Agent-session frames (/agents/ws) --------------------------------------
 // The Rust half of this family is the session frame structs in
-// crates/workshop/server/src/agents/wire.rs, the input-wait frames in
+// crates/workshop/server/src/agents/wire.rs, the operator's input frame in
 // crates/workshop/protocol/src/input.rs, and the routing in
 // crates/workshop/server/src/agents/socket.rs. Delivery classes mirror the Rust docs:
-// durable frames deliver exactly (the event log's per-client cursor and the
-// wait registry's resend-on-attach are the repair paths), ephemeral frames
-// may drop under lag and repair from a complete snapshot or a superseding
-// durable event.
+// durable frames deliver exactly (the event log's per-client cursor and its
+// replay on attach are the repair path), ephemeral frames may drop under lag
+// and repair from a complete snapshot or a superseding durable event.
 
 /**
- * The kind of one agent event, following the Agent Client Protocol
- * `sessionUpdate` names. Mirrors `AgentEventKind` in workshop-server
+ * The kind of one agent event. `awaiting_input`: the agent waits for the
+ * operator's message. Follows the Agent Client Protocol `sessionUpdate`
+ * names and mirrors `AgentEventKind` in workshop-server
  * (src/agents/wire.rs). Future kinds (`plan`, tool-status updates) may
  * arrive as labels outside this union, so renderers matching on kinds
  * tolerate unknown labels through a wildcard arm.
@@ -121,7 +121,8 @@ export type AgentEventKind =
   | "tool_call"
   | "tool_call_update"
   | "agent_thought"
-  | "user_message";
+  | "user_message"
+  | "awaiting_input";
 
 /** Token accounting for one model call, as the backend reported it. */
 export interface Usage {
@@ -247,27 +248,6 @@ export interface AgentDeltaFrame {
   reply: number;
 }
 
-/**
- * A wait opened: the session wants operator input for `token`. Durable:
- * the wait registry retains every unresolved wait and the session resends
- * it on reconnect, so the SPA pins its input box to the token and answers
- * with an `input_response` frame.
- */
-export interface InputRequiredFrame {
-  type: "input_required";
-  token: string;
-}
-
-/**
- * A wait died unresolved: the prompt for `token` is stale. Durable;
- * cancellation is an outcome on the wire, never silence, so the SPA never
- * holds a prompt against a dead token.
- */
-export interface InputCanceledFrame {
-  type: "input_canceled";
-  token: string;
-}
-
 /** The client frame opening a session running the named agent. */
 export interface LaunchFrame {
   type: "launch";
@@ -281,20 +261,20 @@ export interface AttachFrame {
 }
 
 /**
- * The client's answer to an `input_required` prompt: the operator's text,
- * byte-exact as typed, echoing the wait's token.
+ * The operator's message, sent at any time. It answers the agent while
+ * the agent waits, and steers the turn while it works; the text is
+ * byte-exact as typed.
  */
 export interface InputResponseFrame {
   type: "input_response";
-  token: string;
   text: string;
 }
 
 /**
  * The client frame firing the session's turn-cancel. Cancellation is a
- * stop reason, never an error: the server answers with nothing, pending
- * waits die as `input_canceled`, and the relaunched agent returns to
- * waiting.
+ * stop reason, never an error: the server answers with nothing, a message
+ * already sent stays queued for the agent, and the agent returns to
+ * waiting on its inbox.
  */
 export interface AgentCancelFrame {
   type: "cancel";
@@ -437,8 +417,6 @@ export const AGENT_FRAME_GUARDS = {
     content: isString,
     reply: isNumber,
   }),
-  input_required: frame<InputRequiredFrame>("input_required", { token: isString }),
-  input_canceled: frame<InputCanceledFrame>("input_canceled", { token: isString }),
   error: frame<ErrorFrame>("error", { message: isString, id: isAnything }),
 };
 

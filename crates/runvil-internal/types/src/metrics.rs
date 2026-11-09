@@ -36,7 +36,7 @@ pub struct ToolCallEvent {
     /// it, such as `runvil`; `None` for an adhoc tool, a name outside the
     /// round's scope, or a run given no roster. A vendor is one segment,
     /// so `vendor/tool` is the vendor-qualified name, such as
-    /// `runvil/user-input/ask`, and only when `vendor` is present.
+    /// `runvil/web/fetch`, and only when `vendor` is present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vendor: Option<String>,
 }

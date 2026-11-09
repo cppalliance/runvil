@@ -6,22 +6,22 @@
 //! the two share only [`crate::websocket`].
 //!
 //! The server builds one [`Host`] at startup: its `Packs`, installed from
-//! the web, user-input, mcp, and std Plugins, mcp over the servers of the
-//! configured `mcp.json`, and the built-in subagents; a finder that reads
+//! the web, mcp, and std Plugins, mcp over the servers of the configured
+//! `mcp.json`, and the built-ins subagents and user; a finder that reads
 //! each agent from the agents folder through `load_agent`; and the tokio
 //! timer. Each launch opens a conversation in `workshop-agents` and builds
 //! that conversation's one run its own [`RunSetup`]: the conversation's
 //! recorder tee on a handle of the run log's [`TursoRecorder`] that names
 //! the launched agent, a per-run broker over the server's inference broker
-//! ([`broker`]), and the conversation's own services, which hold its input
-//! broker. The run makes its own instance of each Pack it holds from those
-//! services, so its user-input instance asks that conversation's operator,
-//! and drops them when it ends. The run reaches the gateway only through
-//! its per-run broker, which follows the live gateway binding and sends
-//! each round to the dropdown's current pick. Each run's filesystem is an
-//! in-memory root, with the language guide demo's read-only mount beside
-//! it while that demo's switch is on (`language_guide`). The run's setup
-//! carries the Host state ([`bindings`]): the menu's pick and the
+//! ([`broker`]), and a user, the conversation's operator, so the run holds
+//! `runvil/user`; the operator's messages reach the run's main chain
+//! through the conversation. The run makes its own instance of each Pack
+//! it holds and drops them when it ends. The run reaches the gateway only
+//! through its per-run broker, which follows the live gateway binding and
+//! sends each round to the dropdown's current pick. Each run's filesystem
+//! is an in-memory root, with the language guide demo's read-only mount
+//! beside it while that demo's switch is on (`language_guide`). The run's
+//! setup carries the Host state ([`bindings`]): the menu's pick and the
 //! workspace's granted roots, read once the menu's catalog holds a
 //! chat-capable model. Status-bar reporting stays in the server
 //! (`status`): a per-conversation reporter derives it from the
@@ -54,7 +54,7 @@ use harness::pack::{HostServices, PackRegistry, Packs};
 use harness::record::RunId;
 use harness::{Host, RunSetup};
 use plugin_web::SEARCH_PROVIDER;
-use runvil::{Error, ErrorCode, ToolId};
+use runvil::{Error, ErrorCode};
 use runvil_plugin::ServiceKey;
 use serde_json::{Map, Value};
 use workshop_agents::{
@@ -71,7 +71,6 @@ use gateway::usable_gateway;
 use search::GatewaySearchProvider;
 use socket::Receivers;
 pub(crate) use state::{SessionsState, register};
-use wire::AskTool;
 
 /// The directory under the server's state directory the run log sits in:
 /// the `runs.db` every conversation's run is recorded in.
@@ -81,10 +80,10 @@ const HARNESS_STATE_DIR: &str = "harness";
 /// tokio runtime service, as the handle it supplies.
 const RUNTIME: ServiceKey<tokio::runtime::Handle> = ServiceKey::new(runvil_plugin::TOKIO_RUNTIME);
 
-/// The server's installed Packs over its Host-wide [`services`], beside
-/// the ask tool's vendor and id. `mcp` is the `[agents] mcp` setting: the
-/// mcp Pack is installed over the servers of the file it names.
-fn host_packs(registry: &Registry, mcp: Option<&Path>) -> (Packs, Option<AskTool>) {
+/// The server's installed Packs over its Host-wide [`services`]. `mcp` is
+/// the `[agents] mcp` setting: the mcp Pack is installed over the servers
+/// of the file it names.
+fn host_packs(registry: &Registry, mcp: Option<&Path>) -> Packs {
     with_plugins(&services(registry), read_mcp_servers(mcp))
 }
 
@@ -144,31 +143,15 @@ fn read_mcp_servers(setting: Option<&Path>) -> Value {
 }
 
 /// A Host after the server calls, with the Host-wide `services`, the
-/// Plugins of the Packs agents may declare: `web`, `user-input`, so they
-/// can ask the operator, `mcp`, with the `servers` object as its
-/// configuration, and `std`, the file tools. The Host keeps those Packs
-/// and the built-in `subagents`, and each run makes its own instances of
-/// them. The ask tool is the fixed `user-input/ask` of the
-/// `runvil/user-input` Pack, so its vendor is `runvil`, and `None` only if
-/// the user-input Plugin was refused.
-fn with_plugins(services: &HostServices, servers: Value) -> (Packs, Option<AskTool>) {
+/// Plugins of the Packs agents may declare: `web`, `mcp`, with the
+/// `servers` object as its configuration, and `std`, the file tools. The
+/// Host keeps those Packs and the built-ins `subagents` and `user`, and
+/// each run makes its own instances of them.
+fn with_plugins(services: &HostServices, servers: Value) -> Packs {
     let mut packs = PackRegistry::new();
     if let Err(error) = plugin_web::install(&mut packs, Value::Null, services) {
         tracing::warn!(%error, "the web Plugin inserted no Pack");
     }
-    let ask = match plugin_user_input::install(&mut packs, Value::Null, services) {
-        Ok(()) => ToolId::parse(&format!("user-input/{}", plugin_user_input::ASK))
-            .inspect_err(|error| tracing::warn!(%error, "the ask tool's id does not parse"))
-            .ok()
-            .map(|id| AskTool {
-                vendor: "runvil".to_owned(),
-                id,
-            }),
-        Err(error) => {
-            tracing::warn!(%error, "the user-input Plugin inserted no Pack");
-            None
-        }
-    };
     let mcp = Map::from_iter([("mcp".to_owned(), servers)]);
     if let Err(error) = plugin_mcp::install(&mut packs, Value::Object(mcp), services) {
         tracing::warn!(%error, "the mcp Plugin inserted no Pack");
@@ -176,7 +159,7 @@ fn with_plugins(services: &HostServices, servers: Value) -> (Packs, Option<AskTo
     if let Err(error) = plugin_std::install(&mut packs, Value::Null, services) {
         tracing::warn!(%error, "the std Plugin inserted no Pack");
     }
-    (Packs::new(packs), ask)
+    Packs::new(packs)
 }
 
 /// The Host-wide services the Plugins' `install`s read: the search
@@ -184,8 +167,7 @@ fn with_plugins(services: &HostServices, servers: Value) -> (Packs, Option<AskTo
 /// runs on, under the Plugin contract's tokio runtime service. Built
 /// outside a runtime, as a synchronous test does, the runtime is left
 /// out, web and mcp are inserted unavailable, and a run that requires
-/// either is refused. Each run's input broker is the run's own, so these
-/// leave it out.
+/// either is refused.
 fn services(registry: &Registry) -> HostServices {
     let mut services = HostServices::new();
     // Two valid, distinct literals into an empty map, so neither call
@@ -253,10 +235,6 @@ struct Inner {
     /// instances of, the finder that reads each agent from the agents
     /// folder, and the tokio timer.
     host: Arc<Host>,
-    /// The ask tool, `user-input/ask` of vendor `runvil`, which a
-    /// script's ask result is recognized by; `None` only if the
-    /// user-input Plugin was refused.
-    ask: Option<AskTool>,
     /// The running conversations.
     conversations: Conversations,
 }
@@ -280,7 +258,7 @@ impl AgentSessions {
     /// the state directory when the first run starts.
     #[must_use]
     pub fn new(config: &Config, registry: Registry, backoff: ReconnectBackoff) -> Self {
-        let (packs, ask) = host_packs(&registry, config.agents.mcp.as_deref());
+        let packs = host_packs(&registry, config.agents.mcp.as_deref());
         let agents_path = config.agents.path.clone();
         let host = Host {
             packs,
@@ -295,7 +273,6 @@ impl AgentSessions {
                 )),
                 broker: WorkshopBroker::new(registry.clone()),
                 host: Arc::new(host),
-                ask,
                 conversations: Conversations::new(),
                 registry,
                 backoff,
@@ -371,7 +348,8 @@ impl AgentSessions {
 
     /// The setup of `conversation`'s run before the Host state is read:
     /// its recorder tee over a run-log handle naming its agent, its broker,
-    /// its own services, and its filesystem.
+    /// its filesystem, and a user, since every conversation has an
+    /// operator.
     fn setup_for(&self, conversation: &Conversation) -> RunSetup {
         let recorder = conversation.recorder(Arc::new(
             self.inner.recorder.for_agent(conversation.agent()),
@@ -381,16 +359,10 @@ impl AgentSessions {
             conversation.clone(),
         ));
         RunSetup {
-            services: conversation.run_services(),
             vfs: language_guide::run_vfs(),
+            has_user: true,
             ..RunSetup::new(recorder, broker)
         }
-    }
-
-    /// The ask tool's vendor and id, which a socket frames a script's ask
-    /// result by.
-    fn ask(&self) -> Option<AskTool> {
-        self.inner.ask.clone()
     }
 
     /// The running conversation with this id, when one exists: how a
@@ -399,20 +371,12 @@ impl AgentSessions {
         self.inner.conversations.get(&ConversationId::new(id))
     }
 
-    /// Ends the conversation with this id: its run is canceled, pending
-    /// waits die as `input_canceled`, and the conversation leaves the
-    /// table at once. Returns whether a conversation was ended.
+    /// Ends the conversation with this id: its run is canceled, and the
+    /// conversation leaves the table at once. Returns whether a
+    /// conversation was ended.
     #[must_use]
     pub fn close(&self, id: &str) -> bool {
         self.inner.conversations.close(&ConversationId::new(id))
-    }
-
-    /// The unresolved wait tokens of the conversation with this id - the
-    /// teardown leak probe: after a close or a finished run, the list
-    /// must be empty. `None` when no such conversation is running.
-    #[must_use]
-    pub fn unresolved_waits(&self, id: &str) -> Option<Vec<String>> {
-        Some(self.get(id)?.unresolved_waits())
     }
 
     /// The one run of the running conversation with this id, as the run
@@ -421,19 +385,6 @@ impl AgentSessions {
     #[must_use]
     pub fn run_id(&self, id: &str) -> Option<RunId> {
         self.get(id)?.run_id()
-    }
-
-    /// Delivers a fixture response after running `after_acceptance`
-    /// between its acceptance and the waiting ask's resumption.
-    #[cfg(feature = "test-fixtures")]
-    pub fn deliver_input_after_acceptance_for_test(
-        &self,
-        id: &str,
-        response: workshop_protocol::InputResponse,
-        after_acceptance: impl FnOnce(),
-    ) -> Option<Result<(), workshop_agents::WaitError>> {
-        let conversation = self.get(id)?;
-        Some(conversation.send_input(&response.token, response.text, after_acceptance))
     }
 }
 

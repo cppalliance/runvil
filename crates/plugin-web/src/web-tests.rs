@@ -91,7 +91,7 @@ fn made(id: &str) -> Arc<dyn Pack> {
     let (_fqn, _id, factory) = inserted.pop().expect("install inserts one Pack");
     factory
         .expect("install inserts web usable with both services")
-        .new_pack(&name(id), &HostServices::new())
+        .new_pack(&name(id))
         .expect("the factory makes the Pack")
 }
 

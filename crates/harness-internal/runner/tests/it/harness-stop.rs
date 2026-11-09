@@ -2,29 +2,28 @@
 //! a chat round, a tool call, and a timer and leaves the run's cancel
 //! flag clear, so a `pcall` keeps the run alive while an uncaught drop
 //! ends it canceled; two calls one round requested are in flight at
-//! once and one stop drops both; a prompt shaped like `chat` returns to its
-//! question after a stop during a tool call; and a stop leaves a question
-//! to the operator, or any call whose tool info survives stops, open,
-//! while a cancel drops it.
+//! once and one stop drops both; a prompt shaped like `chat` returns to
+//! its inbox after a stop during a tool call; a stop leaves the main
+//! chain's wait on its inbox, so a message sent after it is read; and a
+//! stop leaves any call whose tool info survives stops in flight, while a
+//! cancel drops it.
 
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 
+use harness_runner::RunSetup;
 use harness_runner::recorder::MemoryRecorder;
-use harness_runner::{Harness, RunSetup};
 use runvil::Error;
 use runvil::model::{Completion, CompletionResult, ToolCall};
 use serde_json::json;
 
-use super::{PendingTimer, answers_to, answers_where, calls, launch, run_beside, setup, until};
+use super::{
+    FIRST_RUN, PendingTimer, answers_to, launch, main_waits, no_packs, run_beside, setup, until,
+};
 use crate::scripted::{
-    Held, HeldTimer, MODEL, Operator, ScriptedBroker, calls_hold_once, held_broker, hold_host,
-    reply, surviving_hold_host,
+    Held, HeldTimer, MODEL, ScriptedBroker, calls_hold_once, held_broker, hold_host, reply,
+    surviving_hold_host,
 };
 use crate::support::assert_canceled;
-
-/// The fixture ask tool's id, under the asker's Pack id.
-const ASK_TOOL: &str = "user-input/ask";
 
 /// A main section parked under a `pcall` on a 30-second timed wait over
 /// two children: one parked on a model round, the other on a held tool
@@ -53,17 +52,17 @@ const STOPS_UNCAUGHT: &str = "---\nname: uncaught\ndescription: d\nrunvil: 0\n\
     # Uncaught\n\n\
     ## Only\n\n```lua\nreturn models.infer('held')\n```\n";
 
-/// The built-in chat's shape: ask the operator, run the model loop under
-/// a `pcall`, and ask again, with the held tool advertised to the model.
+/// The built-in chat's shape: read the operator's next message, run the
+/// model loop under a `pcall`, and read again, with the held tool
+/// advertised to the model.
 const CHATS: &str = "---\nname: chats\ndescription: d\nrunvil: 0\n\
-    uses:\n  - tests/harness\n  - tests/user-input\n\
+    uses:\n  - tests/harness\n  - user\n\
     ---\n\n\
     # Chats\n\n\
     ## Conversation\n\n```lua\n\
     tools.offer('harness/hold')\n\
     while true do\n\
-    \x20   local text = input.ask()\n\
-    \x20   messages:user(text)\n\
+    \x20   messages:user(tasks.receive())\n\
     \x20   pcall(function() return models.loop() end)\n\
     end\n```\n";
 
@@ -79,10 +78,10 @@ const LOOPS_ONCE: &str = "---\nname: loops\ndescription: d\nrunvil: 0\n\
     local ok, err = pcall(models.loop)\n\
     return tostring(ok) .. ':' .. err.kind\n```\n";
 
-/// A prompt that returns the operator's answer to one question.
-const ASKS: &str = "---\nname: asks\ndescription: d\nrunvil: 0\n\
-    uses:\n  - tests/user-input\n---\n\n\
-    # Asks\n\n## Only\n\n```lua\nreturn (input.ask())\n```\n";
+/// A prompt that returns the operator's next message.
+const RECEIVES: &str = "---\nname: receives\ndescription: d\nrunvil: 0\n\
+    uses:\n  - user\n---\n\n\
+    # Receives\n\n## Only\n\n```lua\nreturn (tasks.receive())\n```\n";
 
 /// A prompt that returns what the held tool answers.
 const HOLDS: &str = "---\nname: holds\ndescription: d\nrunvil: 0\n\
@@ -214,35 +213,33 @@ async fn two_calls_in_one_round_are_in_flight_at_once_and_a_stop_drops_both() {
 }
 
 #[tokio::test]
-async fn a_chat_shaped_prompt_returns_to_its_question_after_a_stop_during_a_tool_call() {
+async fn a_chat_shaped_prompt_returns_to_its_inbox_after_a_stop_during_a_tool_call() {
     let tool = Arc::new(Held::default());
-    let (operator, answers) = Operator::new();
-    let asked = Arc::clone(&operator.asked);
     let recorder = Arc::new(MemoryRecorder::new());
     let harness = launch(
         hold_host(&tool),
         PendingTimer::default(),
         CHATS,
         RunSetup {
-            services: operator.services(),
+            has_user: true,
             ..setup(recorder.clone(), calls_hold_once())
         },
     );
-    let watched = Arc::clone(&tool);
+    let (watched, waits) = (Arc::clone(&tool), Arc::clone(&recorder));
 
     let report = run_beside(harness, |control| async move {
-        until("the prompt asks its first question", || {
-            asked.load(Ordering::SeqCst) == 1
+        until("the prompt waits on its inbox", || {
+            main_waits(&waits.records(FIRST_RUN)) == 1
         })
         .await;
-        answers.send("hello".to_owned()).unwrap();
+        assert!(control.send("hello".to_owned()));
         until("the model's tool call is in flight", || {
             watched.started() == 1
         })
         .await;
         control.stop_round();
-        until("the prompt returns to its question", || {
-            asked.load(Ordering::SeqCst) == 2
+        until("the prompt returns to its inbox", || {
+            main_waits(&waits.records(FIRST_RUN)) == 2
         })
         .await;
         control.cancel();
@@ -252,55 +249,37 @@ async fn a_chat_shaped_prompt_returns_to_its_question_after_a_stop_during_a_tool
 
     assert!(
         report.result.as_ref().is_err_and(Error::is_canceled),
-        "the cancel ended the run waiting on its second question: {:?}",
+        "the cancel ended the run waiting on its inbox: {:?}",
         report.result
     );
     assert_eq!(tool.dropped(), 1, "the stopped tool call was torn down");
-    assert_eq!(
-        operator.abandoned.load(Ordering::SeqCst),
-        1,
-        "the cancel tore down the second question"
-    );
+    assert!(report.unread.is_empty(), "{:?}", report.unread);
     let records = recorder.records(report.run_id);
     assert_eq!(
-        answers_where(&records, "ToolCall", calls("harness/hold")),
+        answers_to(&records, "ToolCall"),
         [json!("Dropped")],
-        "the stop answered the model's tool call Dropped"
+        "the stop answered the model's tool call Dropped, and reading the inbox issued none"
     );
-    let asks = answers_where(&records, "ToolCall", calls(ASK_TOOL));
-    assert_eq!(asks.len(), 2, "two questions: {asks:?}");
-    assert_eq!(asks[0]["ToolCall"]["Ok"]["text"], "hello");
-    assert_eq!(
-        asks[1],
-        json!("Dropped"),
-        "the cancel answered the second question Dropped"
-    );
-}
-
-/// A Harness running [`ASKS`] on `operator` with the fixture ask Pack and
-/// a broker no round reaches.
-fn asking_harness(recorder: &Arc<MemoryRecorder>, operator: &Arc<Operator>) -> Harness {
-    launch(
-        hold_host(&Arc::default()),
-        PendingTimer::default(),
-        ASKS,
-        RunSetup {
-            services: operator.services(),
-            ..setup(recorder.clone(), ScriptedBroker::replying())
-        },
-    )
 }
 
 #[tokio::test]
-async fn a_stop_leaves_a_question_to_the_operator_open() {
-    let (operator, answers) = Operator::new();
-    let asked = Arc::clone(&operator.asked);
-    let abandoned = Arc::clone(&operator.abandoned);
+async fn a_stop_while_the_main_chain_waits_on_its_inbox_leaves_the_wait_and_a_later_message_reaches_it()
+ {
     let recorder = Arc::new(MemoryRecorder::new());
+    let harness = launch(
+        no_packs(),
+        PendingTimer::default(),
+        RECEIVES,
+        RunSetup {
+            has_user: true,
+            ..setup(recorder.clone(), ScriptedBroker::replying())
+        },
+    );
+    let watched = Arc::clone(&recorder);
 
-    let report = run_beside(asking_harness(&recorder, &operator), |control| async move {
-        until("the prompt asks its question", || {
-            asked.load(Ordering::SeqCst) == 1
+    let report = run_beside(harness, |control| async move {
+        until("the main chain waits on its inbox", || {
+            main_waits(&watched.records(FIRST_RUN)) == 1
         })
         .await;
         control.stop_round();
@@ -308,11 +287,16 @@ async fn a_stop_leaves_a_question_to_the_operator_open() {
             tokio::task::yield_now().await;
         }
         assert_eq!(
-            abandoned.load(Ordering::SeqCst),
-            0,
-            "the stop left the question open"
+            watched.result(FIRST_RUN),
+            None,
+            "the stop left the run waiting on its inbox"
         );
-        answers.send("kept".to_owned()).unwrap();
+        assert_eq!(
+            main_waits(&watched.records(FIRST_RUN)),
+            1,
+            "the stop neither woke the wait nor began another"
+        );
+        assert!(control.send("kept".to_owned()));
     })
     .await
     .expect("the run is reported");
@@ -320,11 +304,13 @@ async fn a_stop_leaves_a_question_to_the_operator_open() {
     assert_eq!(
         report.result,
         Ok("kept".to_owned()),
-        "the question survived the stop and its answer ended the run"
+        "the wait outlived the stop, and the message sent after it ended the run"
     );
     let records = recorder.records(report.run_id);
-    assert_eq!(answers_to(&records, "ToolCall").len(), 1);
-    assert_ne!(answers_to(&records, "ToolCall")[0], json!("Dropped"));
+    assert!(
+        answers_to(&records, "ToolCall").is_empty() && answers_to(&records, "Chat").is_empty(),
+        "reading the inbox issued no effect for the stop to drop: {records:?}"
+    );
 }
 
 #[tokio::test]
@@ -357,30 +343,9 @@ async fn a_stop_leaves_any_tool_call_whose_info_survives_stops_in_flight() {
 
     assert_canceled(&report.result);
     assert_eq!(tool.dropped(), 1, "the cancel tore the surviving call down");
-}
-
-#[tokio::test]
-async fn a_cancel_drops_a_question_to_the_operator() {
-    let (operator, _answers) = Operator::new();
-    let asked = Arc::clone(&operator.asked);
-    let recorder = Arc::new(MemoryRecorder::new());
-
-    let report = run_beside(asking_harness(&recorder, &operator), |control| async move {
-        until("the prompt asks its question", || {
-            asked.load(Ordering::SeqCst) == 1
-        })
-        .await;
-        control.cancel();
-    })
-    .await
-    .expect("the run is reported");
-
-    assert_canceled(&report.result);
     assert_eq!(
-        operator.abandoned.load(Ordering::SeqCst),
-        1,
-        "the cancel tore the question down"
+        answers_to(&recorder.records(report.run_id), "ToolCall"),
+        [json!("Dropped")],
+        "the cancel answered the surviving call Dropped"
     );
-    let records = recorder.records(report.run_id);
-    assert_eq!(answers_to(&records, "ToolCall"), [json!("Dropped")]);
 }

@@ -1,8 +1,8 @@
 //! End-to-end agent-session tests over the `/agents/ws` socket: launch,
 //! the full turn cycle with reply-id coalescing and indexed durable
-//! frames, reconnect replay, the stop, conversation isolation,
-//! status-bus order, backoff reset, and teardown wait cleanup - all
-//! in-process against an SSE mock gateway.
+//! frames, a message that steers a running turn, reconnect replay, the
+//! stop, conversation isolation, status-bus order, backoff reset, and
+//! teardown - all in-process against an SSE mock gateway.
 
 // clippy.toml's allow-expect-in-tests covers #[test] functions only, not
 // the helpers they share; failing a test by panicking with the invariant
@@ -29,14 +29,14 @@ use crate::common::{
 };
 
 /// The echo agent: a Markdown prompt on the unified runtime that loops
-/// on `input.ask()`, runs one chat round per input against the fixture's
-/// `test-model`, and returns on `quit`.
+/// on `tasks.receive()`, runs one chat round per message against the
+/// fixture's `test-model`, and returns on `quit`.
 const ECHO_MD: &str = r"---
 name: echo
 description: The echo test agent on the unified runtime.
 runvil: 0
 uses:
-  - user-input
+  - user
 ---
 
 # Echo
@@ -45,7 +45,7 @@ uses:
 
 ```lua
 while true do
-    local text = input.ask()
+    local text = tasks.receive()
     if text == 'quit' then
         return
     end
@@ -136,45 +136,47 @@ async fn launch_echo(socket: &mut JsonSocket) -> String {
     launch(socket, "echo").await
 }
 
-/// Receives frames until the next `input_required` and returns its
-/// token, asserting no error frame slips through on the way.
-pub(crate) async fn next_wait_token(socket: &mut JsonSocket) -> String {
-    let frame = socket
+/// Whether `frame` is the durable event of the agent waiting on its empty
+/// inbox for the operator.
+pub(crate) fn is_awaiting(frame: &serde_json::Value) -> bool {
+    frame["type"] == "agent_event" && frame["event"]["kind"] == "awaiting_input"
+}
+
+/// Receives frames until the agent's next `awaiting_input` event and
+/// returns it, asserting no error frame slips through on the way.
+pub(crate) async fn next_wait(socket: &mut JsonSocket) -> serde_json::Value {
+    socket
         .recv_until(Duration::from_secs(10), |frame| {
             assert_ne!(
                 frame["type"], "error",
                 "no error frame may come between: {frame}"
             );
-            frame["type"] == "input_required"
+            is_awaiting(frame)
         })
-        .await;
-    frame["token"]
-        .as_str()
-        .expect("the wait announces its token")
-        .to_owned()
+        .await
 }
 
-/// Answers the wait holding `token` with `text`.
-pub(crate) async fn answer(socket: &mut JsonSocket, token: &str, text: &str) {
+/// Sends the operator's message `text`.
+pub(crate) async fn answer(socket: &mut JsonSocket, text: &str) {
     socket
-        .send_json(&json!({ "type": "input_response", "token": token, "text": text }))
+        .send_json(&json!({ "type": "input_response", "text": text }))
         .await;
 }
 
 /// Everything one turn produced, collected until its completed reply
-/// event: the delta frames, the durable event frames, and any wait
-/// tokens announced along the way (the next turn's `input_required` may
-/// hit the wire before the reply's own event frame - frame families
-/// promise order within themselves, not across each other).
+/// event: the delta frames, the durable event frames, and apart from
+/// them the `awaiting_input` events on the way, which only a replay puts
+/// ahead of a turn: live, the wait that leads into a turn was read before
+/// its message was sent.
 pub(crate) struct Turn {
     pub(crate) deltas: Vec<serde_json::Value>,
     pub(crate) events: Vec<serde_json::Value>,
-    waits: Vec<String>,
+    pub(crate) waits: Vec<serde_json::Value>,
 }
 
 /// Collects frames until the turn's `agent_message` event arrives,
-/// splitting deltas, durable events, and announced waits, and refusing
-/// error frames.
+/// splitting deltas, durable events, and waits, and refusing error
+/// frames.
 pub(crate) async fn collect_turn(socket: &mut JsonSocket) -> Turn {
     let mut deltas = Vec::new();
     let mut events = Vec::new();
@@ -184,6 +186,7 @@ pub(crate) async fn collect_turn(socket: &mut JsonSocket) -> Turn {
             let frame = socket.recv_json().await;
             match frame["type"].as_str() {
                 Some("agent_delta") => deltas.push(frame),
+                Some("agent_event") if is_awaiting(&frame) => waits.push(frame),
                 Some("agent_event") => {
                     let done = frame["event"]["kind"] == "agent_message";
                     events.push(frame);
@@ -191,12 +194,6 @@ pub(crate) async fn collect_turn(socket: &mut JsonSocket) -> Turn {
                         break;
                     }
                 }
-                Some("input_required") => waits.push(
-                    frame["token"]
-                        .as_str()
-                        .expect("the wait announces its token")
-                        .to_owned(),
-                ),
                 Some("error") => panic!("no error frame may come between a turn's frames: {frame}"),
                 // Status frames interleave freely.
                 _ => {}
@@ -209,15 +206,6 @@ pub(crate) async fn collect_turn(socket: &mut JsonSocket) -> Turn {
         deltas,
         events,
         waits,
-    }
-}
-
-/// The wait token following `turn`: one already captured during the
-/// collection, else the next announced on the socket.
-pub(crate) async fn wait_after(socket: &mut JsonSocket, turn: &Turn) -> String {
-    match turn.waits.first() {
-        Some(token) => token.clone(),
-        None => next_wait_token(socket).await,
     }
 }
 

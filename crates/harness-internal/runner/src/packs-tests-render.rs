@@ -33,18 +33,13 @@ struct Rendering {
 
 /// Makes a [`Rendering`] Pack from a [`listed`] configuration, refusing
 /// when the Host provides no [`RENDERS`].
-fn rendering(
-    name: &PackId,
-    config: &Value,
-    wide: &HostServices,
-    run: &HostServices,
-) -> Result<Arc<dyn Pack>, Error> {
+fn rendering(name: &PackId, config: &Value, wide: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     let renders = wide
         .get(&RENDERS)
         .ok_or_else(|| make_tool_error(ErrorCode::ToolOther, "rendering needs tests/renders"))?;
     Ok(Arc::new(Rendering {
         name: name.clone(),
-        listed: listed(name, config, wide, run)?,
+        listed: listed(name, config, wide)?,
         renders,
     }))
 }
@@ -128,14 +123,14 @@ async fn a_render_asks_each_usable_pack_once_per_set_it_was_offered_into_and_ans
                 offering(&["one/a", "one/b"]),
             ),
             (PackInfo::new("runvil/two"), rendering, offering(&["two/a"])),
-            (PackInfo::new("runvil/needy"), needy, offering(&["needy/a"])),
+            (PackInfo::new("runvil/backed"), backed, Value::Null),
         ],
     );
-    let run = begin(&host, &HostServices::new(), BTreeMap::new(), &prompt(""));
+    let run = begin(&host, BTreeMap::new(), &prompt(""));
     let offered = vec![
         sets("two", &["two/a"], &[]),
         sets("one", &["one/a"], &["one/b"]),
-        sets("needy", &[], &["needy/a"]),
+        sets("backed", &[], &["backed/a"]),
     ];
     let answer = run.render("0.1".to_owned(), model(), offered).await;
 
@@ -164,7 +159,7 @@ async fn a_render_asks_each_usable_pack_once_per_set_it_was_offered_into_and_ans
                 owned(&["one/a", "one/extra"]),
                 owned(&["one/b", "one/extra"])
             ),
-            ("needy".to_owned(), owned(&[]), owned(&["needy/a"])),
+            ("backed".to_owned(), owned(&[]), owned(&["backed/a"])),
         ],
         "every Pack asked is answered in the order asked, and the one the run cannot use keeps \
          its tools as offered"
@@ -174,7 +169,7 @@ async fn a_render_asks_each_usable_pack_once_per_set_it_was_offered_into_and_ans
 #[tokio::test]
 async fn a_call_goes_to_the_pack_its_id_names_when_the_catalog_lacks_the_tool() {
     let host = host(&[(info("runvil/one"), offering(&["one/echo"]))]);
-    let run = begin(&host, &HostServices::new(), BTreeMap::new(), &prompt(""));
+    let run = begin(&host, BTreeMap::new(), &prompt(""));
     let extra = ToolId::parse("one/extra").unwrap();
     assert!(
         run.catalog().get(&extra).is_none(),

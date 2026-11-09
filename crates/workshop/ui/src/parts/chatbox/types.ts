@@ -95,9 +95,11 @@ export interface ChatBoxProps {
    * What the round action button does once the box holds text; default
    * "send". `send`: enabled. `send-blocked`: aria-disabled but still
    * clickable and still emits `send`, so the owning part can name the
-   * blocker. `idle`: disabled. `stop`: the agent is generating - the button
-   * becomes Stop and emits `stop`, and the placeholder reads "Add a
-   * follow-up". With an empty box and no `stop`, the same button is the mic.
+   * blocker. `idle`: disabled. `stop`: the agent is generating - over an
+   * empty box the button becomes Stop and emits `stop`, once the box holds
+   * text it is the send arrow and emits `send`, as Enter does, and the
+   * placeholder reads "Add a follow-up". With an empty box and no `stop`,
+   * the same button is the mic.
    */
   readonly action?: "send" | "send-blocked" | "stop" | "idle";
   /**

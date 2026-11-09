@@ -1,42 +1,14 @@
 //! Table-driven tests for the agent socket's framing helpers: the pure
-//! render functions that map the conversation's vocabulary onto Workshop
-//! wire shapes, and the cursor and wire-index bookkeeping behind every
-//! durable `agent_event` frame.
+//! render function that maps the conversation's deltas onto Workshop wire
+//! shapes, and the cursor and wire-index bookkeeping behind every durable
+//! `agent_event` frame.
 
-use runvil::ToolId;
 use runvil::event::Event;
 use runvil::ids::{ChainId, Provenance, TaskId};
-use workshop_agents::{Delta, SessionEvent, WaitFrame};
-use workshop_protocol::InputFrame;
+use workshop_agents::{Delta, SessionEvent};
 
-use super::{advance, delta_frame, input_frame};
-use crate::agents::wire::{AgentDeltaFrame, AgentDeltaKind, AgentEventFrame, AskTool};
-
-#[test]
-fn input_frames_map_conversation_waits_to_wire_shapes() {
-    let cases = [
-        (
-            WaitFrame::Required {
-                token: "token-a".to_owned(),
-            },
-            InputFrame::Required {
-                token: "token-a".to_owned(),
-            },
-        ),
-        (
-            WaitFrame::Canceled {
-                token: "token-b".to_owned(),
-            },
-            InputFrame::Canceled {
-                token: "token-b".to_owned(),
-            },
-        ),
-    ];
-
-    for (wait, expected) in cases {
-        assert_eq!(input_frame(wait), expected);
-    }
-}
+use super::{advance, delta_frame};
+use crate::agents::wire::{AgentDeltaFrame, AgentDeltaKind, AgentEventFrame};
 
 #[test]
 fn delta_frames_map_conversation_channels_to_wire_shapes() {
@@ -72,32 +44,13 @@ fn provenance() -> Provenance {
     Provenance::new(TaskId::from(ChainId::root()), 0)
 }
 
-/// The ask tool's fixed id, under the user-input Pack's id.
-const ASK_TOOL: &str = "user-input/ask";
-
-/// The ask tool's vendor and id, which a script's ask result is
-/// recognized by.
-fn ask() -> AskTool {
-    AskTool {
-        vendor: "runvil".to_owned(),
-        id: ToolId::parse(ASK_TOOL).expect("the ask tool id parses"),
-    }
-}
-
-/// The operator's message as a script's ask result, which has a wire
-/// shape.
+/// The operator's message as it entered the main chain's inbox, which has
+/// a wire shape.
 fn operator_message(text: &str) -> Event {
-    let ask = ask();
-    Event::ToolResult {
+    Event::InboxMessage {
         section: "chat".to_owned(),
         provenance: provenance(),
-        turn: 0,
-        tool_call_id: String::new(),
-        alias: ASK_TOOL.to_owned(),
-        tool: ask.id,
-        vendor: Some(ask.vendor),
-        content: text.to_owned(),
-        trusted: true,
+        text: text.to_owned(),
     }
 }
 
@@ -112,7 +65,7 @@ fn entry(index: u64, reply: Option<u64>, event: &Event) -> SessionEvent {
 
 /// The frame `event` renders at wire index `index`.
 fn frame(index: u64, reply: Option<u64>, event: &Event) -> AgentEventFrame {
-    AgentEventFrame::new(index, reply, event, Some(&ask())).expect("an operator message frames")
+    AgentEventFrame::new(index, reply, event).expect("an operator message frames")
 }
 
 #[test]
@@ -134,11 +87,10 @@ fn framed_entries_take_gap_free_wire_indices_past_unframed_ones() {
         entry(3, Some(1), &again),
     ];
     let (mut cursor, mut framed) = (0, 0);
-    let ask = ask();
 
     let rendered: Vec<_> = entries
         .iter()
-        .map(|entry| advance(&mut cursor, &mut framed, Some(&ask), entry))
+        .map(|entry| advance(&mut cursor, &mut framed, entry))
         .collect();
 
     assert_eq!(
@@ -162,7 +114,6 @@ fn an_entry_below_the_cursor_moves_neither_cursor() {
     let replayed = advance(
         &mut cursor,
         &mut framed,
-        Some(&ask()),
         &entry(4, None, &operator_message("seen")),
     );
 
@@ -175,12 +126,7 @@ fn a_live_entry_past_a_gap_moves_the_cursor_beyond_it() {
     let late = operator_message("late");
     let (mut cursor, mut framed) = (2, 1);
 
-    let live = advance(
-        &mut cursor,
-        &mut framed,
-        Some(&ask()),
-        &entry(6, None, &late),
-    );
+    let live = advance(&mut cursor, &mut framed, &entry(6, None, &late));
 
     assert_eq!(
         live,

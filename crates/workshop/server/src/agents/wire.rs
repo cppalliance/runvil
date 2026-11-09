@@ -8,15 +8,18 @@
 //! session streams [`AgentEventFrame`]s - the durable event log, each
 //! frame holding its log index, replayed from the top on attach - and
 //! [`AgentDeltaFrame`]s, the ephemeral live chunks, each stamped with the
-//! `reply` id of the durable event that will supersede it.
-//! `{"type":"cancel"}` fires the session's turn-cancel: cancellation is a
-//! stop reason, never an error - no error frame follows, pending waits die
-//! as `input_canceled`, and the relaunched agent returns to waiting.
-//! Frames already in flight from the canceled run may still arrive
-//! between the cancel and the relaunch: a defined grace window, absorbed
-//! by the reply-id coalescing (the canceled round never settles, so its
-//! deltas fall to the round that eventually does), never a protocol
-//! violation. The three client requests parse as [`SessionRequest`].
+//! `reply` id of the durable event that will supersede it. The event log
+//! says when the agent waits on its empty inbox for the operator
+//! (`awaiting_input`) and holds each message the operator sent
+//! (`user_message`). `{"type":"cancel"}` fires the session's turn-cancel:
+//! cancellation is a stop reason, never an error - no error frame
+//! follows, and the agent's chat loop returns to waiting on its inbox.
+//! Frames already in flight from the canceled round may still arrive
+//! after the cancel: a defined grace window, absorbed by the reply-id
+//! coalescing (the canceled round never settles, so its deltas fall to
+//! the round that eventually does), never a protocol violation. The
+//! three client requests parse as [`SessionRequest`]; the operator's
+//! message, `input_response`, stays in `workshop-protocol`.
 //!
 //! A session-level failure is pushed as an id-less
 //! [`ErrorFrame`](workshop_protocol::ErrorFrame): a model round that
@@ -25,8 +28,7 @@
 //! Delivery on this socket: ephemeral - the reports are sent on a bounded
 //! broadcast beside the deltas and may drop under lag; the durable
 //! transcript already shows the failed turn as one without a reply, and
-//! terminal failures also land on the status bus. The input-wait frames
-//! stay in `workshop-protocol`.
+//! terminal failures also land on the status bus.
 //!
 //! The TypeScript half of this contract is
 //! `crates/workshop/ui/src/services/protocol.ts`; the two files
@@ -36,8 +38,8 @@
 //! SPA suite's `crates/workshop/ui/test/agent-wire-fixtures.mjs`, so drift
 //! on either side fails that side's tests.
 
-use runvil::ToolId;
 use runvil::event::Event;
+use runvil::ids::{ChainId, TaskId};
 use runvil::metrics::{CallMetrics, ToolCallEvent};
 use serde::{Deserialize, Serialize};
 
@@ -151,8 +153,8 @@ impl AgentSessionFrame {
     }
 }
 
-/// The kind of one [`AgentEvent`] on the wire, labelled with the Agent
-/// Client Protocol `sessionUpdate` names so the SPA's transcript stays
+/// The kind of one agent event, named as the Agent Client Protocol's
+/// `sessionUpdate` kinds are, so the SPA's transcript stays
 /// ACP-conversant:
 ///
 /// | Variant | Label |
@@ -162,9 +164,11 @@ impl AgentSessionFrame {
 /// | [`ToolResult`](Self::ToolResult) | `tool_call_update` |
 /// | [`Thinking`](Self::Thinking) | `agent_thought` |
 /// | [`UserInput`](Self::UserInput) | `user_message` |
+/// | [`AwaitingInput`](Self::AwaitingInput) | `awaiting_input` |
 ///
-/// Exactly the Engine's content [`Event`] variants a transcript renders;
-/// lifecycle, task, and debug events never frame.
+/// Exactly the Engine's content [`Event`] variants a transcript renders,
+/// and the main chain's inbox events: lifecycle, task, and debug events,
+/// and a task's inbox events, never frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[non_exhaustive]
 enum AgentEventKind {
@@ -183,6 +187,9 @@ enum AgentEventKind {
     /// Text the user supplied.
     #[serde(rename = "user_message")]
     UserInput,
+    /// The agent waits on its empty inbox for the operator's next message.
+    #[serde(rename = "awaiting_input")]
+    AwaitingInput,
 }
 
 /// One content [`Event`] in the shape the `/agents/ws` wire uses: the
@@ -217,24 +224,21 @@ struct AgentEvent {
     metrics: Option<CallMetrics>,
 }
 
-/// The ask tool a script's result is recognized by: the vendor of the
-/// Pack that answers it and its id.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct AskTool {
-    /// The vendor of the ask tool's Pack, `runvil`.
-    pub(super) vendor: String,
-    /// The ask tool's id, `user-input/ask`.
-    pub(super) id: ToolId,
+/// Whether `event` was reported under the main chain, task `0`, whose
+/// inbox the operator's messages fill.
+fn on_main_chain(event: &Event) -> bool {
+    event.provenance().task == TaskId::from(ChainId::root())
 }
 
 impl AgentEvent {
     /// Projects one Engine event onto the wire shape, or `None` for a
     /// variant the transcript does not render (lifecycle, task, and debug
-    /// events). A script's call to the ask tool `ask`, matched by both its
-    /// vendor and its id, frames as the operator's `user_message`, because
-    /// its result is the text the operator typed.
+    /// events, and a task's inbox events). A message that entered the
+    /// main chain's inbox frames as the operator's `user_message`, since
+    /// only the operator fills that inbox, and the main chain parking on
+    /// its empty inbox frames as `awaiting_input`.
     #[must_use]
-    fn from_event(event: &Event, ask: Option<&AskTool>) -> Option<Self> {
+    fn from_event(event: &Event) -> Option<Self> {
         let base = |kind: AgentEventKind, turn: u32, content: String| AgentEvent {
             kind,
             section: event.section().to_owned(),
@@ -275,18 +279,11 @@ impl AgentEvent {
                     render_tool_calls(calls),
                 )
             },
-            // An empty call id marks a script's call; a model's ask
-            // answers its own tool call and stays a tool result.
-            Event::ToolResult {
-                tool_call_id,
-                tool,
-                vendor: Some(vendor),
-                content,
-                ..
-            } if tool_call_id.is_empty()
-                && ask.is_some_and(|ask| ask.id == *tool && ask.vendor == *vendor) =>
-            {
-                base(AgentEventKind::UserInput, 0, content.clone())
+            Event::InboxMessage { text, .. } if on_main_chain(event) => {
+                base(AgentEventKind::UserInput, 0, text.clone())
+            }
+            Event::InboxWaiting { .. } if on_main_chain(event) => {
+                base(AgentEventKind::AwaitingInput, 0, String::new())
             }
             Event::ToolResult {
                 turn,
@@ -335,20 +332,14 @@ pub(super) struct AgentEventFrame {
 
 impl AgentEventFrame {
     /// Builds the frame for the entry at `index`, or `None` when `event`
-    /// is a variant the transcript does not render. `ask` is the ask
-    /// tool's vendor and id, which a script's ask result is recognized by.
+    /// is a variant the transcript does not render.
     #[must_use]
-    pub(super) fn new(
-        index: u64,
-        reply: Option<u64>,
-        event: &Event,
-        ask: Option<&AskTool>,
-    ) -> Option<Self> {
+    pub(super) fn new(index: u64, reply: Option<u64>, event: &Event) -> Option<Self> {
         Some(Self {
             kind: "agent_event",
             index,
             reply,
-            event: AgentEvent::from_event(event, ask)?,
+            event: AgentEvent::from_event(event)?,
         })
     }
 }

@@ -1,7 +1,9 @@
 //! A conversation over its one run: the run's report becomes the
 //! conversation's failure report, an agent that fails to parse is a
-//! run-failed report with no run recorded, a stop keeps a question open, a
-//! close cancels the run, and the conversation ends with its run.
+//! run-failed report with no run recorded, a message sent before the run
+//! is handed its Harness reaches no run, a stop leaves the agent waiting
+//! on its inbox, a close cancels the run, and the conversation ends with
+//! its run.
 
 // clippy.toml's allow-expect-in-tests covers #[test] functions only, not
 // the helpers they share; failing a test by panicking with the invariant
@@ -17,12 +19,15 @@ use std::time::Duration;
 use harness::record::{MemoryRecorder, RunId};
 use tokio::sync::broadcast;
 use workshop_agents::{
-    Conversation, Conversations, FailureKind, SessionFailure, SessionState, WaitFrame,
+    Conversation, Conversations, FailureKind, SessionEvent, SessionFailure, SessionState,
 };
 
 use crate::support::{AGENT, prompt, run_for};
 
 const DEADLINE: Duration = Duration::from_secs(10);
+
+/// A section that returns the operator's next message.
+const RECEIVES: &str = "return (tasks.receive())";
 
 /// Runs the conversation's one run over `source` on its own task.
 fn start(
@@ -35,18 +40,19 @@ fn start(
     tokio::spawn(async move { conversation.run(host, AGENT, setup).await })
 }
 
-async fn next_wait(waits: &mut broadcast::Receiver<WaitFrame>) -> WaitFrame {
-    tokio::time::timeout(DEADLINE, waits.recv())
-        .await
-        .expect("a wait frame arrives in time")
-        .expect("the wait channel is open")
-}
-
-async fn required(waits: &mut broadcast::Receiver<WaitFrame>) -> String {
-    match next_wait(waits).await {
-        WaitFrame::Required { token } => token,
-        frame @ WaitFrame::Canceled { .. } => panic!("expected a required frame, got {frame:?}"),
-    }
+/// Waits until the run's main chain parks on its empty inbox, as the
+/// conversation's live events report it.
+async fn waits_on_its_inbox(events: &mut broadcast::Receiver<SessionEvent>) {
+    tokio::time::timeout(DEADLINE, async {
+        loop {
+            let entry = events.recv().await.expect("the event channel is open");
+            if entry.event["kind"] == "inbox_waiting" {
+                return;
+            }
+        }
+    })
+    .await
+    .expect("the agent waits on its inbox in time");
 }
 
 async fn ended(run: tokio::task::JoinHandle<()>) {
@@ -159,14 +165,14 @@ async fn a_completed_report_reports_nothing_and_ends_the_conversation() {
 }
 
 #[tokio::test]
-async fn a_close_with_a_question_open_cancels_it_and_reports_the_cancel() {
+async fn a_close_while_the_agent_waits_on_its_inbox_cancels_the_run_and_reports_the_cancel() {
     let table = Conversations::new();
-    let conversation = table.open("ask");
+    let conversation = table.open("receive");
     let recorder = Arc::new(MemoryRecorder::new());
     let mut errors = conversation.subscribe_errors();
-    let mut waits = conversation.subscribe_waits();
-    let run = start(&conversation, &recorder, prompt("return (input.ask())"));
-    let token = required(&mut waits).await;
+    let mut events = conversation.subscribe_events();
+    let run = start(&conversation, &recorder, prompt(RECEIVES));
+    waits_on_its_inbox(&mut events).await;
 
     assert!(
         table.close(conversation.id()),
@@ -177,11 +183,6 @@ async fn a_close_with_a_question_open_cancels_it_and_reports_the_cancel() {
         SessionState::Closing,
         "a close is Closing until the run ends"
     );
-    assert_eq!(
-        next_wait(&mut waits).await,
-        WaitFrame::Canceled { token },
-        "the open question dies as an outcome"
-    );
     ended(run).await;
 
     let reports = reports(&mut errors);
@@ -191,7 +192,10 @@ async fn a_close_with_a_question_open_cancels_it_and_reports_the_cancel() {
         "a canceled report is the cancel's one report"
     );
     assert_eq!(conversation.state(), SessionState::Closed);
-    assert!(conversation.unresolved_waits().is_empty());
+    assert!(
+        !conversation.send_input("after the close".to_owned()),
+        "an ended run refuses the message"
+    );
     let run = conversation.run_id().expect("the recorder began the run");
     assert!(matches!(
         recorder.result(run),
@@ -230,40 +234,63 @@ async fn a_close_before_the_run_starts_ends_its_recorded_run_canceled() {
 }
 
 #[tokio::test]
-async fn a_stop_with_only_a_question_open_leaves_it_open_and_its_token_answers() {
+async fn a_stop_while_the_agent_waits_on_its_inbox_leaves_the_wait_and_a_message_answers_it() {
     let table = Conversations::new();
-    let conversation = table.open("ask");
+    let conversation = table.open("receive");
     let recorder = Arc::new(MemoryRecorder::new());
     let mut errors = conversation.subscribe_errors();
-    let mut waits = conversation.subscribe_waits();
-    let run = start(&conversation, &recorder, prompt("return (input.ask())"));
-    let token = required(&mut waits).await;
+    let mut events = conversation.subscribe_events();
+    let run = start(&conversation, &recorder, prompt(RECEIVES));
+    waits_on_its_inbox(&mut events).await;
 
     conversation.stop_round();
-    // The stop is taken by the run's loop; the question it spared stays
-    // open, so the original token is still the one to answer.
+    // The stop is taken by the run's loop; the agent's wait on its inbox
+    // has nothing in flight for it to drop, so a message still answers it.
     tokio::task::yield_now().await;
-    assert_eq!(
-        conversation.unresolved_waits(),
-        std::slice::from_ref(&token)
+    assert!(
+        conversation.send_input("still here".to_owned()),
+        "the live run accepts the message"
     );
-    conversation
-        .send_input(&token, "still here".to_owned(), || {})
-        .expect("the original token answers the open question");
     ended(run).await;
 
-    assert!(
-        matches!(
-            waits.try_recv(),
-            Err(broadcast::error::TryRecvError::Empty | broadcast::error::TryRecvError::Closed)
-        ),
-        "no canceled frame: the stop never touched the question"
-    );
     assert!(reports(&mut errors).is_empty(), "a stop is never an error");
     let run = conversation.run_id().expect("the recorder began the run");
     assert_eq!(
         recorder.result(run),
         Some(Ok("still here".to_owned())),
-        "the run went on past the stop to the operator's answer"
+        "the run went on past the stop to the operator's message"
+    );
+}
+
+#[tokio::test]
+async fn a_message_sent_before_the_run_is_handed_its_harness_returns_false_and_reaches_no_run() {
+    let table = Conversations::new();
+    let conversation = table.open("early");
+    let recorder = Arc::new(MemoryRecorder::new());
+    assert!(
+        !conversation.send_input("too early".to_owned()),
+        "a conversation whose run has no Harness yet refuses the message"
+    );
+    let mut events = conversation.subscribe_events();
+    let run = start(&conversation, &recorder, prompt(RECEIVES));
+    waits_on_its_inbox(&mut events).await;
+    assert!(
+        conversation.send_input("in time".to_owned()),
+        "the run, handed its Harness, accepts the message"
+    );
+    ended(run).await;
+
+    let run = conversation.run_id().expect("the recorder began the run");
+    assert_eq!(
+        recorder.result(run),
+        Some(Ok("in time".to_owned())),
+        "the run read the message sent once it had its Harness"
+    );
+    assert!(
+        !recorder
+            .records(run)
+            .iter()
+            .any(|record| record.payload.to_string().contains("too early")),
+        "the refused message reached no record"
     );
 }

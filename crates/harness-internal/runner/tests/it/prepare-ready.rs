@@ -77,9 +77,9 @@ struct Starting {
 /// The factory of a [`Starting`] Pack over `startup`, which the test
 /// drives.
 fn starting(startup: Arc<Startup>) -> impl PackFactory {
-    move |name: &PackId, run: &HostServices| -> Result<Arc<dyn Pack>, Error> {
+    move |name: &PackId| -> Result<Arc<dyn Pack>, Error> {
         Ok(Arc::new(Starting {
-            echo: new_echo(name, run)?,
+            echo: new_echo(name)?,
             startup: Arc::clone(&startup),
         }))
     }
@@ -386,7 +386,7 @@ async fn a_cancel_that_lands_while_a_refusal_is_recorded_leaves_the_report_holdi
 
 #[tokio::test]
 async fn a_pack_that_keeps_the_default_ready_is_ready_at_once_and_serves_the_run() {
-    let echo = new_echo(&PackId::parse("tools").unwrap(), &HostServices::new()).unwrap();
+    let echo = new_echo(&PackId::parse("tools").unwrap()).unwrap();
     assert!(
         matches!(echo.ready().now_or_never(), Some(Ok(()))),
         "the default ready resolves Ok on its first poll"

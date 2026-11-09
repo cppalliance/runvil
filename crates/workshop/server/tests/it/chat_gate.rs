@@ -28,9 +28,9 @@ use futures_util::StreamExt as _;
 use serde_json::json;
 
 use workshop_server::fixtures::{gateway_updater, replace_gateway};
-use workshop_server::{AgentsConfig, AppState, Config, InputResponse};
+use workshop_server::{AgentsConfig, AppState, Config};
 
-use crate::agents::{answer, collect_turn, delta_text, next_wait_token, wait_after};
+use crate::agents::{answer, collect_turn, delta_text, is_awaiting, next_wait};
 use crate::common::{
     JsonSocket, connect_agents, echo_stream, launch, spawn_gateway, spawn_router, sse_chunk,
     sse_line, test_config, typed_catalog,
@@ -166,11 +166,17 @@ async fn launch_chat(socket: &mut JsonSocket) -> String {
     launch(socket, "chat").await
 }
 
-/// Asserts that no input wait or error is buffered. The socket refuses
-/// an unknown frame type inline, and its biased loop sends queued error
-/// and wait frames before reading inbound, so any premature frame
+/// Asserts that the chat in `session` is dormant: its run has not begun,
+/// so it has not waited on its inbox, and no error is buffered. The
+/// socket refuses an unknown frame type inline, and its biased loop sends
+/// a queued error frame before reading inbound, so a premature error
 /// arrives ahead of the refusal.
-async fn assert_chat_quiet(socket: &mut JsonSocket) {
+async fn assert_chat_quiet(server: &GateServer, session: &str, socket: &mut JsonSocket) {
+    assert_eq!(
+        server.state.agents().run_id(session),
+        None,
+        "chat must stay dormant until a chat-capable catalog exists, yet its run has begun"
+    );
     socket.send_json(&json!({ "type": "quiet_probe" })).await;
     let frame = socket.recv_json().await;
     assert!(

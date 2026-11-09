@@ -161,7 +161,6 @@ const PLUGIN_DOC_DIRS = [
   "crates/harness-internal",
   "crates/harness-gateway-client",
   "crates/plugin-web",
-  "crates/plugin-user-input",
   "crates/plugin-mcp",
   "crates/plugin-std",
 ];

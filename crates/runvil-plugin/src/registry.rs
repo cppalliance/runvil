@@ -11,7 +11,7 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolInfo, ToolOutput, make_tool_error};
 use serde_json::Value;
 
-use crate::{HostServices, Pack, PackFactory, PackFuture, PackInfo, ToolContext};
+use crate::{Pack, PackFactory, PackFuture, PackInfo, ToolContext};
 
 #[cfg(test)]
 #[path = "registry-tests.rs"]
@@ -258,7 +258,7 @@ const BUILTIN: [PackInfo; 2] = [
     clippy::unnecessary_wraps,
     reason = "the PackFactory signature fixes the return type"
 )]
-fn builtin(_id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+fn builtin(_id: &PackId) -> Result<Arc<dyn Pack>, Error> {
     Ok(Arc::new(Builtin))
 }
 

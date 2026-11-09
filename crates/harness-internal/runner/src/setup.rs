@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use runvil::RunLimits;
 use runvil::vfs::VfsRef;
-use runvil_plugin::HostServices;
 
 use crate::performers::InferenceBroker;
 use crate::recorder::RunRecorder;
@@ -24,8 +23,6 @@ pub struct RunSetup {
     pub recorder: Arc<dyn RunRecorder>,
     /// Lists the models and performs model rounds.
     pub broker: Arc<dyn InferenceBroker>,
-    /// The services the run makes its Pack instances from.
-    pub services: HostServices,
     /// The run's whole filesystem: the input is staged in it, the run
     /// works in it, and the declared output is read from it.
     pub vfs: VfsRef,
@@ -51,15 +48,14 @@ pub struct RunSetup {
 
 impl RunSetup {
     /// A setup over `recorder` and `broker`. Every other field starts
-    /// empty or at its default: no services, a fresh memory store, no
-    /// selection, no roots, no args, no input, `RunLimits::default()`, at
-    /// most 10 tool calls in flight, and no user.
+    /// empty or at its default: a fresh memory store, no selection, no
+    /// roots, no args, no input, `RunLimits::default()`, at most 10 tool
+    /// calls in flight, and no user.
     #[must_use]
     pub fn new(recorder: Arc<dyn RunRecorder>, broker: Arc<dyn InferenceBroker>) -> RunSetup {
         RunSetup {
             recorder,
             broker,
-            services: HostServices::new(),
             vfs: VfsRef::default(),
             selected_model: None,
             workspace_roots: Vec::new(),
@@ -76,7 +72,6 @@ impl fmt::Debug for RunSetup {
     /// Shows every field but the recorder and broker.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RunSetup")
-            .field("services", &self.services)
             .field("vfs", &self.vfs)
             .field("selected_model", &self.selected_model)
             .field("workspace_roots", &self.workspace_roots)

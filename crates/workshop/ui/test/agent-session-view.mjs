@@ -12,8 +12,10 @@
 // raises the toast, the context menu offers Copy Message / Select All,
 // and an error opens the composer's popup instead of
 // a row. Reduced motion drops the height and fade animations. The input
-// pins to the pending wait, answers it byte-exact, and returns to
-// disabled; a view built with a ModelService mounts the toolbar (mode
+// stays editable: send stays disabled until the agent first waits or
+// works, answers the waiting agent byte-exact, and while the agent works
+// an empty box shows Stop and a box with text shows send, which steers
+// the turn; a view built with a ModelService mounts the toolbar (mode
 // chip, model picker, context ring) between the feed and the input bar.
 // Run: node test/agent-session-view.mjs
 import { readFile, writeFile } from "node:fs/promises";
@@ -144,8 +146,6 @@ function makeWire() {
     session: new Emitter(),
     event: new Emitter(),
     delta: new Emitter(),
-    inputRequired: new Emitter(),
-    inputCanceled: new Emitter(),
     error: new Emitter(),
     disconnect: new Emitter(),
   };
@@ -154,8 +154,6 @@ function makeWire() {
     onSession: emitters.session.event,
     onEvent: emitters.event.event,
     onDelta: emitters.delta.event,
-    onInputRequired: emitters.inputRequired.event,
-    onInputCanceled: emitters.inputCanceled.event,
     onError: emitters.error.event,
     onDisconnect: emitters.disconnect.event,
     responses: [],
@@ -164,9 +162,9 @@ function makeWire() {
     launch() {
       return true;
     },
-    respond(token, text) {
+    respond(text) {
       if (!this.up) return false;
-      this.responses.push([token, text]);
+      this.responses.push(text);
       return true;
     },
     cancelTurn() {
@@ -186,8 +184,13 @@ function makeWire() {
       },
       delta: (kind, content, reply) =>
         emitters.delta.fire({ type: "agent_delta", kind, content, reply }),
-      inputRequired: (token) => emitters.inputRequired.fire(token),
-      inputCanceled: (token) => emitters.inputCanceled.fire(token),
+      // The agent parks on its empty inbox, as the durable log says.
+      awaiting: () =>
+        emitters.event.fire({
+          type: "agent_event",
+          index: 0,
+          event: { kind: "awaiting_input", section: "chat", turn: 0, content: "" },
+        }),
       error: (message) => emitters.error.fire(message),
       disconnect: () => emitters.disconnect.fire(),
       session: (session) => emitters.session.fire({ type: "agent_session", session, agent: "chat" }),
@@ -207,18 +210,18 @@ function setup() {
   const turns = () => [...view.element.querySelectorAll(".ws-turn")];
   const tail = () => view.element.querySelector(".ws-tail");
   // The chat box: content and selection are driven through the component
-  // (the DOM alone sets neither on a ProseMirror editor), and the
-  // pending-wait gate shows on the editor's contenteditable attribute.
+  // (the DOM alone sets neither on a ProseMirror editor), and whether the
+  // box takes typing shows on the editor's contenteditable attribute.
   const input = view.chatBox;
   const editorEl = view.element.querySelector(".ws-prompt-input__editor");
   const editable = () => editorEl.getAttribute("contenteditable") === "true";
   // The one round action button: the mic over an empty box, the send arrow
-  // once there is text, Stop while the agent generates.
+  // once there is text, Stop over an empty box while the agent generates.
   const send = view.element.querySelector(".ws-agent-session__action");
-  // The operator's turn: the wait opens, the text goes, and the server
+  // The operator's turn: the agent waits, the text goes, and the server
   // records it as a user message - which also leaves the agent generating.
-  const ask = (text, token = `tok-${wire.responses.length}`) => {
-    wire.fire.inputRequired(token);
+  const ask = (text) => {
+    wire.fire.awaiting();
     input.setText(text);
     send.click();
     wire.fire.event("user_message", text);
@@ -516,8 +519,9 @@ await assertNoLeaks(lifecycle, async () => {
     check("a thinking step the operator closed stays closed through the settle", !isOpen(thinking));
 
     wire.fire.event("agent_message", "done", { reply: 6 });
+    wire.fire.awaiting();
     check(
-      "the group reads Explored once the turn ends, in the same node",
+      "the group reads Explored once the turn ends at the agent's next wait, in the same node",
       rows()[1] === group && actionOf(collapsible) === "Explored" && isOpen(collapsible),
     );
     dispose();
@@ -664,7 +668,11 @@ await assertNoLeaks(lifecycle, async () => {
     wire.fire.delta("text", "answering", 1);
     check("streaming reply text is the status: no tail", tail() === null);
     wire.fire.event("agent_message", "answering", { reply: 1 });
-    check("a finished turn has no tail", tail() === null && service.generating === false);
+    wire.fire.awaiting();
+    check(
+      "a turn ended by the agent's next wait has no tail",
+      tail() === null && service.generating === false,
+    );
     dispose();
   }
 
@@ -696,7 +704,12 @@ await assertNoLeaks(lifecycle, async () => {
     ask("first");
     wire.fire.event("agent_message", "reply **one**", { reply: 0 });
     const footerOf = (turn) => turn?.querySelector(":scope > .ws-turn-footer") ?? null;
-    check("a finished turn shows a footer with Copy", footerOf(turns()[0]) !== null);
+    check(
+      "a reply alone leaves the turn running, with no footer yet",
+      footerOf(turns()[0]) === null,
+    );
+    wire.fire.awaiting();
+    check("a turn the agent's wait finished shows a footer with Copy", footerOf(turns()[0]) !== null);
     ask("second");
     wire.fire.delta("text", "reply t", 1);
     check(
@@ -708,8 +721,9 @@ await assertNoLeaks(lifecycle, async () => {
     );
     wire.fire.event("agent_message", "reply two", { reply: 1 });
     wire.fire.event("agent_message", "and more", { reply: 2 });
+    wire.fire.awaiting();
     const copy = footerOf(turns()[1])?.querySelector(".ws-turn-footer__copy");
-    check("the last turn gets its footer once the agent stops", copy !== null && copy !== undefined);
+    check("the last turn gets its footer once the agent waits again", copy !== null && copy !== undefined);
     const copyPath = /d="([^"]+)"/.exec(ICON_COPY)?.[1];
     const earlierCopy = footerOf(turns()[0])?.querySelector(".ws-turn-footer__copy");
     check(
@@ -832,6 +846,7 @@ await assertNoLeaks(lifecycle, async () => {
     window.getSelection().removeAllRanges();
 
     wire.fire.event("agent_message", "an answer", { reply: 0 });
+    wire.fire.awaiting();
     const footer = turns()[0]?.querySelector(":scope > .ws-turn-footer");
     check("the finished turn has its footer", footer !== null && footer !== undefined);
     fire(footer);
@@ -878,19 +893,16 @@ await assertNoLeaks(lifecycle, async () => {
     wire.fire.event("user_message", "ask me");
     wire.fire.error("the round failed");
     check(
-      "after a send, Try again is offered but disabled until a wait is pinned",
-      retry()?.hidden === false && retry().disabled === true,
+      "after a send, Try again is offered and enabled, with no wait to pin it to",
+      retry()?.hidden === false && retry().disabled === false,
     );
-    wire.fire.inputRequired("t9");
-    check("a pinned wait enables Try again", retry()?.disabled === false);
     retry().click();
     check(
       "Try again re-sends the last user message through respond",
-      isDeepStrictEqual(wire.responses.at(-1), ["t9", "ask me"]) && popup() === null,
+      wire.responses.at(-1) === "ask me" && popup() === null,
     );
 
     wire.up = false;
-    wire.fire.inputRequired("t10");
     input.setText("hello");
     send.click();
     check(
@@ -1057,44 +1069,67 @@ await assertNoLeaks(lifecycle, async () => {
     dispose();
   }
 
-  // --- The input pins to the pending wait ------------------------------------------------
+  // --- The input stays editable; send waits for the agent to start ---------------------
 
   {
     const { wire, input, editorEl, editable, send, dispose } = setup();
+    const enter = () =>
+      editorEl.dispatchEvent(
+        new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+      );
+    check("the box is editable before the agent starts", editable());
+    input.setText("too early");
     check(
-      "the input starts disabled with no wait open, the action idle",
-      !editable() && send.getAttribute("data-action") === "idle",
+      "until the agent first waits or works, send stays disabled",
+      send.getAttribute("data-state") === "send" &&
+        send.getAttribute("data-action") === "idle" &&
+        send.disabled === true,
     );
-    wire.fire.inputRequired("tok1");
+    send.click();
+    enter();
     check(
-      "an input_required enables the pinned input",
-      editable() && send.disabled === false,
+      "a disabled send sends nothing, by click or Enter, and keeps the draft",
+      wire.responses.length === 0 && input.getText() === "too early",
+    );
+    wire.fire.awaiting();
+    check(
+      "the agent's first wait enables send",
+      send.getAttribute("data-action") === "send" && send.disabled === false,
     );
     input.setText("two  spaces ");
     send.click();
     check(
       "submitting answers the wait byte-exact, untrimmed",
-      isDeepStrictEqual(wire.responses, [["tok1", "two  spaces "]]),
+      isDeepStrictEqual(wire.responses, ["two  spaces "]),
     );
     check("a successful send clears the box", input.getText() === "");
+    check("the box stays editable while the agent works", editable());
     check(
-      "the spent wait returns the input to disabled, and the button to Stop while the agent generates",
-      !editable() &&
-        send.getAttribute("data-action") === "stop" &&
-        send.getAttribute("data-state") === "stop",
+      "while the agent works an empty box shows Stop",
+      send.getAttribute("data-action") === "stop" && send.getAttribute("data-state") === "stop",
     );
-    wire.fire.inputRequired("tok2");
+    input.setText("steer it");
+    check(
+      "while the agent works a box with text shows send",
+      send.getAttribute("data-state") === "send" &&
+        send.disabled === false &&
+        send.getAttribute("aria-label") === "Send",
+    );
+    enter();
+    check(
+      "the message steers the working agent and clears the box",
+      isDeepStrictEqual(wire.responses, ["two  spaces ", "steer it"]) && input.getText() === "",
+    );
+    check("the emptied box shows Stop again", send.getAttribute("data-state") === "stop");
+    enter();
+    check("Enter over an empty box while the agent works sends nothing", wire.responses.length === 2);
+    wire.fire.awaiting();
     send.click();
-    check("an empty box sends nothing", wire.responses.length === 1);
+    check("an empty box sends nothing", wire.responses.length === 2);
     input.setText("enter sends");
-    editorEl.dispatchEvent(
-      new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
-    );
-    check(
-      "Enter submits without a button click",
-      isDeepStrictEqual(wire.responses[1], ["tok2", "enter sends"]),
-    );
-    wire.fire.inputRequired("tok3");
+    enter();
+    check("Enter submits without a button click", wire.responses[2] === "enter sends");
+    wire.fire.awaiting();
     input.setText("変換中");
     editorEl.dispatchEvent(
       new window.KeyboardEvent("keydown", {
@@ -1106,10 +1141,22 @@ await assertNoLeaks(lifecycle, async () => {
     );
     check(
       "Enter that commits an IME composition does not submit",
-      wire.responses.length === 2 && input.getText() === "変換中",
+      wire.responses.length === 3 && input.getText() === "変換中",
     );
-    wire.fire.inputCanceled("tok3");
-    check("a canceled wait returns the input to disabled", !editable());
+    dispose();
+  }
+
+  {
+    // An agent that works before it ever waits takes a message too.
+    const { wire, input, send, dispose } = setup();
+    input.setText("steer");
+    wire.fire.delta("text", "already working", 0);
+    check(
+      "the run's first report enables send",
+      send.getAttribute("data-action") === "send" && send.disabled === false,
+    );
+    send.click();
+    check("the message goes to the working agent", isDeepStrictEqual(wire.responses, ["steer"]));
     dispose();
   }
 
@@ -1132,12 +1179,12 @@ await assertNoLeaks(lifecycle, async () => {
     const editorEl = view.element.querySelector(".ws-prompt-input__editor");
     const send = view.element.querySelector(".ws-agent-session__action");
     check(
-      "with no wait the action is idle whatever the model state, and the empty box's mic stays pressable",
+      "before the agent starts the action is idle whatever the model state, and the empty box's mic stays pressable",
       send.getAttribute("data-action") === "idle" &&
         send.getAttribute("data-state") === "mic" &&
         send.disabled === false,
     );
-    wire.fire.inputRequired("model-gated");
+    wire.fire.awaiting();
     input.setText("keep this draft");
     check(
       "the send control exposes the absent-selection gate",
@@ -1183,8 +1230,7 @@ await assertNoLeaks(lifecycle, async () => {
     send.click();
     check(
       "a later model selection makes the pending draft immediately submittable",
-      isDeepStrictEqual(wire.responses, [["model-gated", "keep this draft"]]) &&
-        input.getText() === "",
+      isDeepStrictEqual(wire.responses, ["keep this draft"]) && input.getText() === "",
     );
 
     view.dispose();
@@ -1196,20 +1242,25 @@ await assertNoLeaks(lifecycle, async () => {
   // --- The placeholder matches Cursor's agent input ---------------------------------------
 
   {
-    const { wire, editorEl, dispose } = setup();
+    const { wire, editorEl, ask, dispose } = setup();
     const placeholder = () => editorEl.querySelector("p")?.getAttribute("data-placeholder");
     check(
       "the input shows Cursor's agent placeholder",
       placeholder() === "Plan, Build, / for skills, @ for context",
     );
-    wire.fire.inputRequired("tok");
+    wire.fire.awaiting();
     check(
-      "the placeholder stays stable when the input opens",
+      "the placeholder stays stable when the agent waits",
       placeholder() === "Plan, Build, / for skills, @ for context",
     );
-    wire.fire.inputCanceled("tok");
+    ask("go");
     check(
-      "the placeholder stays stable when the input closes",
+      "while the agent works the placeholder invites a follow-up, which steers the turn",
+      placeholder() === "Add a follow-up",
+    );
+    wire.fire.awaiting();
+    check(
+      "the next wait brings Cursor's placeholder back",
       placeholder() === "Plan, Build, / for skills, @ for context",
     );
     dispose();
@@ -1321,8 +1372,8 @@ await assertNoLeaks(lifecycle, async () => {
       service.generating === false && send.getAttribute("data-state") !== "stop",
     );
     check(
-      "with generating off and no wait the action is idle again",
-      send.getAttribute("data-action") === "idle",
+      "with generating off the started agent's action is send again, the mic over the empty box",
+      send.getAttribute("data-action") === "send" && send.getAttribute("data-state") === "mic",
     );
     check("a turn that is not running cannot be stopped again", view.cancelTurn() === false && wire.cancels === 1);
     dispose();
@@ -1335,32 +1386,14 @@ await assertNoLeaks(lifecycle, async () => {
     ask("go");
     check("generating shows Stop", send.getAttribute("data-state") === "stop");
     wire.fire.event("agent_message", "done", { reply: 0 });
-    wire.fire.inputRequired("tok-next");
     check(
-      "the reply and the next wait end the turn: Stop gives way to the mic over the empty box",
+      "a reply alone keeps Stop: a message that lands as the reply does makes the turn go on",
+      service.generating === true && send.getAttribute("data-state") === "stop",
+    );
+    wire.fire.awaiting();
+    check(
+      "the next wait ends the turn: Stop gives way to the mic over the empty box",
       service.generating === false && send.getAttribute("data-state") === "mic" && send.getAttribute("data-action") === "send",
-    );
-    dispose();
-  }
-
-  {
-    // A sibling call finishing while the round's ask waits must not offer Stop.
-    const { wire, service, send, dispose } = setup();
-    wire.fire.session("s-parallel");
-    wire.fire.event("user_message", "go");
-    wire.fire.event(
-      "tool_call",
-      JSON.stringify([
-        { id: "c1", name: "ask", arguments: {}, tool: "user-input/ask", vendor: "runvil" },
-        { id: "c2", name: "fetch", arguments: {}, tool: "web/fetch", vendor: "runvil" },
-      ]),
-      { reply: 0 },
-    );
-    wire.fire.inputRequired("tok1");
-    wire.fire.event("tool_call_update", "page body", { tool_call_id: "c2" });
-    check(
-      "a sibling call's result while the ask waits keeps the action on send",
-      service.generating === false && send.getAttribute("data-action") === "send",
     );
     dispose();
   }

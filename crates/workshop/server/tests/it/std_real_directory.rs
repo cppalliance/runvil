@@ -87,7 +87,7 @@ fn std_pack() -> std::sync::Arc<dyn Pack> {
         .expect("install inserts the std Pack");
     factory
         .expect("install inserts std usable with no configuration")
-        .new_pack(&id, &HostServices::new())
+        .new_pack(&id)
         .expect("the Pack is made")
 }
 

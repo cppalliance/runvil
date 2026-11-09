@@ -1,25 +1,15 @@
-//! The agent socket's framing helpers: the pure render functions that
-//! map the conversation's wait and delta vocabulary onto Workshop's wire
-//! shapes, and the durable-event framing that drains a conversation's
-//! transcript past the per-client cursor.
+//! The agent socket's framing helpers: the pure render function that
+//! maps the conversation's delta vocabulary onto Workshop's wire shape,
+//! and the durable-event framing that drains a conversation's transcript
+//! past the per-client cursor.
 
 use axum::extract::ws::WebSocket;
 use runvil::event::Event;
-use workshop_agents::{Delta, DeltaKind, SessionEvent, WaitFrame};
-use workshop_protocol::InputFrame;
+use workshop_agents::{Delta, DeltaKind, SessionEvent};
 
 use super::socket::Attached;
-use crate::agents::wire::{AgentDeltaFrame, AgentDeltaKind, AgentEventFrame, AskTool};
+use crate::agents::wire::{AgentDeltaFrame, AgentDeltaKind, AgentEventFrame};
 use crate::websocket::send_frame;
-
-/// Renders a conversation's wait frame as the protocol's input frame: the
-/// one place the conversation's wait vocabulary meets Workshop's wire shape.
-pub(super) fn input_frame(frame: WaitFrame) -> InputFrame {
-    match frame {
-        WaitFrame::Required { token } => InputFrame::Required { token },
-        WaitFrame::Canceled { token } => InputFrame::Canceled { token },
-    }
-}
 
 /// Renders a conversation's delta as the protocol's delta frame, the reply stamp
 /// passed through; `None` for a side channel the wire has no label for,
@@ -51,31 +41,24 @@ pub(super) async fn drain_events(attached: &mut Attached, socket: &mut WebSocket
 
 /// Frames one transcript entry at or past the cursor and advances the
 /// cursor over it. An entry with no wire shape (lifecycle, task, and
-/// debug events) advances the cursor without a frame or a wire index. A
-/// `false` return means the client is gone.
+/// debug events, and a task's inbox events) advances the cursor without a
+/// frame or a wire index. A `false` return means the client is gone.
 pub(super) async fn frame_entry(
     attached: &mut Attached,
     entry: &SessionEvent,
     socket: &mut WebSocket,
 ) -> bool {
-    let ask = attached.ask.as_ref();
-    match advance(&mut attached.cursor, &mut attached.framed, ask, entry) {
+    match advance(&mut attached.cursor, &mut attached.framed, entry) {
         Some(frame) => send_frame(socket, &frame).await,
         None => true,
     }
 }
 
 /// Moves the transcript `cursor` past `entry` and returns the entry's
-/// frame, stamped with the wire index `framed` and advancing it, with a
-/// script's result from the `ask` tool framed as the operator's message.
-/// An entry below the cursor was already read and moves neither; an entry
-/// with no wire shape moves only the cursor.
-fn advance(
-    cursor: &mut u64,
-    framed: &mut u64,
-    ask: Option<&AskTool>,
-    entry: &SessionEvent,
-) -> Option<AgentEventFrame> {
+/// frame, stamped with the wire index `framed` and advancing it. An entry
+/// below the cursor was already read and moves neither; an entry with no
+/// wire shape moves only the cursor.
+fn advance(cursor: &mut u64, framed: &mut u64, entry: &SessionEvent) -> Option<AgentEventFrame> {
     if entry.index < *cursor {
         return None;
     }
@@ -83,7 +66,7 @@ fn advance(
     // A stored payload this build cannot read has no wire shape either;
     // the transcript's index sequence stays whole.
     let event = serde_json::from_value::<Event>(entry.event.clone()).ok()?;
-    let frame = AgentEventFrame::new(*framed, entry.reply, &event, ask)?;
+    let frame = AgentEventFrame::new(*framed, entry.reply, &event)?;
     *framed += 1;
     Some(frame)
 }

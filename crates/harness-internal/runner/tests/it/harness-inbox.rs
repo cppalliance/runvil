@@ -13,21 +13,18 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
-use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunId};
+use harness_runner::recorder::{MemoryRecorder, Record, RecordKind};
 use harness_runner::{RunControl, RunSetup};
 use runvil::vfs::VfsRef;
 use serde_json::json;
 use tokio::sync::Notify;
 
 use super::{
-    HookedBackend, PendingTimer, answers_to, launch, no_packs, plain_harness, run_beside, setup,
-    until,
+    FIRST_RUN, HookedBackend, PendingTimer, answers_to, is_event, launch, main_waits, no_packs,
+    plain_harness, run_beside, setup, until,
 };
 use crate::scripted::{Held, ScriptedBroker, calls_hold_once, held_broker, hold_host, reply};
 use crate::support::assert_canceled;
-
-/// The run every test here drives: the first one a fresh recorder begins.
-const FIRST_RUN: RunId = RunId::from_raw(1);
 
 /// A prompt that returns the first message its main chain reads.
 const RECEIVES: &str = "---\nname: receives\ndescription: d\nrunvil: 0\n---\n\n\
@@ -67,20 +64,6 @@ const LOOPS: &str = "---\nname: loops\ndescription: d\nrunvil: 0\n---\n\n\
     messages:user('hi')\n\
     models.loop()\n\
     return messages[#messages].content\n```\n";
-
-/// Whether `record` is an event of `kind`.
-fn is_event(record: &Record, kind: &str) -> bool {
-    record.kind == RecordKind::Event && record.payload["kind"] == kind
-}
-
-/// How many times `records` show the main chain parked on its empty
-/// inbox.
-fn main_waits(records: &[Record]) -> usize {
-    records
-        .iter()
-        .filter(|record| record.task_id == "0" && is_event(record, "inbox_waiting"))
-        .count()
-}
 
 /// The text of each message whose `InboxMessage` event `records` hold, in
 /// record order.

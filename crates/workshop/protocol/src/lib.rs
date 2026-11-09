@@ -1,6 +1,6 @@
 //! workshop-protocol - the wire protocol of the workshop sockets: the
-//! `/ws` frames and the input-wait frames of `/agents/ws`, typed with
-//! zero I/O.
+//! `/ws` frames and the operator's input frame of `/agents/ws`, typed
+//! with zero I/O.
 //!
 //! Frames are grouped by direction - inbound (client to server) first,
 //! outbound (server to client) second. Every wire shape is pinned by the
@@ -40,21 +40,16 @@
 //! No inbound frame is pushed by the server, so none takes a delivery
 //! classification; the reply frames they trigger are classified below.
 //!
-//! # Agent-session input frames
+//! # Agent-session input frame
 //!
-//! An agent session asks its operator for input through the Harness's
-//! `runvil/user-input` Pack, whose `input.ask()` waits on the
-//! session. Three frames make up that conversation: the server
-//! pushes [`InputFrame::Required`] when a wait opens and
-//! [`InputFrame::Canceled`] when one dies unresolved, and the client
-//! answers with an `input_response` frame parsed as [`InputResponse`].
-//! Both pushed frames are durable: the wait registry retains every
-//! unresolved wait and the session resends it on reconnect, so a push
-//! lost to a dead socket is repaired by the resent set - a live wait
-//! reappears, and a stale prompt is dropped because its token is absent.
-//! Cancellation is an explicit outcome: every path out of an unresolved
-//! wait pushes `input_canceled` for its token. The server's agent socket
-//! routes these frames; this crate pins their shapes and classification.
+//! An agent session's operator sends a message with an `input_response`
+//! frame, parsed as [`InputResponse`], at any time. The server sends it
+//! to the session's run, whose agent reads it from its main chain's
+//! inbox: it answers the agent while the agent waits there, and steers
+//! the turn while the agent works. When the agent waits for the operator
+//! is in the session's durable event log, as `awaiting_input` events, so
+//! no frame of this crate announces it. The server's agent socket routes
+//! this frame; this crate pins its shape.
 //!
 //! # Delivery contract
 //!
@@ -106,7 +101,7 @@ mod workbench;
 
 pub use catalog::{CatalogFrame, CatalogPush, is_chat_capable};
 pub use error::{ErrorEnvelope, ErrorFrame};
-pub use input::{InputFrame, InputResponse};
+pub use input::InputResponse;
 pub use menu::{SelectModelFrame, SwitchProfileFrame};
 pub use status::{Activity, Severity, StatusBarUpdate, StatusFrame};
 pub use workbench::{WorkbenchFrame, WorkbenchSnapshot};

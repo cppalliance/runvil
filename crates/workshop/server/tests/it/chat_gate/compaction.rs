@@ -117,11 +117,9 @@ async fn spawn_compacting_server() -> GateServer {
 }
 
 /// Collects frames until the `agent_message` event holding `reply`
-/// arrives, refusing error frames, and returns the next wait's token when
-/// it was announced on the way. Any other message, such as the summary
-/// round's own reply, is skipped.
-async fn collect_reply(socket: &mut JsonSocket, reply: &str) -> Option<String> {
-    let mut wait = None;
+/// arrives, refusing error frames and any wait on the inbox before it.
+/// Any other message, such as the summary round's own reply, is skipped.
+async fn collect_reply(socket: &mut JsonSocket, reply: &str) {
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             let frame = socket.recv_json().await;
@@ -132,8 +130,8 @@ async fn collect_reply(socket: &mut JsonSocket, reply: &str) -> Option<String> {
                 {
                     break;
                 }
-                Some("input_required") => {
-                    wait = frame["token"].as_str().map(str::to_owned);
+                Some("agent_event") if is_awaiting(&frame) => {
+                    panic!("the chat waits again only after the reply: {frame}")
                 }
                 Some("error") => {
                     panic!("no error frame may come between the reply's frames: {frame}")
@@ -144,7 +142,6 @@ async fn collect_reply(socket: &mut JsonSocket, reply: &str) -> Option<String> {
     })
     .await
     .unwrap_or_else(|_| panic!("the turn delivers the reply `{reply:.40}` within the deadline"));
-    wait
 }
 
 /// GATE 13 - context overflow. Once the conversation outgrows the
@@ -164,9 +161,9 @@ async fn gate_context_overflow_summarizes_older_turns_and_later_turns_answer() {
     // character boundary for the summary request to be valid UTF-8.
     let long = "é".repeat(50_000);
     let inputs = [long.as_str(), "second", "third", "fourth"];
-    let mut token = next_wait_token(&mut socket).await;
     for (index, input) in inputs.into_iter().enumerate() {
-        answer(&mut socket, &token, input).await;
+        next_wait(&mut socket).await;
+        answer(&mut socket, input).await;
         if index >= 2 {
             let error = socket
                 .recv_until(Duration::from_secs(10), |frame| frame["type"] == "error")
@@ -178,11 +175,7 @@ async fn gate_context_overflow_summarizes_older_turns_and_later_turns_answer() {
                 "the overflowed round surfaces as a failed model turn: {error}"
             );
         }
-        let wait = collect_reply(&mut socket, &format!("echo:{input}")).await;
-        token = match wait {
-            Some(token) => token,
-            None => next_wait_token(&mut socket).await,
-        };
+        collect_reply(&mut socket, &format!("echo:{input}")).await;
     }
 
     {

@@ -35,8 +35,7 @@
 //! calling chain's inbox, and for sending to a task's. Each Pack the
 //! prompt declares can contribute a prelude, Lua that defines globals once
 //! per VM before `require` installs ([`install_preludes`] states the
-//! rules). The `input` table that `user-input` defines is one such global:
-//! `input.ask()` is an ordinary tool call to that Pack's ask tool.
+//! rules).
 //!
 //! The `tools` table names every tool by its id: `tools.get` reads a tool
 //! object, `tools.packs` holds one object per Pack the run knows, the

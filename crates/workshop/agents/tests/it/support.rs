@@ -1,17 +1,9 @@
 //! Shared fixtures: an offline broker, and a Host and a per-run setup
-//! built from what a conversation hands it.
-
-// clippy.toml's allow-expect-in-tests covers #[test] functions only, not
-// the helpers they share; failing a test by panicking with the invariant
-// named is exactly what these are for.
-#![expect(
-    clippy::expect_used,
-    reason = "test helpers fail by panicking with the invariant named"
-)]
+//! built around the recorder tee a conversation hands it.
 
 use std::sync::Arc;
 
-use harness::pack::{HostServices, PackRegistry, Packs};
+use harness::pack::{PackRegistry, Packs};
 use harness::record::MemoryRecorder;
 use harness::{BoxFuture, Host, InferenceBroker, RunSetup};
 use runvil::effect::Round;
@@ -46,29 +38,25 @@ impl InferenceBroker for Offline {
     }
 }
 
-/// A prompt whose one section runs `lua`, declaring the operator-input
-/// Pack.
+/// A prompt whose one section runs `lua`, declaring the user Pack, as a
+/// conversation's agent does.
 pub(crate) fn prompt(lua: &str) -> String {
     format!(
         "---\nname: fixture\ndescription: a conversation fixture\nrunvil: 0\n\
-         uses:\n  - user-input\n---\n\n\
+         uses:\n  - user\n---\n\n\
          # Fixture\n\n## Conversation\n\n```lua\n{lua}\n```\n"
     )
 }
 
-/// A Host with the operator-input Pack that finds `source` as [`AGENT`],
-/// beside the run's setup, recording into `recorder` through the
-/// conversation's tee.
+/// A Host that finds `source` as [`AGENT`], beside the setup of a run with
+/// a user, recording into `recorder` through the conversation's tee.
 pub(crate) fn run_for(
     conversation: &Conversation,
     recorder: Arc<MemoryRecorder>,
     source: String,
 ) -> (Arc<Host>, RunSetup) {
-    let mut packs = PackRegistry::new();
-    plugin_user_input::install(&mut packs, serde_json::Value::Null, &HostServices::new())
-        .expect("a new registry takes the Pack");
     let host = Arc::new(Host {
-        packs: Packs::new(packs),
+        packs: Packs::new(PackRegistry::new()),
         prompts: Arc::new(move |name: &str| {
             if name == AGENT {
                 return Ok(source.clone());
@@ -83,7 +71,7 @@ pub(crate) fn run_for(
         timer: Arc::new(TokioTimer),
     });
     let setup = RunSetup {
-        services: conversation.run_services(),
+        has_user: true,
         ..RunSetup::new(conversation.recorder(recorder), Arc::new(Offline))
     };
     (host, setup)

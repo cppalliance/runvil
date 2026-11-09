@@ -65,9 +65,7 @@ pub(crate) fn factory(servers: Value, services: &HostServices) -> Inserted {
 /// One Pack instance `factory` makes under the Pack id `mcp`.
 pub(crate) fn instance(factory: &Arc<dyn PackFactory>) -> Arc<dyn Pack> {
     let id = PackId::parse("mcp").expect("a one-segment Pack id parses");
-    factory
-        .new_pack(&id, &HostServices::new())
-        .expect("the factory makes the Pack")
+    factory.new_pack(&id).expect("the factory makes the Pack")
 }
 
 /// The Pack over the server map `servers`, on the test's runtime.

@@ -1,40 +1,38 @@
 //! What a stop reaches depends on when the loop sees it: a stop
 //! drops a timed `tasks.join_any` while the task it joins keeps
-//! waiting; a stop seen before a step's effects start drops the round in
-//! flight and the run steps its chain on; a stop with only a question to
-//! the operator open spares the round after its answer; and a stop raised
-//! with nothing in flight changes nothing.
+//! waiting on its inbox; a stop seen before a step's effects start drops
+//! the round in flight and the run steps its chain on; a stop while the
+//! main chain waits on its inbox spares the round after its message; and
+//! a stop raised with nothing in flight changes nothing.
 
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, OnceLock};
 
 use harness_runner::recorder::MemoryRecorder;
-use harness_runner::{Packs, RunControl, RunSetup};
+use harness_runner::{RunControl, RunSetup};
 use runvil::vfs::VfsRef;
 use serde_json::json;
 
 use super::{
-    HookedBackend, PendingTimer, answers_to, answers_where, calls, launch, no_packs, run_beside,
-    setup, until,
+    FIRST_RUN, HookedBackend, PendingTimer, answers_to, inbox_waits, launch, main_waits, no_packs,
+    run_beside, setup, until,
 };
-use crate::asker::ASKER;
-use crate::scripted::{Held, HeldTimer, Operator, ScriptedBroker, held_broker};
-use crate::support::registry;
+use crate::scripted::{Held, HeldTimer, ScriptedBroker, held_broker};
 
 /// A main section parked under a `pcall` on a 30-second timed
-/// `tasks.join_any` over a child that asks the operator. Once the wait
-/// ends, the main infers once, joins the child for the operator's answer,
-/// and returns how the wait ended, the reply, and the answer.
+/// `tasks.join_any` over a child that waits on its inbox. Once the wait
+/// ends, the main infers once, sends the child a message, joins the child
+/// for it, and returns how the wait ended, the reply, and the message.
 const STOPS_TIMED_JOIN: &str = "---\nname: timed\ndescription: d\nrunvil: 0\n\
-    uses:\n  - tests/user-input\n---\n\n\
+    ---\n\n\
     # Timed\n\n\
     ## Main\n\n```lua\n\
-    local asker = tasks.spawn('## Asker')\n\
-    local ok, err = pcall(tasks.join_any, { asker }, { timeout = 30 })\n\
+    local child = tasks.spawn('## Child')\n\
+    local ok, err = pcall(tasks.join_any, { child }, { timeout = 30 })\n\
     local after = models.infer('after')\n\
-    local _t, _ok, answer = tasks.join_any({ asker })\n\
-    return tostring(ok) .. ':' .. err.kind .. '|' .. after .. '|' .. answer\n```\n\n\
-    ## Asker\n\n```lua\nreturn (input.ask())\n```\n";
+    tasks.send(child, 'kept')\n\
+    local _t, _ok, message = tasks.join_any({ child })\n\
+    return tostring(ok) .. ':' .. err.kind .. '|' .. after .. '|' .. message\n```\n\n\
+    ## Child\n\n```lua\nreturn (tasks.receive())\n```\n";
 
 /// A main section that spawns a child parked under a `pcall` on a model
 /// round, writes a store file, and then only waits on the child, returning
@@ -51,23 +49,17 @@ const STOPS_BEFORE_A_STEP: &str = "---\nname: before-step\ndescription: d\nrunvi
     local ok, err = pcall(models.infer, 'held')\n\
     return 'chat:' .. tostring(ok) .. ':' .. err.kind\n```\n";
 
-/// A prompt that hands the operator's answer to one model round.
-const ASKS_THEN_INFERS: &str = "---\nname: asks-infers\ndescription: d\nrunvil: 0\n\
-    uses:\n  - tests/user-input\n---\n\n\
-    # AsksInfers\n\n\
-    ## Only\n\n```lua\nreturn models.infer((input.ask()))\n```\n";
+/// A prompt that hands the operator's next message to one model round.
+const RECEIVES_THEN_INFERS: &str = "---\nname: receives-infers\ndescription: d\nrunvil: 0\n\
+    uses:\n  - user\n---\n\n\
+    # ReceivesInfers\n\n\
+    ## Only\n\n```lua\nreturn models.infer((tasks.receive()))\n```\n";
 
 /// A prompt that writes a store file, then runs one model round.
 const WRITES_THEN_INFERS: &str = "---\nname: writes-infers\ndescription: d\nrunvil: 0\n\
     ---\n\n\
     # WritesInfers\n\n\
     ## Only\n\n```lua\nstore.write('note.md', 'kept')\nreturn models.infer('after')\n```\n";
-
-/// A Host that installed only the fixture ask Pack, as `user-input`,
-/// beside the built-in.
-fn asker_host() -> Packs {
-    Packs::new(registry(&[ASKER]))
-}
 
 /// A store whose every write raises a stop through the control the
 /// returned slot holds, once the test puts the run's control there.
@@ -89,36 +81,24 @@ fn stopping_store() -> (VfsRef, Arc<OnceLock<RunControl>>) {
 
 #[tokio::test]
 async fn a_stop_drops_a_timed_join_any_and_its_pcall_resumes_while_the_joined_task_waits() {
-    let (operator, answers) = Operator::new();
-    let asked = Arc::clone(&operator.asked);
     let timer = Arc::new(Held::default());
     let broker = ScriptedBroker::replying();
-    let rounds = broker.rounds();
     let recorder = Arc::new(MemoryRecorder::new());
     let harness = launch(
-        asker_host(),
+        no_packs(),
         HeldTimer(Arc::clone(&timer)),
         STOPS_TIMED_JOIN,
-        RunSetup {
-            services: operator.services(),
-            ..setup(recorder.clone(), broker)
-        },
+        setup(recorder.clone(), broker),
     );
-    let watched = Arc::clone(&timer);
+    let (watched, waits) = (Arc::clone(&timer), Arc::clone(&recorder));
 
     let report = run_beside(harness, |control| async move {
         until(
-            "the child's question and the wait's timer are in flight",
-            || asked.load(Ordering::SeqCst) == 1 && watched.started() == 1,
+            "the child waits on its inbox and the wait's timer is in flight",
+            || inbox_waits(&waits.records(FIRST_RUN), "0.0") == 1 && watched.started() == 1,
         )
         .await;
         control.stop_round();
-        until(
-            "the dropped wait's pcall resumes and the main infers",
-            || rounds.lock().unwrap().len() == 1,
-        )
-        .await;
-        answers.send("kept".to_owned()).unwrap();
     })
     .await
     .expect("the run is reported");
@@ -126,19 +106,16 @@ async fn a_stop_drops_a_timed_join_any_and_its_pcall_resumes_while_the_joined_ta
     assert_eq!(
         report.result,
         Ok("false:canceled|re: after|kept".to_owned()),
-        "the wait raised the canceled error, and the child's question outlived the stop"
+        "the wait raised the canceled error, and the child's wait on its inbox outlived the stop"
     );
     assert_eq!(timer.dropped(), 1, "the stopped timer was torn down");
-    assert_eq!(
-        operator.abandoned.load(Ordering::SeqCst),
-        0,
-        "the stop left the child's question open"
-    );
     let records = recorder.records(report.run_id);
     assert_eq!(answers_to(&records, "Timer"), [json!("Dropped")]);
-    let asks = answers_where(&records, "ToolCall", calls("user-input/ask"));
-    assert_eq!(asks.len(), 1, "one question: {asks:?}");
-    assert_eq!(asks[0]["ToolCall"]["Ok"]["text"], "kept");
+    assert_eq!(
+        inbox_waits(&records, "0.0"),
+        1,
+        "the child waited once, and the stop never woke it"
+    );
 }
 
 #[tokio::test]
@@ -180,32 +157,31 @@ async fn a_stop_seen_before_a_steps_effects_start_drops_the_round_in_flight_and_
 }
 
 #[tokio::test]
-async fn a_stop_with_only_a_question_open_spares_the_round_after_its_answer() {
-    let (operator, answers) = Operator::new();
-    let asked = Arc::clone(&operator.asked);
+async fn a_stop_while_the_main_chain_waits_on_its_inbox_spares_the_round_after_its_message() {
     let broker = ScriptedBroker::replying();
     let rounds = broker.rounds();
     let recorder = Arc::new(MemoryRecorder::new());
     let harness = launch(
-        asker_host(),
+        no_packs(),
         PendingTimer::default(),
-        ASKS_THEN_INFERS,
+        RECEIVES_THEN_INFERS,
         RunSetup {
-            services: operator.services(),
+            has_user: true,
             ..setup(recorder.clone(), broker)
         },
     );
+    let waits = Arc::clone(&recorder);
 
     let report = run_beside(harness, |control| async move {
-        until("the prompt asks its question", || {
-            asked.load(Ordering::SeqCst) == 1
+        until("the main chain waits on its inbox", || {
+            main_waits(&waits.records(FIRST_RUN)) == 1
         })
         .await;
         control.stop_round();
         for _ in 0..16 {
             tokio::task::yield_now().await;
         }
-        answers.send("kept".to_owned()).unwrap();
+        assert!(control.send("kept".to_owned()));
     })
     .await
     .expect("the run is reported");
@@ -213,14 +189,13 @@ async fn a_stop_with_only_a_question_open_spares_the_round_after_its_answer() {
     assert_eq!(
         report.result,
         Ok("re: kept".to_owned()),
-        "the round after the answer completed"
+        "the round after the message completed"
     );
     assert_eq!(
         rounds.lock().unwrap().len(),
         1,
         "the round reached the broker"
     );
-    assert_eq!(operator.abandoned.load(Ordering::SeqCst), 0);
     let records = recorder.records(report.run_id);
     let chats = answers_to(&records, "Chat");
     assert_eq!(chats.len(), 1, "one round: {chats:?}");

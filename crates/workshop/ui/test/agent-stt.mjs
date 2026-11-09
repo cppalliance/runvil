@@ -334,15 +334,13 @@ async function waitFor(condition) {
 }
 
 // The scripted wire behind the real service: only the frames dictation cares
-// about are driven (input_required, input_canceled, agent_session).
+// about are driven (the agent's wait on its inbox, agent_session).
 function makeWire() {
   const emitters = {
     agents: new Emitter(),
     session: new Emitter(),
     event: new Emitter(),
     delta: new Emitter(),
-    inputRequired: new Emitter(),
-    inputCanceled: new Emitter(),
     error: new Emitter(),
     disconnect: new Emitter(),
   };
@@ -351,24 +349,26 @@ function makeWire() {
     onSession: emitters.session.event,
     onEvent: emitters.event.event,
     onDelta: emitters.delta.event,
-    onInputRequired: emitters.inputRequired.event,
-    onInputCanceled: emitters.inputCanceled.event,
     onError: emitters.error.event,
     onDisconnect: emitters.disconnect.event,
     responses: [],
     launch() {
       return true;
     },
-    respond(token, text) {
-      this.responses.push([token, text]);
+    respond(text) {
+      this.responses.push(text);
       return true;
     },
     cancelTurn() {
       return true;
     },
     fire: {
-      inputRequired: (token) => emitters.inputRequired.fire(token),
-      inputCanceled: (token) => emitters.inputCanceled.fire(token),
+      awaiting: () =>
+        emitters.event.fire({
+          type: "agent_event",
+          index: 0,
+          event: { kind: "awaiting_input", section: "chat", turn: 0, content: "" },
+        }),
       session: (session) => emitters.session.fire({ type: "agent_session", session, agent: "chat" }),
     },
   };
@@ -439,9 +439,9 @@ async function setup(speechCapture, host) {
     querySelector: (selector) => button.querySelector(selector),
   };
   // The chat box: content and selection are driven through the component
-  // (the DOM alone sets neither on a ProseMirror editor). The pending-wait
-  // gate and a take's read-only both show on the editor's contenteditable
-  // attribute; the take alone marks the frame with ws-stt-input--recording.
+  // (the DOM alone sets neither on a ProseMirror editor). A take's
+  // read-only shows on the editor's contenteditable attribute, and the take
+  // marks the frame with ws-stt-input--recording.
   const input = view.chatBox;
   const frame = view.element.querySelector(".ws-prompt-input");
   const editorEl = view.element.querySelector(".ws-prompt-input__editor");
@@ -485,7 +485,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, status, mic, input, editable, startTake, dispose } = await setup();
-    wire.fire.inputRequired("fixture");
+    wire.fire.awaiting();
     const socket = await startTake();
     if (socket === null) {
       failures.push("canonical fixture: the first take did not start");
@@ -583,7 +583,7 @@ await assertNoLeaks(lifecycle, async () => {
 
     const second = await startTake();
     check("a second take starts on the reusable fixture socket", second === socket);
-    wire.fire.inputCanceled("fixture");
+    wire.fire.session("s-next");
     const clear = socket.sent
       .filter((event) => event.type === "input_audio_buffer.clear")
       .at(-1);
@@ -598,7 +598,7 @@ await assertNoLeaks(lifecycle, async () => {
     );
     check("second-take cleanup stops recording", !status.recording);
     check("second-take cleanup preserves completed text", input.getText() === "Hello");
-    check("second-take cleanup restores the no-wait disabled UI state", !editable());
+    check("second-take cleanup leaves the box editable", editable());
     dispose();
   }
 
@@ -606,7 +606,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, status, mic, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("tok");
+    wire.fire.awaiting();
     const socket = await startTake();
     if (socket === null) {
       failures.push("mismatch recovery: the first take did not start");
@@ -685,11 +685,11 @@ await assertNoLeaks(lifecycle, async () => {
     dispose();
   }
 
-  // --- The pinned wait gates the mic; a dying wait discards the take -------
+  // --- The mic needs no wait; a new session discards the take ---------------
 
   {
     const { wire, status, mic, input, editable, recording, startTake, dispose } = await setup();
-    check("the mic mounts enabled beside a disabled input", !mic.disabled && !editable());
+    check("the mic mounts enabled beside an editable input", !mic.disabled && editable());
     check(
       "the mic is a push-to-talk button with an accessible name",
       mic.type === "button" &&
@@ -697,23 +697,16 @@ await assertNoLeaks(lifecycle, async () => {
         mic.getAttribute("aria-pressed") === "false" &&
         mic.querySelector("svg") !== null,
     );
-    const gated = await startTake();
-    check("a mic click with no wait pinned opens no Realtime socket", gated === null);
-    check(
-      "a gated click names the missing wait on the status bar",
-      status.local.length === 1 &&
-        status.local[0].label.includes("isn't asking for input") &&
-        status.local[0].severity === "info",
-    );
-    check("a gated click leaves the input disabled and unlocked", !editable() && !recording());
-
-    wire.fire.inputRequired("tok1");
     const socket = await startTake();
-    check("the mic click opens a Realtime socket once a wait is pinned", socket !== null);
+    check("the mic opens a Realtime socket before the agent waits", socket !== null);
     if (socket === null) {
       dispose();
       return;
     }
+    check(
+      "no click names a missing wait on the status bar",
+      !status.local.some((entry) => entry.label.includes("isn't asking for input")),
+    );
     check(
       "a live take lights the recording LED and presses the mic",
       status.recording &&
@@ -724,38 +717,39 @@ await assertNoLeaks(lifecycle, async () => {
     );
     socket.message({ type: "interim", committed: "hello", tentative: "" });
     check(
-      "the interim lands in the pinned input",
+      "the interim lands in the input, locked to the take",
       input.getText() === "hello" && !editable() && recording(),
     );
 
-    wire.fire.inputCanceled("tok1");
-    check("a canceled wait dims the recording LED", !status.recording);
+    wire.fire.session("s1");
+    check("a new session dims the recording LED", !status.recording);
     check(
-      "a canceled wait releases the mic button to idle",
+      "a new session releases the mic button to idle",
       mic.getAttribute("data-mic") === "idle" &&
         mic.getAttribute("aria-pressed") === "false" &&
         mic.title === "Voice Input (Ctrl+Shift+Space)",
     );
-    check("a canceled wait keeps the reusable Realtime socket open", !socket.closed);
+    check("a new session keeps the reusable Realtime socket open", !socket.closed);
     check(
-      "a canceled wait lifts the take lock and drops the interim",
+      "a new session lifts the take lock and drops the interim",
       !recording() && input.getText() === "",
     );
-    check("a canceled wait disables the input again", !editable());
+    check("the input is editable again", editable());
     socket.message({ type: "final", text: "LATE FINAL" });
     check("a final arriving after the discard writes nothing", input.getText() === "");
 
-    wire.fire.inputRequired("tok2");
+    wire.fire.awaiting();
     const reopened = await startTake();
-    check("a fresh wait lets the mic start a fresh take", reopened !== null);
-    wire.fire.inputCanceled("tok2");
+    check("the mic starts a fresh take", reopened !== null);
+    wire.fire.session("s2");
     check("clearing the second take dims the recording LED", !status.recording);
 
-    // A new session resets the pin: the take dies with it.
-    wire.fire.inputRequired("tok3");
+    // A reattach to the same session keeps the take.
     const third = await startTake();
-    check("a take starts against the third wait", third !== null);
+    check("a third take starts", third !== null);
     wire.fire.session("s2");
+    check("a same-session reattach keeps the live take", status.recording && recording());
+    wire.fire.session("s3");
     check("a new session discards the live take", third?.closed === false && !status.recording && !recording());
 
     dispose();
@@ -765,26 +759,25 @@ await assertNoLeaks(lifecycle, async () => {
     check("a click on the disposed view's mic starts nothing", sockets.length === before);
   }
 
-  // --- A wait swapped mid-take holds the take's lock -------------------------
+  // --- The agent waiting mid-take leaves the take's lock ---------------------
 
   {
     const { wire, input, editable, recording, startTake, dispose } = await setup();
-    wire.fire.inputRequired("tok1");
     const socket = await startTake();
     if (socket === null) {
-      failures.push("wait swap: the mic click did not open a Realtime socket");
+      failures.push("wait mid-take: the mic click did not open a Realtime socket");
       dispose();
       return;
     }
     socket.message({ type: "interim", committed: "held", tentative: "" });
-    wire.fire.inputRequired("tok2");
+    wire.fire.awaiting();
     check(
-      "a wait swapped mid-take keeps the input locked to the take",
+      "the agent waiting mid-take keeps the input locked to the take",
       !editable() && recording(),
     );
     socket.message({ type: "final", text: "held final" });
     check(
-      "the take finishes against the new wait",
+      "the take finishes into the box the waiting agent reads",
       editable() && !recording() && input.getText() === "held final",
     );
     dispose();
@@ -794,7 +787,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("tok");
+    wire.fire.awaiting();
     const socket = await startTake();
     if (socket === null) {
       failures.push("interim splice: the mic click did not open a Realtime socket");
@@ -831,7 +824,7 @@ await assertNoLeaks(lifecycle, async () => {
     const { wire, input, editorEl, startTake, dispose } = await setup();
     const marks = () =>
       [...editorEl.querySelectorAll(".ws-stt-tentative")].map((mark) => mark.textContent);
-    wire.fire.inputRequired("producer");
+    wire.fire.awaiting();
     const socket = await startTake();
     if (socket === null) {
       failures.push("producer replay: the mic click did not open a Realtime socket");
@@ -870,7 +863,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, mic, input, editable, startTake, dispose } = await setup();
-    wire.fire.inputRequired("sequential");
+    wire.fire.awaiting();
     const socket = await startTake();
     if (socket === null) {
       failures.push("sequential composition: the first take did not start");
@@ -908,7 +901,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, mic, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("interior");
+    wire.fire.awaiting();
     const socket = await startTake();
     if (socket === null) {
       failures.push("interior correction: the first take did not start");
@@ -934,7 +927,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, mic, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("completion-only");
+    wire.fire.awaiting();
     input.setText("First test alpha");
     const socket = await startTake();
     if (socket === null) {
@@ -957,7 +950,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("existing-space");
+    wire.fire.awaiting();
     input.setText("First test alpha ");
     const socket = await startTake();
     socket?.message(producerHypothesis("existing_space", "Second test beta"));
@@ -970,7 +963,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("producer-space");
+    wire.fire.awaiting();
     input.setText("First test alpha");
     const socket = await startTake();
     socket?.message(producerHypothesis("producer_space", " Second test beta"));
@@ -983,7 +976,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("selection");
+    wire.fire.awaiting();
     input.setText("First test alpha");
     input.setSelection(7, 11);
     const socket = await startTake();
@@ -997,7 +990,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("mid-word");
+    wire.fire.awaiting();
     input.setText("alphaBeta");
     input.setSelection(6, 6);
     const socket = await startTake();
@@ -1011,11 +1004,11 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("rollback-spacing");
+    wire.fire.awaiting();
     input.setText("First test alpha");
     const socket = await startTake();
     socket?.message(producerHypothesis("rollback_spacing", "Second test beta"));
-    wire.fire.inputCanceled("rollback-spacing");
+    wire.fire.session("rollback-spacing");
     check(
       "rolling back a composed hypothesis removes its owned separator",
       input.getText() === "First test alpha",
@@ -1027,7 +1020,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, status, mic, input, editable, recording, dispose } = await setup();
-    wire.fire.inputRequired("delayed-start");
+    wire.fire.awaiting();
     input.setText("old target keep");
     input.setSelection(5, 11);
     const delayed = delayNextMediaStart();
@@ -1046,7 +1039,7 @@ await assertNoLeaks(lifecycle, async () => {
       "a delayed take inserts at the selection current when startup succeeds",
       input.getText() === "edited spoken tail",
     );
-    wire.fire.inputCanceled("delayed-start");
+    wire.fire.session("delayed-start");
     check(
       "delayed prompt rollback preserves edits made during startup",
       input.getText() === "edited live tail" && !recording(),
@@ -1058,7 +1051,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, input, editable, startTake, dispose } = await setup();
-    wire.fire.inputRequired("tok");
+    wire.fire.awaiting();
     // ProseMirror positions: inside the first paragraph, text offset + 1.
     input.setText("ab");
     input.setSelection(2, 2);
@@ -1103,7 +1096,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, view, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("tok");
+    wire.fire.awaiting();
     input.setText("Note");
     const socket = await startTake();
     if (socket === null) {
@@ -1143,7 +1136,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("tok");
+    wire.fire.awaiting();
     input.setText("see ");
     input.insertMention({ id: "src/main.ts", label: "main.ts", kind: "file", data: null });
     const before = JSON.stringify(input.serialize().doc);
@@ -1171,7 +1164,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, input, mic, editable, recording, startTake, dispose } = await setup();
-    wire.fire.inputRequired("tok");
+    wire.fire.awaiting();
     input.setText("prefix");
     const socket = await startTake();
     if (socket === null) {
@@ -1201,7 +1194,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, status, mic, input, editable, recording, send, startTake, dispose } = await setup();
-    wire.fire.inputRequired("tok1");
+    wire.fire.awaiting();
     let socket = await startTake();
     if (socket === null) {
       failures.push("stop window: the mic click did not open a Realtime socket");
@@ -1211,23 +1204,23 @@ await assertNoLeaks(lifecycle, async () => {
     socket.message({ type: "interim", committed: "hello", tentative: "" });
     mic.click();
     check("the stop dims the recording LED while the final is awaited", !status.recording && !editable());
-    wire.fire.inputCanceled("tok1");
-    check("a wait dying in the stop window keeps the Realtime session reusable", !socket.closed);
+    wire.fire.session("stop-window");
+    check("a new session in the stop window keeps the Realtime session reusable", !socket.closed);
     check(
-      "a wait dying in the stop window lifts the take lock and drops the interim",
+      "a new session in the stop window lifts the take lock and drops the interim",
       !recording() && input.getText() === "",
     );
     socket.message({ type: "final", text: "LATE FINAL" });
     check("a final after a stop-window discard writes nothing", input.getText() === "");
 
-    wire.fire.inputRequired("tok2");
+    wire.fire.awaiting();
     socket = await startTake();
     socket?.message({ type: "interim", committed: "sent as shown", tentative: "" });
     mic.click();
     send.click();
     check(
       "a send in the stop window submits the interim",
-      isDeepStrictEqual(wire.responses, [["tok2", "sent as shown"]]) && socket?.closed === false,
+      isDeepStrictEqual(wire.responses, ["sent as shown"]) && socket?.closed === false,
     );
     check(
       "a send in the stop window lifts the take lock and clears the box",
@@ -1236,7 +1229,7 @@ await assertNoLeaks(lifecycle, async () => {
     socket?.message({ type: "final", text: "LATE FINAL" });
     check("a final after a stop-window send writes nothing", input.getText() === "");
 
-    wire.fire.inputRequired("tok3");
+    wire.fire.awaiting();
     input.setText("typed ");
     socket = await startTake();
     socket?.message({ type: "interim", committed: "kept", tentative: "dropped words" });
@@ -1257,7 +1250,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, mic, startTake, dispose } = await setup();
-    wire.fire.inputRequired("tok");
+    wire.fire.awaiting();
     const socket = await startTake();
     if (socket === null) {
       failures.push("flush ordering: the mic click did not open a Realtime socket");
@@ -1286,7 +1279,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, status, input, editorEl, recording, send, startTake, dispose } = await setup();
-    wire.fire.inputRequired("tok1");
+    wire.fire.awaiting();
     const socket = await startTake();
     if (socket === null) {
       failures.push("discard on send: the mic click did not open a Realtime socket");
@@ -1302,7 +1295,7 @@ await assertNoLeaks(lifecycle, async () => {
     editorEl.dispatchEvent(
       new window.KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true, cancelable: true }),
     );
-    check("the send submits the interim the operator saw", isDeepStrictEqual(wire.responses, [["tok1", "hello"]]));
+    check("the send submits the interim the operator saw", isDeepStrictEqual(wire.responses, ["hello"]));
     check("the send dims the recording LED", !status.recording);
     check("the send keeps the reusable Realtime socket open", !socket.closed);
     check(
@@ -1314,7 +1307,7 @@ await assertNoLeaks(lifecycle, async () => {
 
     // Enter sends the same way the button does - even mid-take, when the
     // editor is read-only and ProseMirror drops its keydown.
-    wire.fire.inputRequired("tok2");
+    wire.fire.awaiting();
     const second = await startTake();
     second?.message({ type: "interim", committed: "via enter", tentative: "" });
     editorEl.dispatchEvent(
@@ -1322,7 +1315,7 @@ await assertNoLeaks(lifecycle, async () => {
     );
     check(
       "Enter during a take discards it and sends the interim",
-      isDeepStrictEqual(wire.responses[1], ["tok2", "via enter"]) && second?.closed === false && !status.recording,
+      wire.responses[1] === "via enter" && second?.closed === false && !status.recording,
     );
     dispose();
   }
@@ -1331,7 +1324,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, mic, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("tok1");
+    wire.fire.awaiting();
     const socket = await startTake();
     if (socket === null) {
       failures.push("commit tombstone: the first take did not start");
@@ -1343,9 +1336,9 @@ await assertNoLeaks(lifecycle, async () => {
       () =>
         socket.sent.filter((event) => event.type === "input_audio_buffer.commit").length === 1,
     );
-    wire.fire.inputCanceled("tok1");
+    wire.fire.session("tombstone");
 
-    wire.fire.inputRequired("tok2");
+    wire.fire.awaiting();
     await startTake();
     socket.message({
       type: "input_audio_buffer.committed",
@@ -1406,7 +1399,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, mic, input, editable, startTake, dispose } = await setup();
-    wire.fire.inputRequired("tok");
+    wire.fire.awaiting();
     input.setText("base ");
     const socket = await startTake();
     mic.click();
@@ -1486,7 +1479,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, mic, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("tok");
+    wire.fire.awaiting();
     const socket = await startTake();
     if (socket === null) {
       failures.push("correlated error: the first take did not start");
@@ -1561,7 +1554,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, status, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("tok");
+    wire.fire.awaiting();
     const socket = await startTake();
     socket?.message({ type: "interim", committed: "temporary", tentative: "" });
     socket?.message({
@@ -1589,7 +1582,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, input, startTake, dispose } = await setup();
-    wire.fire.inputRequired("reconnect");
+    wire.fire.awaiting();
     const first = await startTake();
     if (first === null) {
       failures.push("two-socket reconnect: the first take did not start");
@@ -1658,8 +1651,8 @@ await assertNoLeaks(lifecycle, async () => {
     });
     const a = await setup(capture);
     const b = await setup(capture);
-    a.wire.fire.inputRequired("wait-a");
-    b.wire.fire.inputRequired("wait-b");
+    a.wire.fire.awaiting();
+    b.wire.fire.awaiting();
     check(
       "both mics start idle over a free microphone",
       a.mic.getAttribute("data-mic") === "idle" && b.mic.getAttribute("data-mic") === "idle",
@@ -1736,7 +1729,7 @@ await assertNoLeaks(lifecycle, async () => {
       startedB === b.realtime && b.mic.getAttribute("data-mic") === "recording",
     );
     check("the first view now reads blocked", a.mic.getAttribute("data-mic") === "blocked");
-    b.wire.fire.inputCanceled("wait-b");
+    b.wire.fire.session("s-b");
     await waitFor(() => a.mic.getAttribute("data-mic") === "idle");
     check("a discarded take frees the microphone for the first view again", a.mic.getAttribute("data-mic") === "idle");
 
@@ -1783,8 +1776,8 @@ await assertNoLeaks(lifecycle, async () => {
       zones.dispose();
     };
     a.wire.fire.session("session-a");
-    a.wire.fire.inputRequired("wait-a");
-    b.wire.fire.inputRequired("wait-b");
+    a.wire.fire.awaiting();
+    b.wire.fire.awaiting();
     check("no presence before any take", capture.presence === null);
     if ((await a.startTake()) === null) {
       failures.push("presence: the dictating view's take did not start");

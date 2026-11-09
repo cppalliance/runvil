@@ -2,8 +2,9 @@
 //! against its exact JSON, the inbound requests against their variants
 //! and refusals, and both directions against the shared fixture the SPA
 //! suite (`crates/workshop/ui/test/agent-wire-fixtures.mjs`) asserts, so a
-//! wire drift on either side fails that side's fixture test. How a
-//! script's ask result frames sits in the `ask` child module.
+//! wire drift on either side fails that side's fixture test. Only the main
+//! chain's inbox events frame: the operator's message as `user_message`
+//! and the wait for it as `awaiting_input`.
 
 use std::path::Path;
 
@@ -11,12 +12,9 @@ use runvil::ToolId;
 use runvil::event::{Event, ReplyOrigin};
 use runvil::ids::{ChainId, Provenance, RoundId, TaskId};
 use runvil::metrics::{CallMetrics, ClientTiming, LlamaTimings, ToolCallEvent, Usage, VllmMetrics};
-use workshop_protocol::{InputFrame, InputResponse};
+use workshop_protocol::InputResponse;
 
 use super::*;
-
-#[path = "wire-tests-ask.rs"]
-mod ask;
 
 /// Parses the shared fixture into one object keyed by case name.
 fn agent_fixture() -> serde_json::Value {
@@ -32,30 +30,30 @@ fn provenance() -> Provenance {
     Provenance::new(TaskId::from(ChainId::root()), 0)
 }
 
-/// The ask tool's fixed id, under the user-input Pack's id.
-const ASK_TOOL: &str = "user-input/ask";
-
-/// The vendor of the Pack whose ask Workshop recognizes.
-const RUNVIL: Option<&str> = Some("runvil");
-
-fn ask_id() -> ToolId {
-    ToolId::parse(ASK_TOOL).expect("the ask tool id parses")
+/// The provenance of the first task the main chain spawned.
+fn task_provenance() -> Provenance {
+    Provenance::new(TaskId::from(ChainId::root().child(0)), 0)
 }
 
-/// The ask tool's vendor and id, which Workshop recognizes a script's
-/// ask by.
-fn ask() -> AskTool {
-    AskTool {
-        vendor: "runvil".to_owned(),
-        id: ask_id(),
+/// The operator's message in the `chat` section, as it entered the main
+/// chain's inbox: the fixture's `agent_event_minimal` entry as the Engine
+/// event it projects from.
+fn operator_message(text: &str) -> Event {
+    Event::InboxMessage {
+        section: "chat".to_owned(),
+        provenance: provenance(),
+        text: text.to_owned(),
     }
 }
 
-/// The operator's message in the `chat` section, as a script's ask
-/// result: the fixture's `agent_event_minimal` entry as the Engine event
-/// it projects from.
-fn operator_message(text: &str) -> Event {
-    tool_result("", "ask", ask_id(), RUNVIL, text)
+/// The main chain parked on its empty inbox in the `chat` section: the
+/// fixture's `agent_event_awaiting` entry as the Engine event it projects
+/// from.
+fn awaiting() -> Event {
+    Event::InboxWaiting {
+        section: "chat".to_owned(),
+        provenance: provenance(),
+    }
 }
 
 /// The fixture's `agent_event_stamped` entry as the Engine event it
@@ -130,10 +128,7 @@ fn an_agent_session_frame_serializes_its_id_and_agent() {
 #[test]
 fn an_agent_event_frame_has_its_log_index_and_optional_reply_id() {
     let event = operator_message("hi");
-    let ask = ask();
-    let plain = wire(
-        &AgentEventFrame::new(3, None, &event, Some(&ask)).expect("an operator message frames"),
-    );
+    let plain = wire(&AgentEventFrame::new(3, None, &event).expect("an operator message frames"));
     assert_eq!(plain["type"], "agent_event");
     assert_eq!(plain["index"], 3, "the frame reports the entry's log index");
     assert!(
@@ -147,13 +142,55 @@ fn an_agent_event_frame_has_its_log_index_and_optional_reply_id() {
         }),
         "the entry serializes in its ACP-labelled wire shape"
     );
-    let stamped = wire(
-        &AgentEventFrame::new(4, Some(1), &event, Some(&ask)).expect("an operator message frames"),
-    );
+    let stamped =
+        wire(&AgentEventFrame::new(4, Some(1), &event).expect("an operator message frames"));
     assert_eq!(
         stamped["reply"], 1,
         "a superseding event is stamped with the same reply id as its deltas"
     );
+}
+
+#[test]
+fn the_main_chains_inbox_events_frame_as_the_operators_message_and_the_wait_for_it() {
+    let message = wire(
+        &AgentEventFrame::new(1, None, &operator_message("two words"))
+            .expect("the main chain's message frames"),
+    );
+    assert_eq!(
+        message["event"],
+        serde_json::json!({
+            "kind": "user_message", "section": "chat", "turn": 0, "content": "two words",
+        }),
+        "a message in the main chain's inbox is the operator's, framed on turn 0"
+    );
+    let waiting =
+        wire(&AgentEventFrame::new(0, None, &awaiting()).expect("the main chain's wait frames"));
+    assert_eq!(
+        waiting["event"],
+        serde_json::json!({
+            "kind": "awaiting_input", "section": "chat", "turn": 0, "content": "",
+        }),
+        "the main chain parking on its empty inbox is the wait for the operator"
+    );
+}
+
+#[test]
+fn a_tasks_inbox_events_have_no_wire_shape() {
+    let message = Event::InboxMessage {
+        section: "Worker".to_owned(),
+        provenance: task_provenance(),
+        text: "also cover the tests".to_owned(),
+    };
+    let waiting = Event::InboxWaiting {
+        section: "Worker".to_owned(),
+        provenance: task_provenance(),
+    };
+    for event in [message, waiting] {
+        assert!(
+            AgentEventFrame::new(0, None, &event).is_none(),
+            "a task's inbox is its owner's business, never the operator's: {event:?}"
+        );
+    }
 }
 
 #[test]
@@ -170,8 +207,7 @@ fn an_agent_event_frame_renders_tool_call_batches_and_skips_lifecycle_events() {
             serde_json::json!({ "path": "notes.txt" }),
         )],
     };
-    let frame =
-        wire(&AgentEventFrame::new(0, Some(0), &batch, None).expect("a tool-call batch frames"));
+    let frame = wire(&AgentEventFrame::new(0, Some(0), &batch).expect("a tool-call batch frames"));
     assert_eq!(frame["event"]["kind"], "tool_call");
     assert_eq!(
         frame["event"]["content"],
@@ -185,7 +221,7 @@ fn an_agent_event_frame_renders_tool_call_batches_and_skips_lifecycle_events() {
         provenance: provenance(),
     };
     assert!(
-        AgentEventFrame::new(1, None, &lifecycle, None).is_none(),
+        AgentEventFrame::new(1, None, &lifecycle).is_none(),
         "a lifecycle event has no wire label and never frames"
     );
 }
@@ -201,7 +237,7 @@ fn an_agent_event_frame_keeps_the_model_on_thinking_and_the_call_id_on_tool_resu
         text: "weighing the options".to_owned(),
     };
     let thought =
-        wire(&AgentEventFrame::new(5, Some(2), &thinking, None).expect("a thinking event frames"));
+        wire(&AgentEventFrame::new(5, Some(2), &thinking).expect("a thinking event frames"));
     assert_eq!(
         thought["event"],
         serde_json::json!({
@@ -211,19 +247,8 @@ fn an_agent_event_frame_keeps_the_model_on_thinking_and_the_call_id_on_tool_resu
         "a thinking block keeps its model and omits the tool-call id"
     );
 
-    let result = Event::ToolResult {
-        section: "chat".to_owned(),
-        provenance: provenance(),
-        turn: 2,
-        tool_call_id: "call_7".to_owned(),
-        alias: "read_file".to_owned(),
-        tool: ToolId::parse("files/read").expect("a valid tool id"),
-        vendor: None,
-        content: "the file's text".to_owned(),
-        trusted: false,
-    };
-    let update =
-        wire(&AgentEventFrame::new(6, None, &result, None).expect("a tool-result event frames"));
+    let result = tool_result("call_7", "read_file", "files/read", None, "the file's text");
+    let update = wire(&AgentEventFrame::new(6, None, &result).expect("a tool-result event frames"));
     assert_eq!(
         update["event"],
         serde_json::json!({
@@ -234,13 +259,23 @@ fn an_agent_event_frame_keeps_the_model_on_thinking_and_the_call_id_on_tool_resu
     );
 }
 
-/// A trusted tool result in the `chat` section on turn 2, answering
-/// `tool_call_id` (empty for a script's call) under `alias`, bound to
-/// `tool` of a Pack from `vendor`.
+#[test]
+fn a_scripts_tool_result_stays_a_tool_call_update() {
+    let result = tool_result("", "fetch", "web/fetch", Some("runvil"), "the page");
+    let frame = wire(&AgentEventFrame::new(7, None, &result).expect("a tool-result event frames"));
+    assert_eq!(
+        frame["event"]["kind"], "tool_call_update",
+        "only a message in the main chain's inbox is the operator's message"
+    );
+}
+
+/// An untrusted tool result in the `chat` section on turn 2, answering
+/// `tool_call_id` (empty for a script's call) under `alias`, bound to the
+/// tool `tool` of a Pack from `vendor`.
 fn tool_result(
     tool_call_id: &str,
     alias: &str,
-    tool: ToolId,
+    tool: &str,
     vendor: Option<&str>,
     content: &str,
 ) -> Event {
@@ -250,10 +285,10 @@ fn tool_result(
         turn: 2,
         tool_call_id: tool_call_id.to_owned(),
         alias: alias.to_owned(),
-        tool,
+        tool: ToolId::parse(tool).expect("a valid tool id"),
         vendor: vendor.map(str::to_owned),
         content: content.to_owned(),
-        trusted: true,
+        trusted: false,
     }
 }
 
@@ -356,14 +391,13 @@ fn the_shared_fixture_pins_exactly_the_agreed_case_list() {
         [
             "agent_delta_reasoning",
             "agent_delta_text",
+            "agent_event_awaiting",
             "agent_event_minimal",
             "agent_event_stamped",
             "agent_session",
             "agents",
             "attach",
             "cancel",
-            "input_canceled",
-            "input_required",
             "input_response",
             "launch",
         ],
@@ -381,23 +415,16 @@ fn server_to_client_agent_frames_match_the_shared_fixture() {
     assert_eq!(wire(&agents), fixture["agents"]);
     let session = AgentSessionFrame::new("a1b2".to_owned(), "chat".to_owned());
     assert_eq!(wire(&session), fixture["agent_session"]);
-    let ask = Some(ask());
     assert_eq!(
-        wire(&AgentEventFrame::new(
-            3,
-            None,
-            &operator_message("hi"),
-            ask.as_ref()
-        )),
+        wire(&AgentEventFrame::new(3, None, &operator_message("hi"))),
         fixture["agent_event_minimal"]
     );
     assert_eq!(
-        wire(&AgentEventFrame::new(
-            4,
-            Some(1),
-            &stamped_fixture_event(),
-            ask.as_ref()
-        )),
+        wire(&AgentEventFrame::new(2, None, &awaiting())),
+        fixture["agent_event_awaiting"]
+    );
+    assert_eq!(
+        wire(&AgentEventFrame::new(4, Some(1), &stamped_fixture_event())),
         fixture["agent_event_stamped"],
         "the event serializes in its wire shape, metrics and all"
     );
@@ -405,15 +432,6 @@ fn server_to_client_agent_frames_match_the_shared_fixture() {
     assert_eq!(wire(&text), fixture["agent_delta_text"]);
     let reasoning = AgentDeltaFrame::new(AgentDeltaKind::Reasoning, "hmm".to_owned(), 2);
     assert_eq!(wire(&reasoning), fixture["agent_delta_reasoning"]);
-    let token = || "a1b2c3".to_owned();
-    assert_eq!(
-        wire(&InputFrame::Required { token: token() }),
-        fixture["input_required"]
-    );
-    assert_eq!(
-        wire(&InputFrame::Canceled { token: token() }),
-        fixture["input_canceled"]
-    );
 }
 
 #[test]
@@ -421,7 +439,6 @@ fn client_to_server_agent_frames_match_the_shared_fixture() {
     let fixture = agent_fixture();
     let response: InputResponse = serde_json::from_value(fixture["input_response"].clone())
         .expect("the fixture input_response parses");
-    assert_eq!(response.token, "a1b2c3");
     assert_eq!(response.text, "two words");
     assert_eq!(
         SessionRequest::parse(&fixture["launch"]),

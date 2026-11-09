@@ -32,9 +32,8 @@
 //!   `workshop-status`), the feature crates (`workshop-agents`,
 //!   `workshop-run-log`, `workshop-user-state`, `workshop-workspace`),
 //!   the Harness's public crates `harness` and `harness-gateway-client`,
-//!   the Plugin crates `plugin-web`, `plugin-user-input`, and
-//!   `plugin-mcp`, and the Engine's public crates `runvil` and
-//!   `runvil-plugin`.
+//!   the Plugin crates `plugin-web`, `plugin-mcp`, and `plugin-std`, and
+//!   the Engine's public crates `runvil` and `runvil-plugin`.
 //!   `cargo test -p build-xtask` enforces the product and container
 //!   boundaries. Read `crates/workshop/server/AGENTS.md` before adding an
 //!   import.
@@ -55,8 +54,9 @@
 //!   `/v1/realtime` applies a stricter same-origin check that requires a
 //!   browser `Origin` to match the request's own authority. The
 //!   cross-site guard stays the security boundary.
-//! - Every unresolved wait that is dropped yields a canceled frame,
-//!   which the agent socket renders as `input_canceled`.
+//! - Every conversation's run has a user: it holds `runvil/user`, and the
+//!   operator's messages reach its main chain only through its
+//!   conversation.
 
 mod agents;
 mod app;

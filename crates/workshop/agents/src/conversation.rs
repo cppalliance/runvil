@@ -6,8 +6,8 @@
 //! subscriber receives each event as the conversation observes it, and a
 //! reconnecting client reads [`Conversation::transcript`] past its last
 //! seen index. Deltas go out on their own broadcast, stamped with their
-//! round's id, and never enter the transcript. The conversation's
-//! unresolved input waits survive a client's disconnect. Its channels
+//! round's id, and never enter the transcript. The operator's messages go
+//! to the run's main chain through its Harness control. Its channels
 //! close when the run ends.
 
 #[path = "conversation-run.rs"]
@@ -21,7 +21,6 @@ use harness::record::RunId;
 use runvil::event::Event;
 use tokio::sync::{broadcast, watch};
 
-use crate::input::{WaitError, WaitFrame, WaitRegistry, complete_input_response};
 use crate::protocol::{ConversationId, Delta, SessionEvent};
 use crate::state::{FailureKind, SessionFailure, SessionState};
 use crate::table::{self, Table};
@@ -37,19 +36,14 @@ const EVENT_CAPACITY: usize = 256;
 /// repair path.
 const DELTA_CAPACITY: usize = 256;
 
-/// Capacity of a conversation's input-frame broadcast. A conversation
-/// holds at most a handful of waits; the registry's retained state is the
-/// durable-delivery repair path on lag.
-const INPUT_CAPACITY: usize = 32;
-
 /// Capacity of a conversation's failure broadcast. Failures are rare
 /// one-off reports, and a receiver that lags misses only what the durable
 /// transcript already shows as a turn without a reply.
 const ERROR_CAPACITY: usize = 8;
 
-/// A running agent conversation: the handle a socket launches, answers,
-/// stops, closes, and subscribes through. Cheap to clone; every clone
-/// names the same conversation.
+/// A running agent conversation: the handle a socket launches, sends the
+/// operator's messages through, stops, closes, and subscribes through.
+/// Cheap to clone; every clone names the same conversation.
 #[derive(Clone)]
 pub struct Conversation {
     core: Arc<Core>,
@@ -75,15 +69,14 @@ struct Core {
     /// Every event the run has reported, stamped as the live stream
     /// stamps it.
     transcript: Transcript,
-    /// The unresolved user-input waits.
-    waits: Arc<WaitRegistry>,
     /// The live senders, until the conversation ends and drops them.
     channels: Mutex<Option<Channels>>,
     /// Where the run stands.
     state: watch::Sender<SessionState>,
     /// The run the recorder began for this conversation.
     run: Mutex<Option<RunId>>,
-    /// The control over the run, once the run is handed its Harness.
+    /// The control over the run, once the run is handed its Harness: what
+    /// the operator's messages, a stop, and a close go through.
     control: Mutex<Option<RunControl>>,
     /// The table the conversation leaves when it ends.
     table: Weak<Table>,
@@ -94,7 +87,6 @@ struct Core {
 struct Channels {
     events: broadcast::Sender<SessionEvent>,
     deltas: broadcast::Sender<Delta>,
-    waits: broadcast::Sender<WaitFrame>,
     errors: broadcast::Sender<SessionFailure>,
 }
 
@@ -111,7 +103,6 @@ impl Conversation {
         let channels = Channels {
             events: broadcast::channel(EVENT_CAPACITY).0,
             deltas: broadcast::channel(DELTA_CAPACITY).0,
-            waits: broadcast::channel(INPUT_CAPACITY).0,
             errors: broadcast::channel(ERROR_CAPACITY).0,
         };
         Self {
@@ -119,7 +110,6 @@ impl Conversation {
                 id,
                 agent,
                 transcript: Transcript::new(),
-                waits: Arc::new(WaitRegistry::new()),
                 channels: Mutex::new(Some(channels)),
                 state: watch::Sender::new(SessionState::Alive),
                 run: Mutex::new(None),
@@ -172,15 +162,6 @@ impl Conversation {
             .map_or_else(closed, |channels| channels.deltas.subscribe())
     }
 
-    /// Subscribes to the conversation's input-wait frames from this call
-    /// on. Read [`Conversation::unresolved_waits`] after subscribing to
-    /// learn of waits already open.
-    #[must_use]
-    pub fn subscribe_waits(&self) -> broadcast::Receiver<WaitFrame> {
-        self.channels()
-            .map_or_else(closed, |channels| channels.waits.subscribe())
-    }
-
     /// Subscribes to the conversation's failure reports from this call
     /// on. Ephemeral like the deltas.
     #[must_use]
@@ -197,33 +178,24 @@ impl Conversation {
         self.core.transcript.since(from)
     }
 
-    /// The unresolved wait tokens in creation order: the teardown leak
-    /// probe, empty once the run has ended.
-    #[must_use]
-    pub fn unresolved_waits(&self) -> Vec<String> {
-        self.core.waits.unresolved()
-    }
-
-    /// Answers the wait holding `token` with the operator's `text`.
-    /// `before_resume` runs after the answer is accepted and before the
-    /// suspended ask resumes, for a client's own turn bookkeeping.
+    /// Sends the operator's `text` to the run and returns true, or returns
+    /// false, dropping the text, before the run is handed its Harness and
+    /// once the run has ended.
     ///
-    /// # Errors
-    /// Returns [`WaitError::UnknownToken`] when no unresolved wait holds
-    /// `token`.
-    pub fn send_input(
-        &self,
-        token: &str,
-        text: String,
-        before_resume: impl FnOnce(),
-    ) -> Result<(), WaitError> {
-        complete_input_response(&self.core.waits, token, text, before_resume)
+    /// The text goes to the run's main-chain inbox: it answers the agent
+    /// waiting on its inbox, or steers the turn the agent is working on.
+    /// True means the run accepted it, not that the agent read it.
+    #[must_use]
+    pub fn send_input(&self, text: String) -> bool {
+        lock(&self.core.control)
+            .as_ref()
+            .is_some_and(|control| control.send(text))
     }
 
-    /// Stops the round in flight: the run drops every effect except a
-    /// question to the operator, and goes on. An open question stays
-    /// open, and its token still answers it. Nothing happens before the
-    /// run is handed its Harness.
+    /// Stops the round in flight: the run drops every effect in flight
+    /// and goes on. A message already sent stays queued for the agent's
+    /// next read of its inbox. Nothing happens before the run is handed
+    /// its Harness.
     pub fn stop_round(&self) {
         if let Some(control) = lock(&self.core.control).as_ref() {
             control.stop_round();
@@ -231,10 +203,9 @@ impl Conversation {
     }
 
     /// Cancels the run for good: the state is `Closing` at once, every
-    /// effect in flight is answered `Dropped`, open waits die as
-    /// canceled, and the state is `Closed` once the run has ended. A
-    /// close before the run is handed its Harness ends that run before it
-    /// begins. Idempotent.
+    /// effect in flight is answered `Dropped`, and the state is `Closed`
+    /// once the run has ended. A close before the run is handed its
+    /// Harness ends that run before it begins. Idempotent.
     pub fn close(&self) {
         let control = lock(&self.core.control);
         self.core

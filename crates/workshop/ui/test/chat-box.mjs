@@ -38,9 +38,10 @@
 // the expected read-only DOM. Runs under the shared leak check: a
 // ChatBox that is never disposed fails.
 // The round action button: the mic over an empty box, the send arrow once
-// there is text, Stop while the agent generates (with the placeholder "Add a
-// follow-up"), the agent mode picking the send and Stop fill; a recording mic
-// stays the mic; Enter ignores auto-repeat and Ctrl+Enter sends. The
+// there is text, Stop over an empty box while the agent generates (with the
+// placeholder "Add a follow-up") and the send arrow over its follow-up, the
+// agent mode picking the send and Stop fill; a recording mic stays the mic;
+// Enter ignores auto-repeat and Ctrl+Enter sends. The
 // stylesheet's side - the card, the editor, the button's fills - is read from
 // the source text.
 // Run: node test/chat-box.mjs
@@ -142,7 +143,8 @@ function frameElement(input) {
 }
 
 // The one round button: the mic while the box is empty, the send arrow once it
-// has text, Stop while the agent generates. Both names reach the same element,
+// has text, Stop over an empty box while the agent generates. Both names reach
+// the same element,
 // so each test reads as the state it is exercising.
 function actionButton(input) {
   return input.element.querySelector(".ws-agent-session__action");
@@ -955,10 +957,34 @@ await assertNoLeaks(lifecycle, async () => {
       sink.events.length === 1 && sink.events[0].type === "stop",
     );
     pressEnter(editor);
-    check("Enter while generating emits nothing: Stop is the button's alone", sink.events.length === 1);
+    check(
+      "Enter over an empty box while generating emits nothing: Stop is the button's alone",
+      sink.events.length === 1,
+    );
     input.setText("typed");
-    check("text in the box does not turn Stop into send", button.getAttribute("data-state") === "stop");
+    check(
+      "text in the box turns Stop into the send arrow while generating",
+      button.getAttribute("data-state") === "send" &&
+        button.getAttribute("data-action") === "stop" &&
+        button.disabled === false &&
+        button.getAttribute("aria-label") === "Send",
+    );
+    check(
+      "the follow-up placeholder stays while the box holds text",
+      input.props.action === "stop",
+    );
+    button.click();
+    check(
+      "a click on the send arrow while generating emits the follow-up as send",
+      sink.events.length === 2 && sink.events[1].type === "send" && sink.events[1].text === "typed",
+    );
+    pressEnter(editor);
+    check(
+      "Enter with text while generating emits send too",
+      sink.events.length === 3 && sink.events[2].type === "send",
+    );
     input.clear();
+    check("an emptied box is Stop again", button.getAttribute("data-state") === "stop");
     input.update({ action: "send" });
     check(
       "the turn ending brings the mic back over an empty box, with the owner's placeholder",

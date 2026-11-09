@@ -55,8 +55,9 @@ pub struct ToolInfo {
     /// Whether a stop leaves the tool's calls in flight. A stop cancels
     /// every other call in flight and lets the run go on; the run's end
     /// and the early end of the task that made the call still end this
-    /// one. A question to the operator sets it, so the question
-    /// stays open.
+    /// one. A tool whose calls must outlast a stop sets it. Since a stop
+    /// cannot cut such a call short, a message to the calling chain waits
+    /// for it to finish.
     pub survives_stop: bool,
     /// Whether the tool's output lists tools, such as the tools of the
     /// servers a Pack reaches. A script that calls such a tool receives

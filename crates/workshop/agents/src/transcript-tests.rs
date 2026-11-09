@@ -17,16 +17,10 @@ fn at() -> (String, Provenance) {
 
 fn answered(content: &str) -> Event {
     let (section, provenance) = at();
-    Event::ToolResult {
+    Event::InboxMessage {
         section,
         provenance,
-        turn: 0,
-        tool_call_id: String::new(),
-        alias: "ask".to_owned(),
-        tool: "user-input/ask".parse().unwrap(),
-        vendor: None,
-        content: content.to_owned(),
-        trusted: true,
+        text: content.to_owned(),
     }
 }
 

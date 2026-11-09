@@ -1,8 +1,7 @@
 //! The scripted Host the Harness suites run against: a broker that lists
 //! one model and plays each round from a script, performers whose every
-//! future is held until it is torn down, a Pack whose one tool is
-//! held, and an operator who answers each question with the next text a
-//! test sends.
+//! future is held until it is torn down, and a Pack whose one tool is
+//! held.
 
 use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -12,20 +11,16 @@ use std::time::Duration;
 use harness_runner::Packs;
 use harness_runner::performers::{BoxFuture, InferenceBroker, Timer};
 use runvil::effect::Round;
-use runvil::make_tool_error;
 use runvil::model::{
     Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
     ModelInfo, ThinkingMode, ToolCall, ToolSchema, make_completion_error, phrase,
 };
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
-    HostServices, Pack, PackFactory, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo,
-    ToolOutput,
+    Pack, PackFactory, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
-use tokio::sync::mpsc;
 
-use crate::asker::{ASKER, AskBroker, broker_services};
 use crate::support::registry;
 
 /// The one model the scripted broker lists.
@@ -220,6 +215,10 @@ pub(crate) fn held_broker(held: &Arc<Held>) -> ScriptedBroker {
 /// so.
 const HOLD: PackInfo = PackInfo::new("tests/harness");
 
+/// The hold Pack a second time, as `keep`: one tool, `keep/hold`, which
+/// always survives a stop.
+const KEEP: PackInfo = PackInfo::new("tests/keep");
+
 struct HoldPack {
     held: Arc<Held>,
     tools: Vec<ToolInfo>,
@@ -229,7 +228,7 @@ struct HoldPack {
 /// when `survives_stop` is set.
 fn holding(held: &Arc<Held>, survives_stop: bool) -> impl PackFactory + use<> {
     let held = Arc::clone(held);
-    move |name: &PackId, _run: &HostServices| -> Result<Arc<dyn Pack>, Error> {
+    move |name: &PackId| -> Result<Arc<dyn Pack>, Error> {
         let info = ToolInfo::new(
             ToolId::parse(&format!("{name}/hold")).unwrap(),
             "Hold until the call is dropped.",
@@ -268,58 +267,19 @@ pub(crate) fn surviving_hold_host(held: &Arc<Held>) -> Packs {
     host_holding(held, true)
 }
 
-/// A Host that installed the hold Pack over `held` and the fixture ask
-/// Pack, which reach only a run that declares them.
-fn host_holding(held: &Arc<Held>, survives_stop: bool) -> Packs {
-    let mut packs = registry(&[ASKER]);
-    packs.insert(HOLD, holding(held, survives_stop)).unwrap();
+/// A Host holding the hold Pack over `held`, and as `keep` the hold Pack
+/// over `kept`, whose tool survives a stop.
+pub(crate) fn keeping_hold_host(held: &Arc<Held>, kept: &Arc<Held>) -> Packs {
+    let mut packs = registry(&[]);
+    packs.insert(HOLD, holding(held, false)).unwrap();
+    packs.insert(KEEP, holding(kept, true)).unwrap();
     Packs::new(packs)
 }
 
-/// The operator: counts each question asked and each one torn down
-/// unanswered, and answers each with the next text the test sends.
-pub(crate) struct Operator {
-    pub(crate) asked: Arc<AtomicUsize>,
-    pub(crate) abandoned: Arc<AtomicUsize>,
-    answers: tokio::sync::Mutex<mpsc::UnboundedReceiver<String>>,
-}
-
-impl Operator {
-    /// The operator, beside the sender the test answers through.
-    pub(crate) fn new() -> (Arc<Self>, mpsc::UnboundedSender<String>) {
-        let (answer, answers) = mpsc::unbounded_channel();
-        let operator = Arc::new(Self {
-            asked: Arc::default(),
-            abandoned: Arc::default(),
-            answers: tokio::sync::Mutex::new(answers),
-        });
-        (operator, answer)
-    }
-
-    /// Run services whose input broker is this operator.
-    pub(crate) fn services(self: &Arc<Self>) -> HostServices {
-        broker_services(Arc::clone(self) as Arc<dyn AskBroker>)
-    }
-}
-
-#[async_trait::async_trait]
-impl AskBroker for Operator {
-    async fn wait(&self) -> Result<String, Error> {
-        self.asked.fetch_add(1, Ordering::SeqCst);
-        let mut unanswered = Unanswered(Some(Arc::clone(&self.abandoned)));
-        let text = self.answers.lock().await.recv().await;
-        unanswered.0 = None;
-        text.ok_or_else(|| make_tool_error(ErrorCode::ToolOther, "the operator left"))
-    }
-}
-
-/// Counts a question torn down before its answer arrived.
-struct Unanswered(Option<Arc<AtomicUsize>>);
-
-impl Drop for Unanswered {
-    fn drop(&mut self) {
-        if let Some(abandoned) = &self.0 {
-            abandoned.fetch_add(1, Ordering::SeqCst);
-        }
-    }
+/// A Host that installed the hold Pack over `held`, which reaches only a
+/// run that declares it.
+fn host_holding(held: &Arc<Held>, survives_stop: bool) -> Packs {
+    let mut packs = registry(&[]);
+    packs.insert(HOLD, holding(held, survives_stop)).unwrap();
+    Packs::new(packs)
 }

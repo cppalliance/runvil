@@ -3,7 +3,7 @@ name: chat
 description: The built-in Workshop chat agent on the unified runtime.
 runvil: 0
 uses:
-  - user-input
+  - user
   - std
   - web
 models:
@@ -18,7 +18,6 @@ The built-in chat agent: a pass-through between the operator and the selected mo
 ## Conversation
 
 ```lua
-tools.offer("user-input")
 tools.offer("std")
 tools.offer("web")
 tools.offer(tools.packs.extras())
@@ -53,8 +52,7 @@ local function compact(reason)
 end
 --messages:system("Runvil prompting language documentation can be found in /_runvil/language-guide")
 while true do
-    local text = input.ask()
-    messages:user(text)
+    messages:user(tasks.receive())
     pcall(function() return models.loop(compact) end)
 end
 ```

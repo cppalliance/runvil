@@ -74,12 +74,11 @@ async function startTake({ recEl, sttSockets, sleep }, mic) {
   });
 }
 
-// Pins a wait on the newest agent socket, starts a take from `mic`, and
-// drops its Realtime socket, recording whether the LED lit for the take
-// and dimmed on the drop.
+// Starts a take from `mic`, which needs no wait from the agent, and drops
+// its Realtime socket, recording whether the LED lit for the take and
+// dimmed on the drop.
 async function recordOnce(ctx, mic, where) {
-  const { emitAgent, recEl, failures } = ctx;
-  emitAgent({ type: "input_required", token: `tok-${where}` });
+  const { recEl, failures } = ctx;
   const socket = await startTake(ctx, mic);
   if (!socket) {
     failures.push(`a take on ${where} did not light the recording LED`);
@@ -120,21 +119,15 @@ const scenarios = {
       // Realtime negotiation resolves a tick after mount.
       await sleep(20);
 
-      // No wait pinned: the click is refused and the bar says why.
-      const gated = await startTake(ctx, mic);
-      if (gated) {
-        failures.push("a mic click with no wait pinned opened a Realtime socket");
-      }
-      if (!statusText.textContent.includes("isn't asking for input")) {
-        failures.push(`a gated click named no blocker on the status bar (got "${statusText.textContent}")`);
-      }
-
-      // A pinned wait opens the mic; the take lights the real recording LED.
-      emitAgent({ type: "input_required", token: "tok1" });
+      // The mic needs no wait from the agent; the take lights the real
+      // recording LED.
       const sttSocket = await startTake(ctx, mic);
       if (!sttSocket) {
-        failures.push("the mic click did not start capture once a wait was pinned");
+        failures.push("the mic click did not start capture before the agent waited");
         return;
+      }
+      if (statusText.textContent.includes("isn't asking for input")) {
+        failures.push(`the mic click named a wait it no longer needs (got "${statusText.textContent}")`);
       }
       if (
         !sttSocket.sent
@@ -296,7 +289,6 @@ const scenarios = {
         return;
       }
       await sleep(20);
-      emitAgent({ type: "input_required", token: "tok-boot" });
       const firstTake = await startTake(ctx, firstMic);
       if (!firstTake) {
         failures.push("a take on the boot agent panel did not light the recording LED");
@@ -344,7 +336,6 @@ const scenarios = {
         return;
       }
       await sleep(20);
-      emitAgent({ type: "input_required", token: "tok-a" });
       if (!(await startTake(ctx, secondMic))) {
         failures.push("a take on the instance panel did not light the recording LED");
         return;

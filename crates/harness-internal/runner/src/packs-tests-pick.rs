@@ -27,11 +27,8 @@ fn vendors(acme_ready: &str) -> Packs {
 fn a_bare_entry_runs_with_the_runvil_pack_of_that_id() {
     let host = vendors("ready");
     let declares = prompt("uses:\n  - web\n");
-    assert_eq!(
-        catalog_ids(&host, &HostServices::new(), &declares),
-        ["web/runvil"]
-    );
-    let run = begin(&host, &HostServices::new(), BTreeMap::new(), &declares);
+    assert_eq!(catalog_ids(&host, &declares), ["web/runvil"]);
+    let run = begin(&host, BTreeMap::new(), &declares);
     assert_eq!(run.roster().get(&name("web")), Some(&usable_from("runvil")));
 }
 
@@ -39,19 +36,11 @@ fn a_bare_entry_runs_with_the_runvil_pack_of_that_id() {
 fn a_declared_third_party_pack_replaces_the_runvil_pack_of_its_id() {
     let host = vendors("ready");
     assert_eq!(
-        catalog_ids(
-            &host,
-            &HostServices::new(),
-            &prompt("uses:\n  - acme/web\n")
-        ),
+        catalog_ids(&host, &prompt("uses:\n  - acme/web\n")),
         ["web/acme"]
     );
     assert_eq!(
-        catalog_ids(
-            &host,
-            &HostServices::new(),
-            &prompt("uses:\n  - acme/poop\n")
-        ),
+        catalog_ids(&host, &prompt("uses:\n  - acme/poop\n")),
         ["poop/acme", "web/runvil"],
         "a third-party Pack of a new id joins the runvil Packs"
     );
@@ -60,10 +49,7 @@ fn a_declared_third_party_pack_replaces_the_runvil_pack_of_its_id() {
 #[test]
 fn a_run_that_declares_nothing_holds_every_runvil_pack_and_no_third_party_one() {
     let host = vendors("ready");
-    assert_eq!(
-        catalog_ids(&host, &HostServices::new(), &prompt("")),
-        ["web/runvil"]
-    );
+    assert_eq!(catalog_ids(&host, &prompt("")), ["web/runvil"]);
     assert_eq!(usable(&host, &prompt("")), ["subagents", "web"]);
 }
 
@@ -71,7 +57,7 @@ fn a_run_that_declares_nothing_holds_every_runvil_pack_and_no_third_party_one() 
 fn a_bare_entry_that_only_another_vendor_has_is_unavailable_naming_each_fqn() {
     let one = vendors("ready");
     let declares = prompt("uses:\n  - poop\n");
-    let run = begin(&one, &HostServices::new(), BTreeMap::new(), &declares);
+    let run = begin(&one, BTreeMap::new(), &declares);
     assert_eq!(
         run.roster().get(&name("poop")),
         Some(&unavailable_for(
@@ -90,7 +76,7 @@ fn a_bare_entry_that_only_another_vendor_has_is_unavailable_naming_each_fqn() {
         (info("zed/poop"), Value::Null),
         (info("acme/poop"), Value::Null),
     ]);
-    let run = begin(&both, &HostServices::new(), BTreeMap::new(), &declares);
+    let run = begin(&both, BTreeMap::new(), &declares);
     assert_eq!(
         run.roster().get(&name("poop")),
         Some(&unavailable_for(
@@ -104,7 +90,7 @@ fn a_bare_entry_that_only_another_vendor_has_is_unavailable_naming_each_fqn() {
 fn an_entry_no_vendor_has_is_missing_and_an_absent_vendor_name_is_unavailable() {
     let host = vendors("ready");
     let declares = prompt("uses:\n  - nope\n  - acme/gone\n");
-    let run = begin(&host, &HostServices::new(), BTreeMap::new(), &declares);
+    let run = begin(&host, BTreeMap::new(), &declares);
     let roster = run.roster();
     assert_eq!(
         roster.get(&name("nope")),
@@ -128,13 +114,12 @@ fn the_roster_covers_every_declared_pack_the_run_cannot_serve() {
     let host = host_with(
         &HostServices::new(),
         &[
-            (info("acme/needy"), needy, Value::Null),
             (PackInfo::new("acme/broken"), backed, Value::Null),
             (info("acme/fine"), listed, Value::Null),
         ],
     );
-    let declares = prompt("uses:\n  - acme/needy\n  - absent\n  - acme/fine\n  - acme/broken\n");
-    let run = begin(&host, &HostServices::new(), BTreeMap::new(), &declares);
+    let declares = prompt("uses:\n  - absent\n  - acme/fine\n  - acme/broken\n");
+    let run = begin(&host, BTreeMap::new(), &declares);
     assert_eq!(
         run.roster(),
         BTreeMap::from([
@@ -143,10 +128,6 @@ fn the_roster_covers_every_declared_pack_the_run_cannot_serve() {
                 unavailable_for("backed needs tests/backend, and this host provides none"),
             ),
             (name("fine"), usable_from("acme")),
-            (
-                name("needy"),
-                unavailable_for("needy needs tests/session, and this run provides none"),
-            ),
             (name("subagents"), usable_from("runvil")),
             (name("user"), unavailable_for("this run has no user")),
         ]),
@@ -156,7 +137,6 @@ fn the_roster_covers_every_declared_pack_the_run_cannot_serve() {
         refusal(&run, &declares),
         "the environment cannot satisfy this prompt:\n\
          - missing required Pack: absent\n\
-         - needy is unavailable: needy needs tests/session, and this run provides none\n\
          - broken is unavailable: backed needs tests/backend, and this host provides none \
          (at prompt:5)"
     );
@@ -216,7 +196,7 @@ fn refusals_are_empty_when_every_declared_pack_is_installed() {
 /// `host` resolves without waiting, and its failures when it does.
 fn waits(host: &Packs, prompt: &Prompt) -> Option<BTreeMap<&'static str, String>> {
     let picked = host.pick(prompt);
-    let made = host.make(&picked, &HostServices::new(), false);
+    let made = host.make(&picked, false);
     wait_ready(&made, &CancelHandle::new()).now_or_never()
 }
 
@@ -242,7 +222,7 @@ fn the_ready_wait_covers_only_the_runs_packs() {
 /// beside the failures the wait found.
 fn waited(host: &Packs, prompt: &Prompt) -> (BTreeMap<&'static str, String>, RunPacks) {
     let picked = host.pick(prompt);
-    let made = host.make(&picked, &HostServices::new(), false);
+    let made = host.make(&picked, false);
     let failures = wait_ready(&made, &CancelHandle::new())
         .now_or_never()
         .unwrap();

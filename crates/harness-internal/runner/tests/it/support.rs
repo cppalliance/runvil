@@ -26,7 +26,7 @@ use runvil::vfs::{
 use runvil::{Error, ErrorCode, ErrorFact};
 use runvil::{Prompt, Run, RunParams, RunSeed};
 use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
-use runvil_plugin::{HostServices, Pack, PackId, PackInfo, PackRegistry};
+use runvil_plugin::{Pack, PackId, PackInfo, PackRegistry};
 use serde_json::{Value, json};
 
 /// The fixed seed every fixture run and recorded meta takes.
@@ -57,7 +57,7 @@ pub(crate) fn assert_canceled(result: &Result<String, Error>) {
 
 /// The factory of a fixture Pack that shares nothing: it makes the Pack
 /// under the Pack id it receives.
-pub(crate) type Make = fn(&PackId, &HostServices) -> Result<Arc<dyn Pack>, Error>;
+pub(crate) type Make = fn(&PackId) -> Result<Arc<dyn Pack>, Error>;
 
 /// A registry holding the built-ins and each of `packs`, an info beside
 /// its factory, which a suite builds its Host over.

@@ -125,7 +125,7 @@ use crate::server::{Server, State};
 /// Its FQN is `runvil/mcp`, so its Pack id is `mcp`. Its config is the
 /// `mcpServers` object of an `mcp.json` file, and its `install` reads
 /// the Plugin contract's [`runvil_plugin::TOKIO_RUNTIME`] service. It has
-/// no prelude, and its factory reads none of the run's services.
+/// no prelude.
 const MCP: PackInfo =
     PackInfo::new("runvil/mcp").description("Tools from every configured MCP server");
 
@@ -221,7 +221,7 @@ impl Servers {
 
 impl PackFactory for Servers {
     /// Makes one MCP Pack instance named `id` over the shared servers.
-    fn new_pack(&self, id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+    fn new_pack(&self, id: &PackId) -> Result<Arc<dyn Pack>, Error> {
         let mcp = Mcp::new(
             id,
             Arc::clone(&self.namespaces),

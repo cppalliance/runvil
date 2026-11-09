@@ -1,5 +1,6 @@
 //! Recovery gates: a live chat's wait answering on a replacement Gateway,
-//! a failed completion the chat survives, and a selection lost mid-turn.
+//! a failed completion the chat survives, and a selection lost while the
+//! chat waits.
 
 use super::*;
 
@@ -8,7 +9,7 @@ async fn a_live_chat_wait_answers_on_the_replacement_port_and_key() {
     let server = spawn_chat_server(&["test-model"]).await;
     let mut socket = connect_chat(&server.ws_base).await;
     let session = launch_chat(&mut socket).await;
-    let original_wait = next_wait_token(&mut socket).await;
+    next_wait(&mut socket).await;
 
     let replacement_captured = CapturedRequests::default();
     let captured = Arc::clone(&replacement_captured);
@@ -36,9 +37,10 @@ async fn a_live_chat_wait_answers_on_the_replacement_port_and_key() {
     )
     .expect("the replacement publishes");
 
-    // The wait the original gateway's run opened still answers, and its
-    // round goes to the replacement port under the replacement key.
-    answer(&mut socket, &original_wait, "after gateway recovery").await;
+    // The run the original gateway served still waits on its inbox, and
+    // the next message's round goes to the replacement port under the
+    // replacement key.
+    answer(&mut socket, "after gateway recovery").await;
     let turn = collect_turn(&mut socket).await;
     assert_eq!(delta_text(&turn), "echo:after gateway recovery");
     assert!(
@@ -73,8 +75,8 @@ async fn gate_model_failure_surfaces_an_error_and_the_next_input_works() {
     let mut socket = connect_chat(&server.ws_base).await;
     let _session = launch_chat(&mut socket).await;
 
-    let token = next_wait_token(&mut socket).await;
-    answer(&mut socket, &token, "fail").await;
+    next_wait(&mut socket).await;
+    answer(&mut socket, "fail").await;
     let error = socket
         .recv_until(Duration::from_secs(10), |frame| frame["type"] == "error")
         .await;
@@ -86,11 +88,11 @@ async fn gate_model_failure_surfaces_an_error_and_the_next_input_works() {
     );
 
     // The pcall'd failure never kills the program: the loop returns to
-    // input.ask() and the next turn is a normal one. The failed input stays
-    // in the retained message list, so the projection joins the two
+    // tasks.receive() and the next turn is a normal one. The failed input
+    // stays in the retained message list, so the projection joins the two
     // consecutive user utterances with a blank line.
-    let fresh = next_wait_token(&mut socket).await;
-    answer(&mut socket, &fresh, "recovered").await;
+    next_wait(&mut socket).await;
+    answer(&mut socket, "recovered").await;
     let turn = collect_turn(&mut socket).await;
     assert_eq!(
         delta_text(&turn),
@@ -104,8 +106,8 @@ async fn gate_model_failure_surfaces_an_error_and_the_next_input_works() {
 
 /// GATE 7 - selection-loss recovery, unified-runtime semantics: the run's
 /// model is the dropdown selection bound at launch, so a selection that
-/// vanishes mid-turn skips nothing - the frozen binding drives
-/// the raced turn to completion, and the same run keeps serving turns
+/// vanishes while the chat waits skips nothing - the frozen binding drives
+/// the next turn to completion, and the same run keeps serving turns
 /// until a close ends it.
 #[tokio::test]
 async fn gate_selection_loss_leaves_the_runs_frozen_binding_untouched() {
@@ -113,29 +115,20 @@ async fn gate_selection_loss_leaves_the_runs_frozen_binding_untouched() {
     let mut socket = connect_chat(&server.ws_base).await;
     let session = launch_chat(&mut socket).await;
 
-    let token = next_wait_token(&mut socket).await;
-    let state = server.state.clone();
-    server
-        .state
-        .agents()
-        .deliver_input_after_acceptance_for_test(
-            &session,
-            InputResponse {
-                token,
-                text: "accepted before loss".to_owned(),
-            },
-            move || {
-                state.catalog().publish(Vec::new());
-                state.menu().reconcile_catalog();
-            },
-        )
-        .expect("the launched session remains registered")
-        .expect("the submitted input completes its live wait");
+    next_wait(&mut socket).await;
+    server.state.catalog().publish(Vec::new());
+    server.state.menu().reconcile_catalog();
+    answer(&mut socket, "accepted before loss").await;
 
     // The selection is gone, but the run's binding was frozen at launch:
-    // the raced turn dispatches and completes, and no error frame surfaces.
+    // the turn after the loss dispatches and completes, and no error frame
+    // surfaces.
     let turn = collect_turn(&mut socket).await;
     assert_eq!(delta_text(&turn), "echo:accepted before loss");
+    assert!(
+        server.state.agents().run_id(&session).is_some(),
+        "the launched session remains registered"
+    );
 
     server
         .state
@@ -146,8 +139,8 @@ async fn gate_selection_loss_leaves_the_runs_frozen_binding_untouched() {
         .menu()
         .set_selected("test-model")
         .expect("the retained model can be selected for recovery");
-    let token = wait_after(&mut socket, &turn).await;
-    answer(&mut socket, &token, "recovered after selection").await;
+    next_wait(&mut socket).await;
+    answer(&mut socket, "recovered after selection").await;
     let turn = collect_turn(&mut socket).await;
     assert_eq!(
         delta_text(&turn),

@@ -8,15 +8,14 @@
 //! start as a [`Timestamp`], and shares it behind an `Arc`.
 //! [`Host::parse`] finds a prompt by its name and parses it. For each run
 //! the launcher builds a [`RunSetup`] with the run's recorder, inference
-//! broker, services, filesystem, model selection, workspace roots,
-//! [`RunLimits`], tool-call cap, arguments, input text, and whether a
-//! user answers it, and [`Harness::new`] takes the Host, the parsed
-//! prompt, and that setup. [`Harness::run`] runs the prompt to its end and
-//! returns its [`RunReport`]. The run makes its own instance of each Pack
-//! it holds, handing each factory the setup's services, and drops the
-//! instances when it ends. While the run goes on, the launcher sends its
-//! main chain messages and steers it through the [`RunControl`] it took
-//! from `Harness::control` before the run started.
+//! broker, filesystem, model selection, workspace roots, [`RunLimits`],
+//! tool-call cap, arguments, input text, and whether a user answers it,
+//! and [`Harness::new`] takes the Host, the parsed prompt, and that setup.
+//! [`Harness::run`] runs the prompt to its end and returns its
+//! [`RunReport`]. The run makes its own instance of each Pack it holds
+//! and drops the instances when it ends. While the run goes on, the
+//! launcher sends its main chain messages and steers it through the
+//! [`RunControl`] it took from `Harness::control` before the run started.
 //!
 //! Every run gets a record and ends with its result: the final text, or
 //! the error that ended it, where a cancel is the error whose code is
@@ -44,8 +43,8 @@ pub use runvil::timestamp::Timestamp;
 pub mod pack {
     //! The registry a Host's Plugins insert Packs into, the Packs
     //! installed from it, whose factories make each run's instances, the
-    //! services maps a Host fills, and the Pack ids. The Plugin crates
-    //! themselves are the Host's own dependencies.
+    //! services map a Host fills for its Plugins, and the Pack ids. The
+    //! Plugin crates themselves are the Host's own dependencies.
 
     pub use harness_runner::Packs;
     pub use runvil_plugin::HostServices;

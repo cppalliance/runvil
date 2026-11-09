@@ -24,7 +24,7 @@ use std::thread::{self, Thread, ThreadId};
 use std::time::Duration;
 
 use harness_runner::performers::{InferenceBroker, Timer};
-use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunRecorder};
+use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunId, RunRecorder};
 use harness_runner::{Harness, Packs, RunControl, RunReport, RunSetup};
 use runvil::vfs::VfsRef;
 use runvil::{Error, ErrorCode};
@@ -77,8 +77,8 @@ pub(crate) fn no_packs() -> Packs {
     Packs::new(PackRegistry::new())
 }
 
-/// A Harness running `source` over `recorder` and `broker` with no Packs,
-/// no run services, and a timer no test here reaches.
+/// A Harness running `source` over `recorder` and `broker` with no Packs
+/// and a timer no test here reaches.
 fn plain_harness(recorder: &Arc<MemoryRecorder>, broker: ScriptedBroker, source: &str) -> Harness {
     launch(
         no_packs(),
@@ -149,6 +149,29 @@ fn answers_to(records: &[Record], kind: &str) -> Vec<Value> {
 /// Whether a `ToolCall` effect body calls `tool`.
 fn calls(tool: &'static str) -> impl Fn(&Value) -> bool {
     move |body| body["tool"] == tool
+}
+
+/// The run a test here drives: the first one a fresh recorder begins.
+const FIRST_RUN: RunId = RunId::from_raw(1);
+
+/// Whether `record` is an event of `kind`.
+fn is_event(record: &Record, kind: &str) -> bool {
+    record.kind == RecordKind::Event && record.payload["kind"] == kind
+}
+
+/// How many times `records` show the chain of the task `task` parked on
+/// its empty inbox.
+fn inbox_waits(records: &[Record], task: &str) -> usize {
+    records
+        .iter()
+        .filter(|record| record.task_id == task && is_event(record, "inbox_waiting"))
+        .count()
+}
+
+/// How many times `records` show the main chain parked on its empty
+/// inbox.
+fn main_waits(records: &[Record]) -> usize {
+    inbox_waits(records, "0")
 }
 
 /// A prompt declaring `paper.md` as its input and `report.md` as its

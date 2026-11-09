@@ -1,7 +1,7 @@
 // The agent-session view model: DOM-free state over one /agents/ws
 // socket. The service subscribes to the socket's frame events and keeps
 // what the views render: the discovered agent list, the acknowledged
-// session, the transcript, and the pending input wait. The transcript is
+// session, and the transcript. The transcript is
 // derived from the durable event stream plus the ephemeral deltas:
 // deltas coalesce into pending items keyed by the reply id stamped on
 // every chunk, and the durable event stamped with that id replaces them (the
@@ -10,11 +10,14 @@
 // DOM.
 //
 // Beyond the items, the service keeps the turn's liveness: `generating`
-// (the agent is working, so the composer offers stop and the transcript
-// shows a tail status), `reconnecting` (the socket dropped and the
-// reattach has not been acknowledged), and the reasoning clock that
-// times each thought. The clock is injectable so tests stamp exact
-// durations.
+// (the agent is working, so the composer offers stop over an empty box and
+// the transcript shows a tail status), `started` (the session's run has
+// reported, so it takes the operator's messages), `reconnecting` (the
+// socket dropped and the reattach has not been acknowledged), and the
+// reasoning clock that times each thought. The agent waiting on its inbox
+// ends the working state and the operator's message starts it again, both
+// read from the durable log, so a replayed log ends in the right state.
+// The clock is injectable so tests stamp exact durations.
 
 import { Emitter, type Event } from "@workshop/platform/event";
 import { Disposable } from "@workshop/platform/lifecycle";
@@ -35,13 +38,12 @@ export interface AgentSessionWire {
   readonly onSession: Event<AgentSessionFrame>;
   readonly onEvent: Event<AgentEventFrame>;
   readonly onDelta: Event<AgentDeltaFrame>;
-  readonly onInputRequired: Event<string>;
-  readonly onInputCanceled: Event<string>;
   readonly onError: Event<string>;
   /** Fires when the socket drops; the socket reconnects on its own. */
   readonly onDisconnect: Event<void>;
   launch(agent: string): boolean;
-  respond(token: string, text: string): boolean;
+  /** Sends the operator's message; false when the socket is down. */
+  respond(text: string): boolean;
   /** Fires the turn-cancel; false when the socket is down and nothing was sent. */
   cancelTurn(): boolean;
 }
@@ -191,8 +193,7 @@ function parseToolCalls(content: string): readonly ToolCallRow[] {
  * The state behind one agent session surface. Reads arrive as socket
  * events; the service folds them into snapshots and fires the matching
  * change event after every fold, so a view repaints from `agents`,
- * `session`, `items`, `pendingInputToken`, `generating`, and
- * `reconnecting` alone.
+ * `session`, `items`, `started`, `generating`, and `reconnecting` alone.
  */
 export class AgentSessionService extends Disposable {
   private agentList: readonly string[] = [];
@@ -206,20 +207,14 @@ export class AgentSessionService extends Disposable {
    */
   private settled = -1;
   /**
-   * True from a sent cancel until the turn's work restarts (an answer, an
-   * input request, or a session acknowledgment). A reasoning chunk that
-   * arrives in that window is a late straggler from the cancel grace
-   * period; it opens already ended, so the thought never reads as
+   * True from a sent cancel until the turn's work restarts (a message, the
+   * agent waiting on its inbox, or a session acknowledgment). A reasoning
+   * chunk that arrives in that window is a late straggler from the cancel
+   * grace period; it opens already ended, so the thought never reads as
    * streaming under an idle composer.
    */
   private stopped = false;
-  /**
-   * The open wait tokens in the order the server announced them. A
-   * round's calls run in parallel, so several waits can be open at once;
-   * the oldest is the pin the operator answers next.
-   */
-  private openWaits: string[] = [];
-  private pinnedToken: string | null = null;
+  private begun = false;
   private working = false;
   private dropped = false;
 
@@ -235,9 +230,9 @@ export class AgentSessionService extends Disposable {
   /** Fires after every transcript fold; read `items` for the snapshot. */
   readonly onDidChangeTranscript: Event<void> = this._onDidChangeTranscript.event;
 
-  private readonly _onDidChangePendingInput = this._register(new Emitter<string | null>());
-  /** Fires with the pinned wait token, or null when no wait is open. */
-  readonly onDidChangePendingInput: Event<string | null> = this._onDidChangePendingInput.event;
+  private readonly _onDidChangeStarted = this._register(new Emitter<boolean>());
+  /** Fires with the new value whenever `started` really changes. */
+  readonly onDidChangeStarted: Event<boolean> = this._onDidChangeStarted.event;
 
   private readonly _onDidChangeGenerating = this._register(new Emitter<boolean>());
   /** Fires with the new value whenever `generating` really changes. */
@@ -269,32 +264,6 @@ export class AgentSessionService extends Disposable {
     this._register(wire.onSession((frame) => this.acknowledge(frame)));
     this._register(wire.onEvent((frame) => this.foldEvent(frame)));
     this._register(wire.onDelta((frame) => this.foldDelta(frame)));
-    this._register(
-      wire.onInputRequired((token) => {
-        // The agent is waiting on the operator: no thinking is still
-        // running, and nothing is generating until the answer lands.
-        const closed = this.closeThinking(null);
-        // The relaunched agent is waiting: the cancel grace window is over.
-        this.stopped = false;
-        this.setGenerating(false);
-        // A reattach resend repeats tokens that may already be open.
-        if (!this.openWaits.includes(token)) {
-          this.openWaits.push(token);
-        }
-        this.pinOldestWait();
-        if (closed) {
-          this._onDidChangeTranscript.fire();
-        }
-      }),
-    );
-    this._register(
-      wire.onInputCanceled((token) => {
-        // Only the announced wait dies, wherever it sits; the oldest
-        // wait still open keeps or takes the pin.
-        this.openWaits = this.openWaits.filter((open) => open !== token);
-        this.pinOldestWait();
-      }),
-    );
     this._register(wire.onError((message) => this.foldError(message, null)));
     this._register(wire.onDisconnect(() => this.setReconnecting(true)));
   }
@@ -314,16 +283,22 @@ export class AgentSessionService extends Disposable {
     return this.transcript;
   }
 
-  /** The pending wait's token, or null while the agent is working. */
-  get pendingInputToken(): string | null {
-    return this.openWaits[0] ?? null;
+  /**
+   * True once the acknowledged session's run has reported anything - a
+   * durable event or a live chunk - so the agent has first waited on its
+   * inbox or worked, and its run takes the operator's messages. Off until
+   * then, and again when a new session is acknowledged.
+   */
+  get started(): boolean {
+    return this.begun;
   }
 
   /**
-   * True while the agent is working on the operator's last message: on
-   * after a send or an answered tool call that leaves no wait open, off
-   * when the reply lands, a wait opens, an error arrives, or a cancel is
-   * sent.
+   * True while the agent is working: on after a send, at the operator's
+   * message in the log, and at an answered model tool call; off when the
+   * agent waits on its inbox, an error arrives, or a cancel is sent. A
+   * reply alone leaves it on, since a message that lands as the reply does
+   * makes the agent go on.
    */
   get generating(): boolean {
     return this.working;
@@ -347,33 +322,22 @@ export class AgentSessionService extends Disposable {
   }
 
   /**
-   * Answers the pinned wait - the oldest open one - with the operator's
-   * text, byte-exact. The text never enters the transcript here: the
-   * server records it and the durable `user_message` event renders it,
-   * so the view shows exactly what the log holds. False when no wait is
-   * open or the socket is down; a failed send keeps every open wait (each
-   * is still open server-side) and folds a local error item, because a
-   * downed socket is the one failure the server can never report. A sent
-   * answer spends its token and pins the next oldest wait; `generating`
-   * turns on only once no wait remains open.
+   * Sends the operator's message, byte-exact: it answers the agent while
+   * the agent waits on its inbox, and steers the turn while it works. The
+   * text never enters the transcript here: the server records it and the
+   * durable `user_message` event renders it, so the view shows exactly
+   * what the log holds. False when the socket is down; a failed send folds
+   * a local error item, because a downed socket is the one failure the
+   * server can never report. A sent message turns `generating` on.
    */
   respond(text: string): boolean {
-    const token = this.pendingInputToken;
-    if (token === null) {
-      return false;
-    }
-    if (!this.wire.respond(token, text)) {
+    if (!this.wire.respond(text)) {
       this.foldError(CONNECTION_FAILED_MESSAGE, CONNECTION_FAILED_TITLE);
       return false;
     }
-    // The answer restarts the turn's work, so a stop no longer applies.
+    // The message restarts the turn's work, so a stop no longer applies.
     this.stopped = false;
-    // The token is single-use; the response just spent it.
-    this.openWaits = this.openWaits.filter((open) => open !== token);
-    this.pinOldestWait();
-    if (this.openWaits.length === 0) {
-      this.setGenerating(true);
-    }
+    this.setGenerating(true);
     return true;
   }
 
@@ -400,12 +364,9 @@ export class AgentSessionService extends Disposable {
   /**
    * Folds a session acknowledgment. A different session id means a
    * different event log replaying from index zero, so the transcript
-   * resets with it; a same-session reattach keeps the transcript (the
-   * socket's cursor already deduplicates the replay). The open waits
-   * reset on every acknowledgment: the server resends unresolved waits
-   * right after, in creation order, so the list rebuilds oldest first
-   * and a stale prompt vanishes by its token's absence. The
-   * acknowledgment also ends a reconnect.
+   * resets with it and the new session has not started; a same-session
+   * reattach keeps the transcript (the socket's cursor already
+   * deduplicates the replay). The acknowledgment also ends a reconnect.
    */
   private acknowledge(frame: AgentSessionFrame): void {
     const changedSession =
@@ -416,10 +377,9 @@ export class AgentSessionService extends Disposable {
       this.transcript = [];
       this.settled = -1;
       this.setGenerating(false);
+      this.setStarted(false);
       this._onDidChangeTranscript.fire();
     }
-    this.openWaits = [];
-    this.setPinnedToken(null);
     this.setReconnecting(false);
     this._onDidChangeSession.fire(frame);
   }
@@ -428,9 +388,26 @@ export class AgentSessionService extends Disposable {
   private foldEvent(frame: AgentEventFrame): void {
     const event = frame.event;
     const reply = frame.reply ?? null;
+    // Every durable entry is the session's run reporting, so it has begun.
+    this.setStarted(true);
     switch (event.kind) {
+      case "awaiting_input": {
+        // The agent waits on its empty inbox for the operator: no thinking
+        // is still running, nothing is generating until a message lands,
+        // and the cancel grace window is over.
+        const closed = this.closeThinking(null);
+        this.stopped = false;
+        this.setGenerating(false);
+        if (closed) {
+          this._onDidChangeTranscript.fire();
+        }
+        return;
+      }
       case "user_message": {
         this.transcript.push({ kind: "user", text: event.content });
+        // The operator's message sets the agent working, live or replayed.
+        this.stopped = false;
+        this.setGenerating(true);
         break;
       }
       case "agent_message": {
@@ -442,9 +419,9 @@ export class AgentSessionService extends Disposable {
           pending: false,
           reply,
         });
-        // A reply always ends the turn: the chat agent loops ask, then
-        // model, so nothing runs after one.
-        this.setGenerating(false);
+        // A reply does not end the turn: a message that lands as the
+        // reply does makes the agent go on, so only its next wait on its
+        // inbox ends the working state.
         break;
       }
       case "agent_thought": {
@@ -480,12 +457,10 @@ export class AgentSessionService extends Disposable {
       }
       case "tool_call_update": {
         // An answered model call means the agent has its result and is
-        // working again, unless a wait is still open: a round's calls run
-        // in parallel, so a sibling's result does not end the operator's
-        // turn. Checked before the result lands so the scan reads only
-        // the calls.
+        // working again. Checked before the result lands so the scan reads
+        // only the calls.
         const toolCallId = event.tool_call_id ?? null;
-        if (toolCallId !== null && this.openWaits.length === 0 && this.answersModelCall(toolCallId)) {
+        if (toolCallId !== null && this.answersModelCall(toolCallId)) {
           this.setGenerating(true);
         }
         this.transcript.push({
@@ -512,6 +487,8 @@ export class AgentSessionService extends Disposable {
    * round's clock; a text chunk ends the same round's thinking.
    */
   private foldDelta(frame: AgentDeltaFrame): void {
+    // A live chunk is the session's run reporting, so it has begun.
+    this.setStarted(true);
     if (frame.reply <= this.settled) {
       // A late chunk whose durable superseder already rendered.
       return;
@@ -655,18 +632,13 @@ export class AgentSessionService extends Disposable {
     return -1;
   }
 
-  /** Pins the oldest open wait, or clears the pin when none is open. */
-  private pinOldestWait(): void {
-    this.setPinnedToken(this.openWaits[0] ?? null);
-  }
-
-  /** Pins or clears the wait token, firing only on a real change. */
-  private setPinnedToken(token: string | null): void {
-    if (this.pinnedToken === token) {
+  /** Sets `started`, firing only on a real change. */
+  private setStarted(value: boolean): void {
+    if (this.begun === value) {
       return;
     }
-    this.pinnedToken = token;
-    this._onDidChangePendingInput.fire(token);
+    this.begun = value;
+    this._onDidChangeStarted.fire(value);
   }
 
   /** Sets `generating`, firing only on a real change. */

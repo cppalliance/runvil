@@ -54,10 +54,8 @@
 //!   Pack whose Pack id no declaration takes. It makes its own instance of
 //!   each of them and of no other Pack, waits on no other Pack's `ready`,
 //!   and drops its instances when its future ends.
-//! - Each object takes the services that live as long as it does when it
-//!   is made: Host-wide services reach only a Plugin's `install`, the
-//!   run's own services reach only the factories its Packs are made by,
-//!   and a tool call gets only facts about that call.
+//! - Host services reach only a Plugin's `install`, and a tool call gets
+//!   only facts about that call.
 //! - A factory that refuses or panics leaves its Pack unavailable to that
 //!   run alone: a refusal is logged at debug and a panic at error, and the
 //!   next run calls the factory again.

@@ -5,21 +5,18 @@
 //! each run's begin draws a fresh seed and reads its start from the
 //! Host's timer, both handed to the recorder; the setup's limits reach
 //! the prepared run; each run makes its own instance of each of its Packs
-//! and drops it by the time `Harness::run` returns; and the run's tool
-//! performer sends a `ToolCall` effect to the Pack its id names. The
-//! run's optional input broker - one of its own services, which a Pack's
-//! factory takes and the fixture ask Pack holds - sits in the `input`
-//! child module, a Pack's factory taking a service from the run's
-//! services sits in the `host_services` child module, a
-//! Pack's prelude reaching the prepared run sits in the `prelude` child
-//! module, the prompt's declared input and output files sit in the
-//! `files` child module, the wait for each Pack to be ready sits in
-//! the `ready` child module, and the built-in `runvil/user`, which only a
-//! run with a user holds, sits in the `user` child module.
+//! and drops it by the time `Harness::run` returns, handing its factory
+//! nothing but the Pack id; and the run's tool performer sends a
+//! `ToolCall` effect to the Pack its id names. A Pack's prelude reaching
+//! the prepared run sits in the `prelude` child module, the prompt's
+//! declared input and output files sit in the `files` child module, the
+//! wait for each Pack to be ready sits in the `ready` child module, and
+//! the built-in `runvil/user`, which only a run with a user holds, sits
+//! in the `user` child module.
 
 use std::num::NonZeroU32;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use harness_runner::performers::{BoxFuture, Timer};
@@ -32,8 +29,7 @@ use runvil::model::{Completion, CompletionResult, ToolCall};
 use runvil::timestamp::Timestamp;
 use runvil::{Error, ErrorCode, ErrorFact, RunLimits};
 use runvil_plugin::{
-    HostServices, Pack, PackFactory, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo,
-    ToolOutput,
+    Pack, PackFactory, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -43,10 +39,6 @@ use crate::support::{Make, Unused, host_over, parsed, registry};
 
 #[path = "prepare-files.rs"]
 mod files;
-#[path = "prepare-host-services.rs"]
-mod host_services;
-#[path = "prepare-input.rs"]
-mod input;
 #[path = "prepare-prelude.rs"]
 mod prelude;
 #[path = "prepare-ready.rs"]
@@ -98,8 +90,7 @@ pub(crate) fn building(pack: (PackInfo, Make)) -> Packs {
 
 /// The setup of a run recorded through `recorder` and served by the
 /// scripted broker. It selects no model, so the run binds the broker's
-/// one model, and it holds no run services, no input, and a fresh memory
-/// store.
+/// one model, and it holds no input and a fresh memory store.
 pub(crate) fn setup_over(recorder: &Arc<MemoryRecorder>) -> RunSetup {
     RunSetup::new(recorder.clone(), Arc::new(ScriptedBroker::replying()))
 }
@@ -151,7 +142,7 @@ struct Echo {
     clippy::unnecessary_wraps,
     reason = "the PackFactory signature fixes the return type"
 )]
-fn new_echo(name: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+fn new_echo(name: &PackId) -> Result<Arc<dyn Pack>, Error> {
     let echo = ToolInfo::new(
         ToolId::parse(&format!("{name}/echo")).unwrap(),
         "Echo the value argument.",
@@ -436,10 +427,10 @@ impl Pack for Counted {
 /// The factory of a [`Counted`] Pack, counting each instance it makes in
 /// `counts`.
 fn counting(counts: Arc<Counts>) -> impl PackFactory {
-    move |name: &PackId, run: &HostServices| -> Result<Arc<dyn Pack>, Error> {
+    move |name: &PackId| -> Result<Arc<dyn Pack>, Error> {
         counts.made.fetch_add(1, Ordering::SeqCst);
         Ok(Arc::new(Counted {
-            echo: new_echo(name, run)?,
+            echo: new_echo(name)?,
             counts: Arc::clone(&counts),
         }))
     }
@@ -479,6 +470,35 @@ async fn each_run_makes_its_own_instance_and_drops_it_by_the_time_harness_run_re
             "the run's instance is dropped by the time Harness::run returns"
         );
     }
+}
+
+#[tokio::test]
+async fn a_run_makes_its_packs_with_no_run_services() {
+    let named = Arc::new(Mutex::new(Vec::new()));
+    let seen = Arc::clone(&named);
+    let mut packs = registry(&[]);
+    packs
+        .insert(
+            PackInfo::new("tests/tools"),
+            move |name: &PackId| -> Result<Arc<dyn Pack>, Error> {
+                seen.lock().unwrap().push(name.to_string());
+                new_echo(name)
+            },
+        )
+        .unwrap();
+
+    let report = report_of(CALLS_ECHO, Packs::new(packs), setup_over(&recorder())).await;
+
+    assert_eq!(
+        completed(report.result),
+        "hi",
+        "the Pack made from its id alone serves the run's call"
+    );
+    assert_eq!(
+        *named.lock().unwrap(),
+        ["tools"],
+        "the run hands its factory the Pack id and nothing else"
+    );
 }
 
 #[tokio::test]

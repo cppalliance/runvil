@@ -2,14 +2,15 @@
 // scripted wire, no DOM: durable events fold into transcript items in
 // log order; ephemeral deltas coalesce into pending items by their
 // superseding reply id, per channel, and the durable event replaces
-// them; late deltas after their round settled are dropped; the input pin
-// follows input_required / input_canceled / respond; a session
-// acknowledgment resets the pin and a new session id resets the
+// them; late deltas after their round settled are dropped; respond sends
+// the operator's text alone, at any time; a new session id resets the
 // transcript; errors fold as items. The turn's liveness rides along: an
-// injected clock stamps each thought's start and end, `generating` and
-// `reconnecting` follow their rules, `cancelTurn` settles the service's
-// own view, tool rows carry their bound tool id, and errors carry their
-// popup title. Run: node test/agent-session-service.mjs
+// injected clock stamps each thought's start and end, `generating` turns
+// off at `awaiting_input` and on at the next `user_message`, so a replayed
+// log ends in the right state, `started` turns on with the session's
+// first report, `reconnecting` follows its rule, `cancelTurn` settles the
+// service's own view, tool rows carry their bound tool id, and errors
+// carry their popup title. Run: node test/agent-session-service.mjs
 import { writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -55,8 +56,6 @@ function makeWire() {
     session: new Emitter(),
     event: new Emitter(),
     delta: new Emitter(),
-    inputRequired: new Emitter(),
-    inputCanceled: new Emitter(),
     error: new Emitter(),
     disconnect: new Emitter(),
   };
@@ -65,8 +64,6 @@ function makeWire() {
     onSession: emitters.session.event,
     onEvent: emitters.event.event,
     onDelta: emitters.delta.event,
-    onInputRequired: emitters.inputRequired.event,
-    onInputCanceled: emitters.inputCanceled.event,
     onError: emitters.error.event,
     onDisconnect: emitters.disconnect.event,
     launched: [],
@@ -79,8 +76,8 @@ function makeWire() {
       this.launched.push(agent);
       return this.launchResult;
     },
-    respond(token, text) {
-      this.responses.push([token, text]);
+    respond(...args) {
+      this.responses.push(args);
       return this.respondResult;
     },
     cancelTurn() {
@@ -104,8 +101,13 @@ function makeWire() {
       },
       delta: (kind, content, reply) =>
         emitters.delta.fire({ type: "agent_delta", kind, content, reply }),
-      inputRequired: (token) => emitters.inputRequired.fire(token),
-      inputCanceled: (token) => emitters.inputCanceled.fire(token),
+      // The agent parks on its empty inbox, as the durable log says.
+      awaiting: () =>
+        emitters.event.fire({
+          type: "agent_event",
+          index: 0,
+          event: { kind: "awaiting_input", section: "chat", turn: 0, content: "" },
+        }),
       error: (message) => emitters.error.fire(message),
     },
     disposeEmitters: () => {
@@ -263,116 +265,74 @@ await assertNoLeaks(lifecycle, () => {
     service.dispose();
   }
 
-  // --- The input pin: required, respond, canceled ---------------------------
-
-  {
-    const wire = makeWire();
-    const service = new AgentSessionService(wire);
-    const pins = [];
-    service.onDidChangePendingInput((token) => pins.push(token));
-    check("no wait is pinned at construction", service.pendingInputToken === null);
-    check("respond without a pin sends nothing", service.respond("hi") === false);
-    check("nothing went out without a pin", wire.responses.length === 0);
-    wire.fire.inputRequired("tok1");
-    check("input_required pins its token", service.pendingInputToken === "tok1");
-    wire.fire.inputCanceled("other");
-    check("a foreign token's cancellation leaves the pin", service.pendingInputToken === "tok1");
-    check("respond sends the pinned token with the text byte-exact", service.respond("hi  ") === true);
-    check(
-      "the response sent token and text",
-      isDeepStrictEqual(wire.responses, [["tok1", "hi  "]]),
-    );
-    check("a spent token unpins", service.pendingInputToken === null);
-    wire.fire.inputRequired("tok2");
-    wire.fire.inputCanceled("tok2");
-    check("input_canceled unpins its own token", service.pendingInputToken === null);
-    check(
-      "the pin change event fired for every transition",
-      isDeepStrictEqual(pins, ["tok1", null, "tok2", null]),
-    );
-    service.dispose();
-  }
-
-  // --- Open waits pin the oldest and advance on each answer -----------------
-
-  {
-    const wire = makeWire();
-    const service = new AgentSessionService(wire);
-    wire.fire.inputRequired("tok1");
-    wire.fire.inputRequired("tok2");
-    check("two open waits pin the oldest", service.pendingInputToken === "tok1");
-    service.respond("first");
-    check("answering the oldest wait pins the next", service.pendingInputToken === "tok2");
-    check("a wait still open keeps generating off", service.generating === false);
-    service.respond("second");
-    check("answering the last open wait unpins", service.pendingInputToken === null);
-    check("answering the last open wait turns generating on", service.generating === true);
-    check(
-      "each answer spent its own token",
-      isDeepStrictEqual(wire.responses, [
-        ["tok1", "first"],
-        ["tok2", "second"],
-      ]),
-    );
-    service.dispose();
-  }
-
-  // --- A canceled wait leaves wherever it sits in the open waits -------------
-
-  {
-    const openTwo = () => {
-      const wire = makeWire();
-      const service = new AgentSessionService(wire);
-      wire.fire.inputRequired("tok1");
-      wire.fire.inputRequired("tok2");
-      return { wire, service };
-    };
-    const oldest = openTwo();
-    oldest.wire.fire.inputCanceled("tok1");
-    check("canceling the oldest wait pins the next", oldest.service.pendingInputToken === "tok2");
-    oldest.service.dispose();
-    const newer = openTwo();
-    newer.wire.fire.inputCanceled("tok2");
-    check("canceling a newer wait keeps the oldest pinned", newer.service.pendingInputToken === "tok1");
-    newer.service.dispose();
-  }
-
-  // --- A reattach pins the oldest unresolved wait ----------------------------
+  // --- respond sends the operator's text alone, at any time -----------------
 
   {
     const wire = makeWire();
     const service = new AgentSessionService(wire);
     wire.fire.session("s1");
-    wire.fire.inputRequired("tok1");
-    wire.fire.inputRequired("tok2");
-    wire.fire.session("s1");
-    wire.fire.inputRequired("tok1");
-    wire.fire.inputRequired("tok2");
-    check("the reattach resend pins the oldest unresolved wait", service.pendingInputToken === "tok1");
-    service.respond("first");
-    check("answering after the resend pins the newer wait", service.pendingInputToken === "tok2");
-    service.respond("second");
-    check("two answers drain the resent waits", service.pendingInputToken === null);
+    wire.fire.awaiting();
+    check("respond answers the waiting agent", service.respond("hi  ") === true);
+    wire.fire.event("user_message", "hi  ");
+    check("respond steers the working agent too", service.respond("and more") === true);
+    check(
+      "each message went out as its text alone, byte-exact, with no wait token",
+      isDeepStrictEqual(wire.responses, [["hi  "], ["and more"]]),
+    );
+    check(
+      "the text never enters the transcript until the server records it",
+      service.items.length === 1 && service.items[0].kind === "user",
+    );
     service.dispose();
   }
 
-  // --- A failed respond keeps the pin and folds a local error ---------------
+  // --- A failed respond folds a local error ----------------------------------
 
   {
     const wire = makeWire();
     const service = new AgentSessionService(wire);
-    wire.fire.inputRequired("tok1");
+    wire.fire.awaiting();
     wire.respondResult = false;
     check("a failed send reports false", service.respond("hi") === false);
-    check("the pin survives a failed send", service.pendingInputToken === "tok1");
     check(
       "the failure folds as an error item",
       service.items.length === 1 && service.items[0].kind === "error",
     );
+    check("a failed send leaves generating off", service.generating === false);
     service.dispose();
   }
 
-  // --- Session acknowledgments: pin reset, transcript reset on a new id ----
+  // --- started: the session's first report, until a new session ---------------
+
+  {
+    const wire = makeWire();
+    const service = new AgentSessionService(wire);
+    const seen = [];
+    service.onDidChangeStarted((value) => seen.push(value));
+    check("no session has started at construction", service.started === false);
+    wire.fire.session("s1");
+    check(
+      "an acknowledged session has not started until its run reports",
+      service.started === false,
+    );
+    wire.fire.error("the run has no model yet");
+    check("an error is no report of the run's", service.started === false);
+    wire.fire.awaiting();
+    check("the agent's first wait on its inbox starts it", service.started === true);
+    wire.fire.session("s1");
+    check("a same-session reattach keeps it started", service.started === true);
+    wire.fire.session("s2");
+    check("a new session has not started", service.started === false);
+    wire.fire.delta("text", "already working", 0);
+    check("a working agent's first chunk starts it", service.started === true);
+    wire.fire.session("s3");
+    wire.fire.event("tool_call", "[]", { reply: 0 });
+    check("any durable event of the run starts it", service.started === true);
+    check("only real changes fired", isDeepStrictEqual(seen, [true, false, true, false, true]));
+    service.dispose();
+  }
+
+  // --- Session acknowledgments: transcript reset on a new id -----------------
 
   {
     const wire = makeWire();
@@ -382,20 +342,14 @@ await assertNoLeaks(lifecycle, () => {
     // A refused launch folds a pre-session error; the session that then
     // starts leaves it out of its feed.
     wire.fire.error("unknown agent: bad");
-    wire.fire.inputRequired("tok1");
     wire.fire.session("s1");
-    check("an acknowledgment resets the pin for the resend set", service.pendingInputToken === null);
     check(
       "the first acknowledgment starts the session's transcript clean",
       service.items.length === 0 && service.session?.session === "s1",
     );
     wire.fire.event("user_message", "one");
-    wire.fire.inputRequired("tok2");
     wire.fire.session("s1");
-    check(
-      "a same-session reattach keeps the transcript and resets the pin",
-      service.items.length === 1 && service.pendingInputToken === null,
-    );
+    check("a same-session reattach keeps the transcript", service.items.length === 1);
     wire.fire.session("s2");
     check("a new session id resets the transcript", service.items.length === 0);
     check("every acknowledgment fired", isDeepStrictEqual(sessions, ["s1", "s1", "s2"]));
@@ -498,9 +452,9 @@ await assertNoLeaks(lifecycle, () => {
     clock.now = 3000;
     wire.fire.delta("reasoning", "waiting on input", 2);
     clock.now = 3400;
-    wire.fire.inputRequired("tok1");
+    wire.fire.awaiting();
     const afterInput = service.items.find((item) => item.kind === "reasoning" && item.reply === 2);
-    check("input_required ends the open thinking", afterInput.endedAt === 3400);
+    check("awaiting_input ends the open thinking", afterInput.endedAt === 3400);
     clock.now = 9000;
     wire.fire.error("again");
     check(
@@ -522,7 +476,7 @@ await assertNoLeaks(lifecycle, () => {
     service.dispose();
   }
 
-  // --- generating: respond and answered tool calls turn it on ---------------
+  // --- generating: on at a send and the operator's message, off at a wait ---
 
   {
     const wire = makeWire();
@@ -531,8 +485,8 @@ await assertNoLeaks(lifecycle, () => {
     service.onDidChangeGenerating((value) => seen.push(value));
     check("generating is off at construction", service.generating === false);
     wire.fire.session("s1");
-    wire.fire.inputRequired("tok1");
-    check("a wait opening leaves generating off", service.generating === false);
+    wire.fire.awaiting();
+    check("the agent waiting on its inbox leaves generating off", service.generating === false);
     wire.respondResult = false;
     service.respond("fails");
     check("a failed respond does not turn generating on", service.generating === false);
@@ -545,9 +499,44 @@ await assertNoLeaks(lifecycle, () => {
     });
     check("a tool-call batch alone leaves generating as it was", service.generating === true);
     wire.fire.event("agent_message", "done", { reply: 1 });
-    check("an agent_message turns generating off", service.generating === false);
+    check(
+      "an agent_message keeps generating on: a message that lands as the reply does goes on",
+      service.generating === true,
+    );
+    wire.fire.awaiting();
+    check("awaiting_input turns generating off", service.generating === false);
     check("only real changes fired", isDeepStrictEqual(seen, [true, false]));
     service.dispose();
+  }
+
+  {
+    // A replayed log, delivered with no send: each user_message turns
+    // generating on and each awaiting_input turns it off, so the replay
+    // ends in the state its last entry gives.
+    const replay = (kinds) => {
+      const wire = makeWire();
+      const service = new AgentSessionService(wire);
+      wire.fire.session("s1");
+      for (const kind of kinds) {
+        if (kind === "awaiting_input") wire.fire.awaiting();
+        else wire.fire.event(kind, kind, { reply: 0 });
+      }
+      const generating = service.generating;
+      service.dispose();
+      return generating;
+    };
+    check(
+      "a replay that ends on the agent's wait ends idle",
+      replay(["awaiting_input", "user_message", "agent_message", "awaiting_input"]) === false,
+    );
+    check(
+      "a replay that ends mid-turn ends working",
+      replay(["awaiting_input", "user_message", "agent_message", "awaiting_input", "user_message"]) === true,
+    );
+    check(
+      "the next user_message after a wait shows the agent working again",
+      replay(["awaiting_input", "user_message", "agent_message"]) === true,
+    );
   }
 
   {
@@ -555,24 +544,21 @@ await assertNoLeaks(lifecycle, () => {
     const service = new AgentSessionService(wire);
     wire.fire.session("s1");
     wire.fire.event("user_message", "first turn");
-    wire.fire.event("tool_call", '[{"id":"c1","name":"ask","arguments":{},"tool":"user-input/ask","vendor":"runvil"}]', {
+    wire.fire.event("tool_call", '[{"id":"c1","name":"fetch","arguments":{},"tool":"web/fetch"}]', {
       reply: 0,
     });
-    wire.fire.inputRequired("tok1");
-    check("an open wait keeps generating off", service.generating === false);
-    // Each wait closes before its result lands, as it does in the shipped
-    // UI; a cancel, not a respond, so generating is still off and only the
-    // result can turn it on.
-    wire.fire.inputCanceled("tok1");
-    wire.fire.event("tool_call_update", "operator answer", { tool_call_id: "c1" });
+    // A sent cancel turns generating off; the result of a call it spared
+    // shows the agent working again.
+    service.cancelTurn();
+    check("a sent cancel turns generating off", service.generating === false);
+    wire.fire.event("tool_call_update", "page body", { tool_call_id: "c1" });
     check(
       "a tool_call_update answering a model batch call turns generating on",
       service.generating === true,
     );
-    wire.fire.inputRequired("tok2");
-    check("input_required turns generating off", service.generating === false);
-    wire.fire.inputCanceled("tok2");
+    wire.fire.awaiting();
     wire.fire.event("user_message", "second turn");
+    service.cancelTurn();
     wire.fire.event("tool_call_update", "stray", { tool_call_id: "c1" });
     check(
       "a tool_call_update whose call is in an earlier turn does not turn generating on",
@@ -591,30 +577,6 @@ await assertNoLeaks(lifecycle, () => {
     check("a same-session acknowledgment leaves generating alone", service.generating === true);
     wire.fire.session("s2");
     check("an acknowledgment with a new session id turns generating off", service.generating === false);
-    service.dispose();
-  }
-
-  // --- A sibling call's result does not end an open wait --------------------
-
-  {
-    const wire = makeWire();
-    const service = new AgentSessionService(wire);
-    wire.fire.session("s1");
-    wire.fire.event("user_message", "parallel round");
-    wire.fire.event(
-      "tool_call",
-      JSON.stringify([
-        { id: "c1", name: "ask", arguments: {}, tool: "user-input/ask", vendor: "runvil" },
-        { id: "c2", name: "fetch", arguments: {}, tool: "web/fetch", vendor: "runvil" },
-      ]),
-      { reply: 0 },
-    );
-    wire.fire.inputRequired("tok1");
-    wire.fire.event("tool_call_update", "page body", { tool_call_id: "c2" });
-    check("a sibling call's result while a wait is open leaves generating off", service.generating === false);
-    check("a sibling call's result leaves the wait pinned", service.pendingInputToken === "tok1");
-    service.respond("answer");
-    check("answering the open wait after a sibling's result turns generating on", service.generating === true);
     service.dispose();
   }
 
@@ -684,7 +646,7 @@ await assertNoLeaks(lifecycle, () => {
     const clock = { now: 10 };
     const service = new AgentSessionService(wire, () => clock.now);
     wire.fire.session("s1");
-    wire.fire.inputRequired("tok1");
+    wire.fire.awaiting();
     service.respond("go");
     wire.fire.delta("reasoning", "thinking", 0);
     clock.now = 90;
@@ -720,7 +682,7 @@ await assertNoLeaks(lifecycle, () => {
     const service = new AgentSessionService(wire, () => clock.now);
     const last = () => service.items[service.items.length - 1];
     wire.fire.session("s1");
-    wire.fire.inputRequired("tok1");
+    wire.fire.awaiting();
     wire.respondResult = true;
     wire.cancelResult = true;
     service.respond("go");
@@ -735,23 +697,33 @@ await assertNoLeaks(lifecycle, () => {
         last().endedAt === 40,
     );
 
-    // The relaunched agent waiting on the operator ends the grace window.
+    // The agent waiting on its inbox again ends the grace window.
     clock.now = 50;
-    wire.fire.inputRequired("tok2");
+    wire.fire.awaiting();
     wire.fire.delta("reasoning", "after the wait", 1);
     check(
-      "an input request after Stop makes the next first chunk stream",
+      "a wait on the inbox after Stop makes the next first chunk stream",
       last().startedAt === 50 && last().endedAt === null,
     );
 
-    // The operator answering restarts the turn's work.
+    // The operator's message restarts the turn's work.
     service.cancelTurn();
     service.respond("again");
     clock.now = 60;
     wire.fire.delta("reasoning", "fresh", 2);
     check(
-      "an answer after Stop makes the next first chunk stream",
+      "a message after Stop makes the next first chunk stream",
       last().startedAt === 60 && last().endedAt === null,
+    );
+
+    // So does the message's durable record, replayed or live.
+    service.cancelTurn();
+    wire.fire.event("user_message", "replayed");
+    clock.now = 65;
+    wire.fire.delta("reasoning", "recorded", 7);
+    check(
+      "a user_message after Stop makes the next first chunk stream",
+      last().startedAt === 65 && last().endedAt === null,
     );
 
     // A same-session reattach acknowledgment ends the grace window too.
@@ -779,7 +751,7 @@ await assertNoLeaks(lifecycle, () => {
     const clock = { now: 10 };
     const service = new AgentSessionService(wire, () => clock.now);
     wire.fire.session("s1");
-    wire.fire.inputRequired("tok1");
+    wire.fire.awaiting();
     service.respond("go");
     wire.cancelResult = false;
     check("a cancel that fails to send reports false", service.cancelTurn() === false);
@@ -801,7 +773,7 @@ await assertNoLeaks(lifecycle, () => {
     service.onError((message) => heard.push(message));
     wire.fire.error("unknown agent: bad");
     check("a server error carries no title", service.items[0].title === null);
-    wire.fire.inputRequired("tok1");
+    wire.fire.awaiting();
     wire.respondResult = false;
     service.respond("hello");
     const local = service.items[service.items.length - 1];
@@ -827,10 +799,10 @@ await assertNoLeaks(lifecycle, () => {
     const service = new AgentSessionService(wire);
     service.dispose();
     wire.fire.event("user_message", "after disposal");
-    wire.fire.inputRequired("tok9");
+    wire.fire.awaiting();
     check(
       "a disposed service folds nothing",
-      service.items.length === 0 && service.pendingInputToken === null,
+      service.items.length === 0 && service.started === false && service.generating === false,
     );
   }
 });

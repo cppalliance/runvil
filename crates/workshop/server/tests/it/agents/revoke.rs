@@ -16,7 +16,7 @@ name: roots
 description: The roots test agent on the unified runtime.
 runvil: 0
 uses:
-  - user-input
+  - user
 ---
 
 # Roots
@@ -27,7 +27,7 @@ uses:
 messages:user('launch@' .. tostring(ui().workspace_root))
 models.loop(models.get('test-model'))
 while true do
-    local text = input.ask()
+    local text = tasks.receive()
     messages:user(text .. '@' .. tostring(ui().workspace_root))
     models.loop(models.get('test-model'))
 end
@@ -88,9 +88,9 @@ async fn a_revoke_reaches_the_next_conversation_and_a_running_one_keeps_its_laun
         format!("launch@{}", granted.display()),
         "the launch reads the granted folder"
     );
-    let token = next_wait_token(&mut running).await;
+    next_wait(&mut running).await;
 
-    // The revoke lands while the first conversation waits on its operator.
+    // The revoke lands while the first conversation waits on its inbox.
     workspace
         .revoke_and_persist(&granted)
         .await
@@ -105,7 +105,7 @@ async fn a_revoke_reaches_the_next_conversation_and_a_running_one_keeps_its_laun
         "the next conversation reads roots without the revoked folder"
     );
 
-    answer(&mut running, &token, "turn").await;
+    answer(&mut running, "turn").await;
     assert_eq!(
         next_round(&mut rounds).await,
         format!("turn@{}", granted.display()),

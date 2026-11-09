@@ -3,9 +3,8 @@
 //!
 //! A Plugin reads a service through a [`ServiceKey`], which binds an id
 //! literal, its [`ServiceId`], to the provider's Rust type. The Host fills
-//! two [`HostServices`] maps: the Host-wide one, which reaches a Plugin's
-//! `install`, and each run's own, which reaches
-//! [`PackFactory::new_pack`](crate::PackFactory::new_pack).
+//! one [`HostServices`] map, which reaches each Plugin's `install`; a
+//! Pack's factory keeps what its instances need from it.
 //!
 //! An id literal is a [`GlobalName`] with exactly one `/`, as in
 //! `namespace/name`. [`HostServices::provide`] refuses any other literal.

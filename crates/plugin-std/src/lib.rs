@@ -22,8 +22,7 @@
 //! `Read`, which is Cursor's name for the same tool.
 //!
 //! The Pack has no prelude, so declaring it, as in `uses: [std]`, only
-//! makes it required. It needs no per-run service and takes no
-//! configuration but `null` or `{}`.
+//! makes it required. It takes no configuration but `null` or `{}`.
 //!
 //! # The definitions
 //!

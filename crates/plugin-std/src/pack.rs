@@ -29,8 +29,7 @@ pub const NOT_IMPLEMENTED: &str = "The <name> tool is not implemented in this bu
 /// The Pack's `PackInfo`.
 ///
 /// Its FQN is `runvil/std`, so its Pack id is `std`. It has no prelude,
-/// its factory reads none of the run's services, and it takes no
-/// configuration but `null` or `{}`.
+/// and it takes no configuration but `null` or `{}`.
 const STD: PackInfo =
     PackInfo::new("runvil/std").description("Read, write, search, and delete files");
 
@@ -71,7 +70,7 @@ struct Std {
 
 /// The Pack's factory: makes the Pack under the Pack id `name`, naming
 /// each tool `<name>/<segment>`.
-fn new_pack(name: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+fn new_pack(name: &PackId) -> Result<Arc<dyn Pack>, Error> {
     let tools = spec::all()?
         .iter()
         .map(|definition| {

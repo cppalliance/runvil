@@ -145,7 +145,7 @@ return listing .. '\n' .. page
 #[tokio::test]
 async fn a_prompt_sees_the_directory_mapped_under_the_runvil_mount() -> Outcome {
     let directory = local_directory()?;
-    let (host, _ask) = host_packs(&Registry::new(), None);
+    let host = host_packs(&Registry::new(), None);
 
     let result = run_prompt_over(host, PROMPT.to_owned(), filesystem_with(directory.path())).await;
 

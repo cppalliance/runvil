@@ -1,9 +1,9 @@
 //! A fixture Plugin crate's whole Pack side: a `GREETER` constant, an
 //! `install` that reads a Host-wide service into the Pack's factory, a
-//! factory that takes a per-run service from the run it makes the Pack
-//! for and names its tool under the Pack id it receives, and an
-//! `impl Pack` whose `call` answers from what its instance holds and
-//! whose `render` is the default.
+//! factory that names its tool under the Pack id it receives, a plain
+//! function of the Pack id that is a factory too, and an `impl Pack` whose
+//! `call` answers from what its instance holds and whose `render` is the
+//! default.
 
 use std::future::Future;
 use std::num::NonZeroU32;
@@ -21,9 +21,6 @@ use serde_json::{Value, json};
 
 /// The Host-wide service `install` reads.
 const GREETING: ServiceKey<str> = ServiceKey::new("acme/greeting");
-
-/// The per-run service the factory reads.
-const VISITOR: ServiceKey<str> = ServiceKey::new("acme/visitor");
 
 const GREETER: PackInfo = PackInfo::new("acme/greeter").prelude("local pack = ...\n");
 
@@ -59,34 +56,33 @@ struct Greetings {
 }
 
 impl PackFactory for Greetings {
-    fn new_pack(&self, id: &PackId, run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
-        let visitor = run.get(&VISITOR).ok_or_else(|| {
-            make_tool_error(
-                ErrorCode::ToolOther,
-                "greeter needs acme/visitor, and this run provides none",
-            )
-        })?;
-        let tool = ToolId::parse(&format!("{id}/greet")).map_err(|e| {
-            make_tool_error(ErrorCode::ToolBackend, "greeter could not name its tool")
-                .with_cause(&e)
-        })?;
-        let tools = vec![ToolInfo::new(
-            tool,
-            "Greets this run's visitor.",
-            json!({"type": "object", "properties": {"mark": {"type": "string"}}}),
-        )];
-        Ok(Arc::new(Greeter {
-            greeting: Arc::clone(&self.greeting),
-            visitor,
-            tools,
-        }))
+    fn new_pack(&self, id: &PackId) -> Result<Arc<dyn Pack>, Error> {
+        new_greeter(id, Arc::clone(&self.greeting))
     }
 }
 
-/// One run's instance: the shared greeting and the run's visitor.
+/// An instance under the Pack id `id` that greets with `greeting`.
+fn new_greeter(id: &PackId, greeting: Arc<str>) -> Result<Arc<dyn Pack>, Error> {
+    let tool = ToolId::parse(&format!("{id}/greet")).map_err(|e| {
+        make_tool_error(ErrorCode::ToolBackend, "greeter could not name its tool").with_cause(&e)
+    })?;
+    let tools = vec![ToolInfo::new(
+        tool,
+        "Greets whoever runs the prompt.",
+        json!({"type": "object", "properties": {"mark": {"type": "string"}}}),
+    )];
+    Ok(Arc::new(Greeter { greeting, tools }))
+}
+
+/// A Pack that shares nothing, so a plain function of the Pack id is its
+/// factory.
+fn new_plain(id: &PackId) -> Result<Arc<dyn Pack>, Error> {
+    new_greeter(id, Arc::from("Hi"))
+}
+
+/// One run's instance: the greeting it took from its factory.
 struct Greeter {
     greeting: Arc<str>,
-    visitor: Arc<str>,
     tools: Vec<ToolInfo>,
 }
 
@@ -104,10 +100,7 @@ impl Pack for Greeter {
             match cx.tool().name() {
                 "greet" => {
                     let mark = args.get("mark").and_then(Value::as_str).unwrap_or(".");
-                    Ok(ToolOutput::untrusted(format!(
-                        "{}, {}{mark}",
-                        self.greeting, self.visitor
-                    )))
+                    Ok(ToolOutput::untrusted(format!("{}{mark}", self.greeting)))
                 }
                 other => Err(make_tool_error(
                     ErrorCode::ToolOther,
@@ -137,16 +130,22 @@ fn host_wide() -> HostServices {
     services
 }
 
+/// The factory `install` inserts as `fqn` into a registry, or the reason
+/// it inserted the Pack unavailable.
+fn factory_of(packs: PackRegistry, fqn: &str) -> Result<Arc<dyn PackFactory>, Error> {
+    let (_info, _id, factory) = packs
+        .into_entries()
+        .find(|(info, _, _)| info.fqn == fqn)
+        .expect("the registry holds the Pack");
+    factory
+}
+
 /// The greeter's factory `install` inserts with `config` and the Host-wide
 /// `services`, or the reason it inserted the Pack unavailable.
 fn installed(config: Value, services: &HostServices) -> Result<Arc<dyn PackFactory>, Error> {
     let mut packs = PackRegistry::new();
     install(&mut packs, config, services).expect("a fresh registry takes the greeter");
-    let (_info, _id, factory) = packs
-        .into_entries()
-        .find(|(info, _, _)| info.fqn == GREETER.fqn)
-        .expect("install inserts the greeter");
-    factory
+    factory_of(packs, GREETER.fqn)
 }
 
 /// The greeter's factory, inserted usable over the Host-wide greeting.
@@ -157,18 +156,10 @@ fn greetings() -> Arc<dyn PackFactory> {
     factory
 }
 
-/// A run's own services, whose visitor is Ada.
-fn visited_by_ada() -> HostServices {
-    let mut run = HostServices::new();
-    run.provide(&VISITOR, Arc::from("Ada"))
-        .expect("a valid, new id is accepted");
-    run
-}
-
-/// The instance made under the Pack id `name` for a run visited by Ada.
+/// The instance made under the Pack id `name`.
 fn built_as(name: &str) -> Arc<dyn Pack> {
     let name = PackId::parse(name).expect("a one-segment Pack id parses");
-    let Ok(pack) = greetings().new_pack(&name, &visited_by_ada()) else {
+    let Ok(pack) = greetings().new_pack(&name) else {
         panic!("the factory makes the Pack");
     };
     pack
@@ -208,8 +199,27 @@ fn a_call_through_dyn_pack_answers_from_what_its_instance_took() {
     let call = TestCall::new(pack.tools()[0].id.clone());
     let output =
         block_on(pack.call(call.context(), json!({"mark": "!"}))).expect("the greet call succeeds");
-    assert_eq!(output.text(), "Hello, Ada!");
+    assert_eq!(output.text(), "Hello!");
     assert_eq!(output.trust(), OutputTrust::Untrusted);
+}
+
+#[test]
+fn a_plain_function_of_the_pack_id_alone_is_a_factory() {
+    let mut packs = PackRegistry::new();
+    packs
+        .insert(PackInfo::new("acme/plain"), new_plain)
+        .expect("a fresh registry takes the Pack");
+    let Ok(factory) = factory_of(packs, "acme/plain") else {
+        panic!("the plain function is inserted as the Pack's factory");
+    };
+    let name = PackId::parse("plain").expect("a one-segment Pack id parses");
+    let Ok(pack) = factory.new_pack(&name) else {
+        panic!("the plain function makes the Pack from its id alone");
+    };
+    let call = TestCall::new(pack.tools()[0].id.clone());
+    let output = block_on(pack.call(call.context(), json!({}))).expect("the greet call succeeds");
+    assert_eq!(pack.tools()[0].id.to_string(), "plain/greet");
+    assert_eq!(output.text(), "Hi.");
 }
 
 #[test]
@@ -223,7 +233,7 @@ fn the_default_render_returns_the_offered_tools_unchanged() {
     );
     let farewell = ToolInfo::new(
         ToolId::parse("greeter/farewell").expect("a two-segment tool id parses"),
-        "Bids this run's visitor goodbye.",
+        "Bids whoever runs the prompt goodbye.",
         json!({"type": "object"}),
     );
     let offered = vec![pack.tools()[0].clone().wire_name("hello"), farewell];
@@ -231,18 +241,6 @@ fn the_default_render_returns_the_offered_tools_unchanged() {
     assert_eq!(
         rendered, offered,
         "a Pack without its own render shows the model what the section offered, in offer order"
-    );
-}
-
-#[test]
-fn the_factory_refuses_a_run_without_the_per_run_service_it_takes() {
-    let name = PackId::parse("greeter").expect("a one-segment Pack id parses");
-    let Err(error) = greetings().new_pack(&name, &HostServices::new()) else {
-        panic!("a run without a visitor gets no instance");
-    };
-    assert_eq!(
-        error.to_string(),
-        "greeter needs acme/visitor, and this run provides none"
     );
 }
 

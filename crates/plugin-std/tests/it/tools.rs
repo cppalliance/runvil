@@ -68,7 +68,7 @@ fn made(name: &str) -> Arc<dyn Pack> {
     let Ok(factory) = inserted_with(Value::Null).1 else {
         panic!("install inserts std usable with no configuration");
     };
-    let Ok(pack) = factory.new_pack(&name, &HostServices::new()) else {
+    let Ok(pack) = factory.new_pack(&name) else {
         panic!("the factory makes the Pack");
     };
     pack

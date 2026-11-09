@@ -9,11 +9,12 @@
 // skin's min/max height tokens.
 //
 // The action button is the mic while the box is empty and the agent idle,
-// the send arrow once there is text, and Stop while the agent generates
-// (`action: "stop"`); a recording mic keeps the button on the mic so a
-// second press can end the take. The agent mode picks the fill of the send
-// and stop states. While generating, the placeholder reads "Add a
-// follow-up".
+// the send arrow once there is text, and Stop over an empty box while the
+// agent generates (`action: "stop"`), where text in the box turns it back
+// into the send arrow for a follow-up; a recording mic keeps the button on
+// the mic so a second press can end the take. The agent mode picks the
+// fill of the send and stop states. While generating, the placeholder
+// reads "Add a follow-up".
 //
 // The component is isolated: props in (every one defaulted), events out
 // through one sink, an imperative handle for the owning part and for
@@ -204,12 +205,11 @@ export class ChatBox extends Disposable implements ChatBoxHandle {
   // part's source is in place when the command chip arrives.
   private readonly commandSource: ChipSource;
 
-  // Two locks, one property: the pending-wait gate (the editable prop)
+  // Two locks, one property: the owning part's gate (the editable prop)
   // and a dictation take (setReadOnly) both map onto contenteditable,
   // because ProseMirror has no separate readOnly. Each side keeps its own
   // flag so one lock lifting never reopens the other - a take that
-  // outlives its wait must not leave the box editable against the dead
-  // wait.
+  // outlives the owner's gate must not leave the box editable against it.
   private takeReadOnly = false;
 
   // Whether the editor holds no text and no pill: an empty box shows the
@@ -479,18 +479,18 @@ export class ChatBox extends Disposable implements ChatBoxHandle {
 
   /**
    * What the one round button is: the mic while the box is empty, the send
-   * arrow once it has text, Stop while the agent generates. A recording
-   * mic stays the mic whatever the box holds, so its second press can end
-   * the take.
+   * arrow once it has text, and Stop over an empty box while the agent
+   * generates. A recording mic stays the mic whatever the box holds, so its
+   * second press can end the take.
    */
   private actionState(): ActionState {
     if (this.dynamic.mic === "recording") {
       return "mic";
     }
-    if (this.dynamic.action === "stop") {
-      return "stop";
+    if (this.empty) {
+      return this.dynamic.action === "stop" ? "stop" : "mic";
     }
-    return this.empty ? "mic" : "send";
+    return "send";
   }
 
   /** The button's press: the mic presses, Stop stops, the send arrow sends. */
@@ -515,29 +515,39 @@ export class ChatBox extends Disposable implements ChatBoxHandle {
 
   /**
    * The send button's press and the submitting Enter share this path:
-   * `idle` and `stop` are silent (Stop is the button's alone), and both
-   * send states emit `send`, `send-blocked` included, so the owning part
-   * can name the blocker.
+   * `idle` is silent, `stop` is silent over an empty box (Stop is the
+   * button's alone) and sends a follow-up once the box holds text, and
+   * both send states emit `send`, `send-blocked` included, so the owning
+   * part can name the blocker.
    */
   private emitSend(): void {
     switch (this.dynamic.action) {
       case "idle":
+        return;
       case "stop":
+        if (!this.empty) {
+          this.sendContents();
+        }
         return;
       case "send":
       case "send-blocked":
-        this.onEvent({
-          type: "send",
-          text: this.getText(),
-          mentions: this.mentions(),
-          attachments: [...this.attachments],
-        });
+        this.sendContents();
         return;
       default: {
         const exhaustive: never = this.dynamic.action;
         return exhaustive;
       }
     }
+  }
+
+  /** Emits `send` with the box's text, pills, and attachments. */
+  private sendContents(): void {
+    this.onEvent({
+      type: "send",
+      text: this.getText(),
+      mentions: this.mentions(),
+      attachments: [...this.attachments],
+    });
   }
 
   /** Re-reads whether the box is empty; a change repaints the button. */

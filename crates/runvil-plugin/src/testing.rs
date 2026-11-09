@@ -10,9 +10,8 @@ use crate::ToolContext;
 /// It owns everything a [`ToolContext`] borrows: the called tool's id, an
 /// access over a fresh in-memory filesystem, and an origin naming the
 /// section `Test` and a caller that is the script unless
-/// [`with_caller`](TestCall::with_caller) names another. A test hands the
-/// run's own services to the Pack's factory, which makes the instance it
-/// calls.
+/// [`with_caller`](TestCall::with_caller) names another. A test calls the
+/// Pack's factory for the instance it calls.
 #[derive(Debug)]
 pub struct TestCall {
     tool: ToolId,

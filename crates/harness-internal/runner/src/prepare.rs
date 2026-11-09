@@ -8,12 +8,11 @@
 //! run: put the prompt's declared `input:` file in place in the store
 //! (`files::stage_input`); hand the run's whole filesystem, real
 //! directories and the declared store, to the params as given; make the
-//! run's instance of each of its Packs with the run's own services, and
-//! take the run's snapshot of them once each is ready, or the run's
-//! cancel fires, which yields the catalog, the roster, the preludes, and
-//! the tool performer;
-//! set the first three, the setup's limits, and the run's model on the
-//! params; and build the `Run` beside that snapshot.
+//! run's instance of each of its Packs, and take the run's snapshot of
+//! them once each is ready, or the run's cancel fires, which yields the
+//! catalog, the roster, the preludes, and the tool performer; set the
+//! first three, the setup's limits, and the run's model on the params;
+//! and build the `Run` beside that snapshot.
 //!
 //! An input file that cannot be put in place is a run that ended before
 //! it began: the recorder ends it with that failure as its result, the
@@ -67,10 +66,9 @@ pub(crate) async fn begin(
 }
 
 /// Stages `prompt`'s input in `setup.vfs`, makes the run's Packs from
-/// `host.packs` with `setup.services` and snapshots them once each is
-/// ready or `cancel` fires, and builds the `Run` over `params` under
-/// `setup.limits`. Ends the run at the recorder with an input failure as
-/// its result and returns it.
+/// `host.packs` and snapshots them once each is ready or `cancel` fires,
+/// and builds the `Run` over `params` under `setup.limits`. Ends the run
+/// at the recorder with an input failure as its result and returns it.
 ///
 /// The run's `ui()` snapshot is `setup`'s selection and first workspace
 /// root, and `model` fills all five roles, so the run's first step checks
@@ -112,16 +110,13 @@ pub(crate) async fn prepare(
 
     // The run's whole filesystem, the real directories and the declared
     // store, goes to the params as given. The run makes its instance of
-    // each of its Packs with its own services, and the snapshot of them
-    // is taken once each is ready or the run is canceled: its catalog is
-    // what the run offers, its roster gives each Pack's object in the
-    // run's Lua and is what the run's first step checks the declared
-    // Packs against, its preludes go to every section VM, and the
-    // snapshot itself is the run's tool performer.
-    let packs = host
-        .packs
-        .snapshot(&prompt, setup.services.clone(), setup.has_user, cancel)
-        .await;
+    // each of its Packs, and the snapshot of them is taken once each is
+    // ready or the run is canceled: its catalog is what the run offers,
+    // its roster gives each Pack's object in the run's Lua and is what the
+    // run's first step checks the declared Packs against, its preludes go
+    // to every section VM, and the snapshot itself is the run's tool
+    // performer.
+    let packs = host.packs.snapshot(&prompt, setup.has_user, cancel).await;
     let params = params
         .with_cancel(cancel.clone())
         .with_limits(setup.limits)

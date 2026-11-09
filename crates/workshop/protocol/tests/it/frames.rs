@@ -3,8 +3,8 @@
 //! optionality change fails here before it reaches a socket.
 
 use workshop_protocol::{
-    Activity, CatalogPush, ErrorEnvelope, ErrorFrame, InputFrame, InputResponse, Severity,
-    StatusBarUpdate, SwitchProfileFrame, WorkbenchSnapshot,
+    Activity, CatalogPush, ErrorEnvelope, ErrorFrame, InputResponse, Severity, StatusBarUpdate,
+    SwitchProfileFrame, WorkbenchSnapshot,
 };
 
 /// Builds a minimal update with the given label.
@@ -134,44 +134,27 @@ fn a_switch_to_no_profile_is_visible_on_the_workbench_frame() {
 }
 
 #[test]
-fn an_input_required_frame_serializes_with_its_token() {
-    let frame = serde_json::to_value(InputFrame::Required {
-        token: "a1b2c3".to_owned(),
-    })
-    .expect("the frame serializes");
-    assert_eq!(
-        frame,
-        serde_json::json!({"type": "input_required", "token": "a1b2c3"}),
-        "the wire shape matches the workshop protocol's frame taxonomy"
-    );
-}
-
-#[test]
-fn an_input_canceled_frame_serializes_with_its_token() {
-    let frame = serde_json::to_value(InputFrame::Canceled {
-        token: "a1b2c3".to_owned(),
-    })
-    .expect("the frame serializes");
-    assert_eq!(
-        frame,
-        serde_json::json!({"type": "input_canceled", "token": "a1b2c3"}),
-        "the wire shape matches the workshop protocol's frame taxonomy"
-    );
-}
-
-#[test]
 fn an_input_response_parses_its_body_byte_exact_ignoring_the_envelope() {
     let gnarly = "line1\r\nline2 \"quoted\" {\"text\":\"decoy\"} \\slash 🦀";
     let response: InputResponse = serde_json::from_value(serde_json::json!({
         "type": "input_response",
-        "token": "a1b2c3",
         "text": gnarly,
     }))
     .expect("the frame parses with its envelope tag present");
-    assert_eq!(response.token, "a1b2c3");
     assert_eq!(
         response.text, gnarly,
         "the operator's text survives the wire byte-exact"
+    );
+}
+
+#[test]
+fn an_input_response_without_text_is_refused() {
+    assert!(
+        serde_json::from_value::<InputResponse>(serde_json::json!({
+            "type": "input_response",
+        }))
+        .is_err(),
+        "a message must carry its text"
     );
 }
 

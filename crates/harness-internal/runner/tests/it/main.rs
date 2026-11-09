@@ -8,7 +8,6 @@
     reason = "test helpers panic on setup failure, which is the desired behavior"
 )]
 
-mod asker;
 mod effect_loop;
 mod harness;
 mod performers;

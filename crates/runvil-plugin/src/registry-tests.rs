@@ -17,7 +17,7 @@ use runvil_types::tools::make_tool_error;
 use serde_json::Value;
 
 use super::{BUILTIN, PackOrigin, PackRegistry, builtin, pack_id};
-use crate::{HostServices, Pack, PackId, PackInfo};
+use crate::{Pack, PackId, PackInfo};
 
 /// Asserts `result` refuses the insert of `fqn` for `reason`, with its
 /// message as its prose, and returns the message.
@@ -184,7 +184,7 @@ fn the_registry_hands_each_packs_factory_on_with_its_pack_id() {
     packs
         .insert(
             fixture("acme/kit"),
-            move |id: &PackId, _run: &HostServices| -> Result<Arc<dyn Pack>, Error> {
+            move |id: &PackId| -> Result<Arc<dyn Pack>, Error> {
                 Err(make_tool_error(
                     ErrorCode::ToolOther,
                     format!("{id} refuses at depth {depth}"),
@@ -195,7 +195,7 @@ fn the_registry_hands_each_packs_factory_on_with_its_pack_id() {
     let made: Vec<(&'static str, PackId, Option<String>)> = packs
         .into_entries()
         .map(|(info, id, factory)| {
-            let made = factory.unwrap().new_pack(&id, &HostServices::new());
+            let made = factory.unwrap().new_pack(&id);
             (info.fqn, id, made.err().map(|error| error.to_string()))
         })
         .collect();
@@ -308,7 +308,7 @@ fn builtins_offer_no_tools_or_prelude() {
     for info in BUILTIN {
         assert!(info.prelude.is_none(), "{} has a prelude", info.fqn);
         let name = pack_id(info.fqn).unwrap();
-        let pack = builtin(&name, &HostServices::new()).unwrap();
+        let pack = builtin(&name).unwrap();
         assert!(pack.tools().is_empty(), "{} offers tools", info.fqn);
     }
 }

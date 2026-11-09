@@ -12,8 +12,8 @@ async fn gate_cancel_mid_generation_returns_to_waiting_and_next_input_works() {
     let mut socket = connect_chat(&server.ws_base).await;
     let _session = launch_chat(&mut socket).await;
 
-    let token = next_wait_token(&mut socket).await;
-    answer(&mut socket, &token, "hang").await;
+    let first = next_wait(&mut socket).await;
+    answer(&mut socket, "hang").await;
     // Generation is provably live: a text chunk of the never-finishing
     // stream has reached the wire.
     let delta = socket
@@ -30,11 +30,14 @@ async fn gate_cancel_mid_generation_returns_to_waiting_and_next_input_works() {
     socket.send_json(&json!({ "type": "cancel" })).await;
 
     // A stop is a stop reason: the chat's pcall takes the dropped round,
-    // and its loop asks again, and next_wait_token refuses error frames
-    // on the way - which asserts exactly the no-error contract.
-    let fresh = next_wait_token(&mut socket).await;
-    assert_ne!(fresh, token, "the chat's next ask opens a fresh wait");
-    answer(&mut socket, &fresh, "after cancel").await;
+    // and its loop waits on its inbox again, and next_wait refuses error
+    // frames on the way - which asserts exactly the no-error contract.
+    let fresh = next_wait(&mut socket).await;
+    assert!(
+        fresh["index"].as_u64() > first["index"].as_u64(),
+        "the chat waits again, a fresh entry after the stopped round: {fresh}"
+    );
+    answer(&mut socket, "after cancel").await;
     let turn = collect_turn(&mut socket).await;
     assert_eq!(
         delta_text(&turn),

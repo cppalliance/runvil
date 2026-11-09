@@ -67,14 +67,13 @@ function check(name, condition) {
 const CASES = [
   "agent_delta_reasoning",
   "agent_delta_text",
+  "agent_event_awaiting",
   "agent_event_minimal",
   "agent_event_stamped",
   "agent_session",
   "agents",
   "attach",
   "cancel",
-  "input_canceled",
-  "input_required",
   "input_response",
   "launch",
 ];
@@ -124,11 +123,10 @@ const INBOUND = {
   agents: [],
   agent_session: [],
   agent_event_minimal: [],
+  agent_event_awaiting: [],
   agent_event_stamped: ["reply"],
   agent_delta_text: [],
   agent_delta_reasoning: [],
-  input_required: [],
-  input_canceled: [],
 };
 const inbound = Object.entries(INBOUND).map(([name, optional]) => [name, fixture[name], optional]);
 inbound.push(["error (workshop-frames.json)", workshopFixture.error, ["id"]]);
@@ -159,14 +157,10 @@ await assertNoLeaks(lifecycle, async () => {
   const sessions = [];
   const events = [];
   const deltas = [];
-  const required = [];
-  const canceled = [];
   socket.onAgents((list) => agents.push(list));
   socket.onSession((frame) => sessions.push(frame));
   socket.onEvent((frame) => events.push(frame));
   socket.onDelta((frame) => deltas.push(frame));
-  socket.onInputRequired((token) => required.push(token));
-  socket.onInputCanceled((token) => canceled.push(token));
   const errors = [];
   socket.onError((message) => errors.push(message));
   socket.connect();
@@ -175,12 +169,11 @@ await assertNoLeaks(lifecycle, async () => {
 
   wire.message(fixture.agents);
   wire.message(fixture.agent_session);
+  wire.message(fixture.agent_event_awaiting);
   wire.message(fixture.agent_event_minimal);
   wire.message(fixture.agent_event_stamped);
   wire.message(fixture.agent_delta_text);
   wire.message(fixture.agent_delta_reasoning);
-  wire.message(fixture.input_required);
-  wire.message(fixture.input_canceled);
 
   check(
     "the agents fixture frame delivers its list verbatim",
@@ -191,27 +184,27 @@ await assertNoLeaks(lifecycle, async () => {
     isDeepStrictEqual(sessions, [fixture.agent_session]),
   );
   check(
-    "both agent_event fixture frames deliver verbatim, in order, index and reply intact",
-    isDeepStrictEqual(events, [fixture.agent_event_minimal, fixture.agent_event_stamped]),
+    "every agent_event fixture frame delivers verbatim, in order, index and reply intact",
+    isDeepStrictEqual(events, [
+      fixture.agent_event_awaiting,
+      fixture.agent_event_minimal,
+      fixture.agent_event_stamped,
+    ]),
+  );
+  check(
+    "the agent's wait on its inbox is an agent_event of kind awaiting_input",
+    events[0]?.event.kind === "awaiting_input",
   );
   check(
     "the minimal event omits reply and the stamped event includes it, as the fixture does",
-    events[0] !== undefined &&
-      !("reply" in events[0]) &&
-      events[1] !== undefined &&
-      events[1].reply === fixture.agent_event_stamped.reply,
+    events[1] !== undefined &&
+      !("reply" in events[1]) &&
+      events[2] !== undefined &&
+      events[2].reply === fixture.agent_event_stamped.reply,
   );
   check(
     "both agent_delta fixture frames deliver verbatim with their superseding reply id",
     isDeepStrictEqual(deltas, [fixture.agent_delta_text, fixture.agent_delta_reasoning]),
-  );
-  check(
-    "the input_required fixture frame delivers its token",
-    isDeepStrictEqual(required, [fixture.input_required.token]),
-  );
-  check(
-    "the input_canceled fixture frame delivers its token",
-    isDeepStrictEqual(canceled, [fixture.input_canceled.token]),
   );
   wire.message(workshopFixture.error);
   check(
@@ -223,7 +216,7 @@ await assertNoLeaks(lifecycle, async () => {
   // Every required field of every inbound frame, plus the nested required
   // fields of an event: a copy without it fails its guard and is dropped,
   // with one warning naming its type.
-  const handled = [agents, sessions, events, deltas, required, canceled, errors];
+  const handled = [agents, sessions, events, deltas, errors];
   const handledCounts = () => handled.map((calls) => calls.length);
   const before = handledCounts();
   const removals = [];
@@ -263,7 +256,7 @@ await assertNoLeaks(lifecycle, async () => {
   // --- Client-to-server: each send matches its fixture entry --------------
 
   socket.launch(fixture.launch.agent);
-  socket.respond(fixture.input_response.token, fixture.input_response.text);
+  socket.respond(fixture.input_response.text);
   socket.cancelTurn();
   check(
     "launch, input_response, and cancel sends match their fixture entries",

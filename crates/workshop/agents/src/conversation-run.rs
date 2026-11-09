@@ -1,21 +1,16 @@
 //! What a conversation hands its run's setup, and how it runs the agent
-//! and takes the run's report: the recorder tee, the run's own services
-//! holding the conversation's input broker, the live pieces of the run's
-//! own rounds, and the drive that parses the agent, runs it, and ends the
-//! conversation with its run.
+//! and takes the run's report: the recorder tee, the live pieces of the
+//! run's own rounds, and the drive that parses the agent, runs it, and
+//! ends the conversation with its run.
 
 use std::sync::Arc;
 
-use harness::pack::HostServices;
 use harness::record::RunRecorder;
 use harness::{Harness, Host, RunReport, RunSetup, display_chain};
-use plugin_user_input::{INPUT_BROKER, InputBroker};
 use runvil::ids::RoundId;
 use runvil::{Error, Prompt};
-use tokio::sync::broadcast;
 
 use super::{Conversation, lock};
-use crate::input::SessionInputBroker;
 use crate::protocol::{Delta, DeltaKind};
 use crate::state::{FailureKind, SessionState};
 use crate::tee::ConversationRecorder;
@@ -32,37 +27,13 @@ impl Conversation {
         Arc::new(ConversationRecorder::new(self.clone(), inner))
     }
 
-    /// The run's own services: this conversation's input broker, supplied
-    /// under [`INPUT_BROKER`], and nothing else.
-    #[must_use]
-    pub fn run_services(&self) -> HostServices {
-        let frames = self
-            .channels()
-            .map_or_else(|| broadcast::channel(1).0, |channels| channels.waits);
-        let broker: Arc<dyn InputBroker> = Arc::new(SessionInputBroker::new(
-            Arc::clone(&self.core.waits),
-            frames,
-        ));
-        let mut services = HostServices::new();
-        if let Err(error) = services.provide(&INPUT_BROKER, broker) {
-            // An empty map takes the broker's valid literal id, so this
-            // refusal is defensive.
-            tracing::warn!(
-                conversation = %self.core.id,
-                %error,
-                "the conversation's input broker was refused; the run has no operator"
-            );
-        }
-        services
-    }
-
     /// Parses the agent `name` on `host` on the blocking pool, then runs
     /// it with `setup`. A parse failure is reported as a run failure with
     /// its located message; no run is recorded.
     ///
-    /// The run's Harness control is held while the run goes on, so a stop
-    /// or a close reaches the run. The conversation ends with its run, or
-    /// with the parse failure.
+    /// The run's Harness control is held while the run goes on, so the
+    /// operator's messages, a stop, and a close reach the run. The
+    /// conversation ends with its run, or with the parse failure.
     pub async fn run(&self, host: Arc<Host>, name: &str, setup: RunSetup) {
         let prompt = match parse(&host, name).await {
             Ok(prompt) => prompt,
@@ -91,12 +62,19 @@ impl Conversation {
         self.end();
     }
 
-    /// Notes the report's run and reports a run that failed or was cut
-    /// short; a completed run reports nothing.
+    /// Notes the report's run, logs how many of the operator's messages
+    /// it never read, and reports a run that failed or was cut short; a
+    /// completed run reports nothing.
     fn take_report(&self, result: Result<RunReport, Error>) {
         let message = match result {
             Ok(report) => {
                 self.note_run(report.run_id);
+                tracing::info!(
+                    conversation = %self.core.id,
+                    agent = %self.core.agent,
+                    unread = report.unread.len(),
+                    "the agent run ended; this many of the operator's messages went unread"
+                );
                 match report.result {
                     Ok(_) => return,
                     Err(error) if error.is_canceled() => {

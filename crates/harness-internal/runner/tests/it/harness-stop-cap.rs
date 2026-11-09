@@ -2,25 +2,26 @@
 //! the calls waiting for a slot without starting them, and a waiting call
 //! that survives stops starts once the stop frees a slot. A task's early
 //! end spares no call that survives stops: canceling a task drops its
-//! question to the operator while the run goes on.
+//! held call that survives stops while the run goes on.
 
 use std::fmt::Write as _;
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 
-use harness_runner::RunSetup;
 use harness_runner::recorder::MemoryRecorder;
 use runvil::model::{Completion, CompletionResult, ToolCall};
 use serde_json::json;
 
 use super::{PendingTimer, answers_to, answers_where, calls, launch, run_beside, setup, until};
-use crate::scripted::{Held, MODEL, Operator, ScriptedBroker, hold_host, reply};
+use crate::scripted::{
+    Held, MODEL, ScriptedBroker, hold_host, keeping_hold_host, reply, surviving_hold_host,
+};
+use crate::support::assert_canceled;
 
 /// The held tool's id.
 const HOLD_TOOL: &str = "harness/hold";
 
-/// The fixture ask tool's id, under the asker's Pack id.
-const ASK_TOOL: &str = "user-input/ask";
+/// The id of the held tool that survives stops, under the keep Pack's id.
+const KEEP_TOOL: &str = "keep/hold";
 
 /// A model loop under a `pcall` that offers each of `tools` and names
 /// each one's Pack, reporting how the loop call ended.
@@ -71,10 +72,11 @@ async fn settle() {
     }
 }
 
-/// Main spawns Child, which asks the operator; Main then waits on a
-/// `wait` round, cancels Child, and waits on an `after` round.
-const CANCELS_AN_ASKER: &str = "---\nname: cancels\ndescription: d\nrunvil: 0\n\
-    uses:\n  - tests/user-input\n---\n\n\
+/// Main spawns Child, which makes a held call that survives stops; Main
+/// then waits on a `wait` round, cancels Child, and waits on an `after`
+/// round.
+const CANCELS_A_HOLDER: &str = "---\nname: cancels\ndescription: d\nrunvil: 0\n\
+    uses:\n  - tests/harness\n---\n\n\
     # Cancels\n\n\
     ## Main\n\n```lua\n\
     local t = tasks.spawn('## Child')\n\
@@ -82,23 +84,29 @@ const CANCELS_AN_ASKER: &str = "---\nname: cancels\ndescription: d\nrunvil: 0\n\
     tasks.cancel(t)\n\
     models.infer('after')\n\
     return 'canceled'\n```\n\n\
-    ## Child\n\n```lua\nreturn (input.ask())\n```\n";
+    ## Child\n\n```lua\nreturn tools.call('harness/hold')\n```\n";
 
-/// A broker that answers the `wait` round once `operator` has been asked,
-/// and every other round once the question has been torn down. It waits
-/// without bound, so a question left open fails the test through
-/// `run_beside`'s patience.
-fn holds_back(operator: &Operator) -> ScriptedBroker {
-    let asked = Arc::clone(&operator.asked);
-    let abandoned = Arc::clone(&operator.abandoned);
+/// A broker that answers the `wait` round once the held call has started,
+/// and every other round once it has been torn down. It waits without
+/// bound, so a call left in flight fails the test through `run_beside`'s
+/// patience.
+fn holds_back(held: &Arc<Held>) -> ScriptedBroker {
+    let held = Arc::clone(held);
     ScriptedBroker::new(move |_round, messages| {
         let text = messages
             .last()
             .map(|message| message.content().to_owned())
             .unwrap_or_default();
-        let gate = Arc::clone(if text == "wait" { &asked } else { &abandoned });
+        let held = Arc::clone(&held);
         Box::pin(async move {
-            while gate.load(Ordering::SeqCst) == 0 {
+            let reached = |held: &Held| {
+                if text == "wait" {
+                    held.started() > 0
+                } else {
+                    held.dropped() > 0
+                }
+            };
+            while !reached(&held) {
                 tokio::task::yield_now().await;
             }
             reply(format!("re: {text}"))
@@ -145,72 +153,63 @@ async fn a_stop_drops_waiting_calls_without_starting_them() {
 #[tokio::test]
 async fn a_stop_starts_a_waiting_call_that_survives_stops() {
     let held = Arc::new(Held::default());
-    let (operator, answers) = Operator::new();
-    let asked = Arc::clone(&operator.asked);
+    let kept = Arc::new(Held::default());
     let recorder = Arc::new(MemoryRecorder::new());
     let mut wire_names = vec!["harness_hold"; 10];
-    wire_names.push("user-input_ask");
+    wire_names.push("keep_hold");
     let harness = launch(
-        hold_host(&held),
+        keeping_hold_host(&held, &kept),
         PendingTimer::default(),
-        &loops_offering(&[HOLD_TOOL, ASK_TOOL]),
-        RunSetup {
-            services: operator.services(),
-            ..setup(recorder.clone(), calls_once(wire_names))
-        },
+        &loops_offering(&[HOLD_TOOL, KEEP_TOOL]),
+        setup(recorder.clone(), calls_once(wire_names)),
     );
-    let watched = Arc::clone(&held);
+    let (watched, survivor) = (Arc::clone(&held), Arc::clone(&kept));
 
     let report = run_beside(harness, |control| async move {
         until("ten holds are in flight", || watched.started() >= 10).await;
         settle().await;
         assert_eq!(
-            asked.load(Ordering::SeqCst),
+            survivor.started(),
             0,
-            "the question waits behind the ten holds"
+            "the surviving call waits behind the ten holds"
         );
         control.stop_round();
-        until("the stop frees a slot for the question", || {
-            asked.load(Ordering::SeqCst) == 1
+        until("the stop frees a slot for the surviving call", || {
+            survivor.started() == 1
         })
         .await;
-        answers.send("kept".to_owned()).unwrap();
+        settle().await;
+        assert_eq!(survivor.dropped(), 0, "the stop spared the surviving call");
+        control.cancel();
     })
     .await
     .expect("the run is reported");
 
-    assert_eq!(
-        report.result,
-        Ok("false:canceled".to_owned()),
-        "the batch answers with its first failure in call order"
-    );
+    assert_canceled(&report.result);
     assert_eq!(held.started(), 10);
     assert_eq!(held.dropped(), 10, "the stop tore down the ten holds");
+    assert_eq!(kept.dropped(), 1, "the cancel tore down the surviving call");
     let records = recorder.records(report.run_id);
     assert_eq!(
         answers_where(&records, "ToolCall", calls(HOLD_TOOL)),
         vec![json!("Dropped"); 10]
     );
-    let asks = answers_where(&records, "ToolCall", calls(ASK_TOOL));
-    assert_eq!(asks.len(), 1, "one question: {asks:?}");
     assert_eq!(
-        asks[0]["ToolCall"]["Ok"]["text"], "kept",
-        "the question survived the stop and was answered"
+        answers_where(&records, "ToolCall", calls(KEEP_TOOL)),
+        vec![json!("Dropped")],
+        "the one surviving call, started after the stop, was dropped by the cancel"
     );
 }
 
 #[tokio::test]
-async fn canceling_a_task_drops_its_question_to_the_operator() {
-    let (operator, _answers) = Operator::new();
+async fn canceling_a_task_drops_its_call_that_survives_stops() {
+    let held = Arc::new(Held::default());
     let recorder = Arc::new(MemoryRecorder::new());
     let harness = launch(
-        hold_host(&Arc::default()),
+        surviving_hold_host(&held),
         PendingTimer::default(),
-        CANCELS_AN_ASKER,
-        RunSetup {
-            services: operator.services(),
-            ..setup(recorder.clone(), holds_back(&operator))
-        },
+        CANCELS_A_HOLDER,
+        setup(recorder.clone(), holds_back(&held)),
     );
 
     let report = run_beside(harness, |_control| async {})
@@ -222,15 +221,11 @@ async fn canceling_a_task_drops_its_question_to_the_operator() {
         Ok("canceled".to_owned()),
         "the run went on past the canceled task"
     );
-    assert_eq!(
-        operator.abandoned.load(Ordering::SeqCst),
-        1,
-        "canceling the task tore its question down"
-    );
+    assert_eq!(held.dropped(), 1, "canceling the task tore its call down");
     let records = recorder.records(report.run_id);
     assert_eq!(
-        answers_where(&records, "ToolCall", calls(ASK_TOOL)),
+        answers_where(&records, "ToolCall", calls(HOLD_TOOL)),
         vec![json!("Dropped")],
-        "the question that survives stops was answered Dropped"
+        "the call that survives stops was answered Dropped"
     );
 }

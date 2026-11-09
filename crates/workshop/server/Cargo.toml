@@ -18,10 +18,8 @@ harness.workspace = true
 # The Gateway web search client the agent sessions' search provider
 # sends each search through.
 harness-gateway-client.workspace = true
-# The two Packs every agent run's Host installs: `runvil/web`, with
-# the search-provider and runtime services it reads, and
-# `runvil/user-input`, whose ask tool id the agent socket frames by.
-plugin-user-input.workspace = true
+# The web Pack every agent run's Host installs: `runvil/web`, with the
+# search-provider and runtime services it reads.
 plugin-web.workspace = true
 # The MCP client Pack, installed once over every server of the
 # configured `mcp.json`.
@@ -45,8 +43,8 @@ tokio.workspace = true
 tokio-tungstenite.workspace = true
 tracing.workspace = true
 url.workspace = true
-# The conversation layer: the conversation table, transcripts, input
-# waits, agent discovery, and the recorder tee each run writes through.
+# The conversation layer: the conversation table, transcripts, agent
+# discovery, and the recorder tee each run writes through.
 workshop-agents.workspace = true
 workshop-gateway.workspace = true
 workshop-menu.workspace = true

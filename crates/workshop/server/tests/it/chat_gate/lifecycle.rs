@@ -44,8 +44,8 @@ async fn gate_a_model_picked_between_turns_serves_the_next_round() {
     let mut socket = connect_chat(&server.ws_base).await;
     let session = launch_chat(&mut socket).await;
 
-    let token = next_wait_token(&mut socket).await;
-    answer(&mut socket, &token, "one").await;
+    next_wait(&mut socket).await;
+    answer(&mut socket, "one").await;
     let turn = collect_turn(&mut socket).await;
     let reply = turn.events.last().expect("the first turn completes");
     assert_eq!(
@@ -59,8 +59,8 @@ async fn gate_a_model_picked_between_turns_serves_the_next_round() {
         .set_selected("model-b")
         .expect("model-b is in the retained catalog");
 
-    let token = wait_after(&mut socket, &turn).await;
-    answer(&mut socket, &token, "two").await;
+    next_wait(&mut socket).await;
+    answer(&mut socket, "two").await;
     let turn = collect_turn(&mut socket).await;
     let reply = turn.events.last().expect("the second turn completes");
     assert_eq!(
@@ -100,14 +100,14 @@ async fn gate_delayed_catalog_starts_chat_only_after_a_chat_model_arrives() {
     let server = spawn_chat_server(&[]).await;
     server.state.menu().set_gateway_reachable(true);
     let mut socket = connect_chat(&server.ws_base).await;
-    let _session = launch_chat(&mut socket).await;
+    let session = launch_chat(&mut socket).await;
     let mut workbench = JsonSocket::connect(&format!("{}/ws", server.ws_base)).await;
     let initial = workbench
         .recv_until(Duration::from_secs(10), |frame| frame["type"] == "models")
         .await;
     assert_eq!(initial["models"], json!([]));
 
-    assert_chat_quiet(&mut socket).await;
+    assert_chat_quiet(&server, &session, &mut socket).await;
     server.state.catalog().publish(vec![
         json!({"id": "whisper-base-en", "kind": "transcription", "object": "model"}),
         json!({"id": "whisper-small-en", "kind": "transcription", "object": "model"}),
@@ -126,7 +126,7 @@ async fn gate_delayed_catalog_starts_chat_only_after_a_chat_model_arrives() {
         json!([]),
         "the shared catalog feeding both model menus publishes no speech-only choices"
     );
-    assert_chat_quiet(&mut socket).await;
+    assert_chat_quiet(&server, &session, &mut socket).await;
 
     server.state.catalog().publish(vec![
         json!({"id": "whisper-base-en", "kind": "transcription", "object": "model"}),
@@ -148,8 +148,8 @@ async fn gate_delayed_catalog_starts_chat_only_after_a_chat_model_arrives() {
         json!([{"id": "claude-opus-4-6", "kind": "chat", "object": "model"}]),
         "both chat-facing choosers receive only the chat-capable model"
     );
-    let token = next_wait_token(&mut socket).await;
-    answer(&mut socket, &token, "after startup").await;
+    next_wait(&mut socket).await;
+    answer(&mut socket, "after startup").await;
     let turn = collect_turn(&mut socket).await;
     assert_eq!(delta_text(&turn), "echo:after startup");
     {

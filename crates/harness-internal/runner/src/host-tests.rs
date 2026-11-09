@@ -10,8 +10,7 @@ use std::time::Duration;
 
 use runvil::{Error, ErrorCode, Prompt, make_tool_error};
 use runvil_plugin::{
-    HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ToolContext, ToolInfo,
-    ToolOutput,
+    Pack, PackFuture, PackId, PackInfo, PackRegistry, ToolContext, ToolInfo, ToolOutput,
 };
 use serde_json::Value;
 
@@ -45,11 +44,11 @@ impl Pack for Idle {
     clippy::unnecessary_wraps,
     reason = "the PackFactory signature fixes the return type"
 )]
-fn builds(_id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+fn builds(_id: &PackId) -> Result<Arc<dyn Pack>, Error> {
     Ok(Arc::new(Idle))
 }
 
-fn fails(_id: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+fn fails(_id: &PackId) -> Result<Arc<dyn Pack>, Error> {
     Err(make_tool_error(
         ErrorCode::ToolOther,
         "the broken backend is down",

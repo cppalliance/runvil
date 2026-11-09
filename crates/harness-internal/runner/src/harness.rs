@@ -107,13 +107,12 @@ impl Harness {
     /// and gets the model's replies through `setup.broker`, and it reads
     /// its start from `host.timer` and sleeps through it. It runs under
     /// `setup.limits`. It makes its own instance of each Pack of
-    /// `host.packs` that the prompt picks, handing each factory
-    /// `setup.services`, and its tool calls go to those instances, which
-    /// drop when the run ends; when `setup.has_user` is false, it holds
-    /// `runvil/user` unavailable instead of making it. A run has at most
-    /// `setup.max_tool_calls_in_flight` tool calls in flight; the rest wait
-    /// and start oldest first. All of this work happens in
-    /// [`Harness::run`].
+    /// `host.packs` that the prompt picks, and its tool calls go to those
+    /// instances, which drop when the run ends; when `setup.has_user` is
+    /// false, it holds `runvil/user` unavailable instead of making it. A
+    /// run has at most `setup.max_tool_calls_in_flight` tool calls in
+    /// flight; the rest wait and start oldest first. All of this work
+    /// happens in [`Harness::run`].
     #[must_use]
     pub fn new(host: Arc<Host>, prompt: Prompt, setup: RunSetup) -> Harness {
         Harness {
@@ -318,8 +317,9 @@ impl RunControl {
     /// and lets the run go on.
     ///
     /// A call survives a stop when its tool's info sets
-    /// `survives_stop`, as the question to the operator does; for a tool
-    /// only the model sees, that is the info its section's render gave it.
+    /// `survives_stop`; for a tool only the model sees, that is the info
+    /// its section's render gave it. A chain waiting on its inbox has
+    /// nothing in flight, so a stop never reaches its wait.
     /// Every other effect in flight is aborted and answered `Dropped`. The
     /// run's cancel flag stays clear.
     /// A `pcall` around a dropped call catches its canceled error.

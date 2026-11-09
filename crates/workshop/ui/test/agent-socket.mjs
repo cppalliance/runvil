@@ -189,7 +189,7 @@ await assertNoLeaks(lifecycle, async () => {
   const down = new AgentSocket("ws://fake/agents/ws");
   check("launch reports false before a connect", down.launch("chat") === false);
   check("attach reports false before a connect", down.attach("s1") === false);
-  check("respond reports false before a connect", down.respond("tok", "hi") === false);
+  check("respond reports false before a connect", down.respond("hi") === false);
   check("cancelTurn reports false before a connect", down.cancelTurn() === false);
   down.dispose();
 
@@ -199,7 +199,6 @@ await assertNoLeaks(lifecycle, async () => {
   const heard = [];
   tolerant.onAgents((list) => heard.push(["agents", list]));
   tolerant.onEvent((frame) => heard.push(["event", frame.index]));
-  tolerant.onInputRequired((token) => heard.push(["required", token]));
   tolerant.onError((message) => heard.push(["error", message]));
   tolerant.connect();
   const noisy = fakeSockets[fakeSockets.length - 1];
@@ -207,9 +206,12 @@ await assertNoLeaks(lifecycle, async () => {
   noisy.raw("not json");
   noisy.message({ type: "mystery" });
   noisy.message({ type: "agent_event", event: {} });
-  noisy.message({ type: "input_required" });
+  noisy.message({ type: "input_required", token: "tok" });
   noisy.message({ type: "agents", agents: "not a list" });
-  check("malformed frames are skipped, a listless agents push included", heard.length === 0);
+  check(
+    "malformed frames are skipped, a listless agents push and a retired wait frame included",
+    heard.length === 0,
+  );
 
   // --- Error frames deliver their message, with a fallback -----------------
 

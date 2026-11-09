@@ -12,15 +12,14 @@
 //! `acme/web` stands in for `runvil/web` and an undeclared third-party
 //! Pack is in no run and is never made. Before each run, the Harness's
 //! preparation picks those Packs and makes the run's instance of each
-//! with the run's own services. A factory's refusal or panic is not an
-//! error: the Pack is unavailable to that run alone, with the refusal or
-//! "the Pack's factory panicked" as its reason, and the next run calls
-//! the factory again. The built-in `runvil/user` is made only for a run
-//! whose setup has a user; any other run holds it unavailable, with the
-//! reason "this run has no user". Then it waits for each instance to be
-//! ready, and a Pack whose `ready` fails is unavailable to that run the
-//! same way. Then it takes a snapshot of the instances: the catalog the
-//! Engine offers
+//! through its factory. A factory's refusal or panic is not an error: the
+//! Pack is unavailable to that run alone, with the refusal or "the Pack's
+//! factory panicked" as its reason, and the next run calls the factory
+//! again. The built-in `runvil/user` is made only for a run whose setup
+//! has a user; any other run holds it unavailable, with the reason "this
+//! run has no user". Then it waits for each instance to be ready, and a
+//! Pack whose `ready` fails is unavailable to that run the same way. Then
+//! it takes a snapshot of the instances: the catalog the Engine offers
 //! the run, the roster that says how each Pack stands, a declared Pack
 //! the pick could not resolve included, the preludes of the Packs the
 //! prompt declares, and the performer that sends each tool call to the
@@ -50,7 +49,7 @@ use runvil::vfs::Access;
 use runvil::{Error, ErrorCode};
 use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput, make_tool_error};
 use runvil_plugin::{
-    HostServices, Pack, PackFactory, PackId, PackInfo, PackRegistry, RenderContext, ToolContext,
+    Pack, PackFactory, PackId, PackInfo, PackRegistry, RenderContext, ToolContext,
 };
 use serde_json::Value;
 
@@ -131,9 +130,9 @@ impl Packs {
     }
 
     /// Picks the Packs a run of `prompt` holds, makes
-    /// the run's instance of each with `services`, the
-    /// run's own, waits until each is ready or
-    /// `cancel` fires, and takes the run's snapshot.
+    /// the run's instance of each, waits until each
+    /// is ready or `cancel` fires, and takes the
+    /// run's snapshot.
     ///
     /// A Pack whose factory refuses or panics, or whose `ready` fails, is
     /// unavailable to this run, with the reason, and so is `runvil/user`
@@ -142,12 +141,11 @@ impl Packs {
     pub(crate) async fn snapshot(
         &self,
         prompt: &Prompt,
-        services: HostServices,
         has_user: bool,
         cancel: &CancelHandle,
     ) -> RunPacks {
         let picked = self.pick(prompt);
-        let made = self.make(&picked, &services, has_user);
+        let made = self.make(&picked, has_user);
         let failures = wait_ready(&made, cancel).await;
         RunPacks::snapshot(made, failures, &picked.unresolved)
     }
@@ -183,17 +181,15 @@ impl Packs {
         Picked { fqns, unresolved }
     }
 
-    /// Makes the run's instance of each of its `packs` with `run`, the
-    /// run's own services, in pick order.
+    /// Makes the run's instance of each of its `packs`, in pick order.
     ///
     /// A Pack inserted unavailable keeps its reason and is never made, and
     /// neither is [`USER`] when `has_user` is false: it is unavailable to
     /// the run with [`NO_USER`] as the reason. A factory that refuses
     /// leaves its Pack unavailable to this run with the refusal as the
-    /// reason, logged at debug, since a Host with no operator refuses
-    /// `runvil/user-input` on every run. A factory that panics leaves its
-    /// Pack unavailable with [`FACTORY_PANICKED`], logged at error.
-    fn make(&self, packs: &Picked, run: &HostServices, has_user: bool) -> Vec<Made<'_>> {
+    /// reason, logged at debug. A factory that panics leaves its Pack
+    /// unavailable with [`FACTORY_PANICKED`], logged at error.
+    fn make(&self, packs: &Picked, has_user: bool) -> Vec<Made<'_>> {
         packs
             .fqns
             .iter()
@@ -202,7 +198,7 @@ impl Packs {
                 let pack = match &installed.factory {
                     Err(reason) => Err(reason.clone()),
                     Ok(_) if fqn == USER && !has_user => Err(NO_USER.to_owned()),
-                    Ok(factory) => new_pack(factory.as_ref(), installed, run),
+                    Ok(factory) => new_pack(factory.as_ref(), installed),
                 };
                 Some(Made {
                     fqn,
@@ -291,16 +287,11 @@ impl fmt::Debug for Packs {
 }
 
 /// Calls `factory` for the run's instance of the Pack `installed` names,
-/// with `run`, the run's own services, and returns the instance or the
-/// reason the run has none. A refusal is logged at debug, and a panic is
-/// caught and logged at error.
-fn new_pack(
-    factory: &dyn PackFactory,
-    installed: &Installed,
-    run: &HostServices,
-) -> Result<Arc<dyn Pack>, String> {
+/// and returns the instance or the reason the run has none. A refusal is
+/// logged at debug, and a panic is caught and logged at error.
+fn new_pack(factory: &dyn PackFactory, installed: &Installed) -> Result<Arc<dyn Pack>, String> {
     let id = &installed.id;
-    match catch_unwind(AssertUnwindSafe(|| factory.new_pack(id, run))) {
+    match catch_unwind(AssertUnwindSafe(|| factory.new_pack(id))) {
         Ok(Ok(pack)) => Ok(pack),
         Ok(Err(error)) => {
             tracing::debug!(

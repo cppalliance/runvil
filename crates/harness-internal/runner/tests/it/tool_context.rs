@@ -8,7 +8,7 @@ use std::sync::Arc;
 use runvil::make_tool_error;
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
-    HostServices, Pack, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
+    Pack, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -38,7 +38,7 @@ struct Record {
     clippy::unnecessary_wraps,
     reason = "the PackFactory signature fixes the return type"
 )]
-fn new_record(name: &PackId, _run: &HostServices) -> Result<Arc<dyn Pack>, Error> {
+fn new_record(name: &PackId) -> Result<Arc<dyn Pack>, Error> {
     let record = ToolInfo::new(
         ToolId::parse(&format!("{name}/record")).unwrap(),
         "Write a file through the call's access and name the caller.",

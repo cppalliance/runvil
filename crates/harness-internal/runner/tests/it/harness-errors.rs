@@ -50,8 +50,7 @@ fn harness_with(source: &str, setup: RunSetup) -> Harness {
     launch(no_packs(), PendingTimer::default(), source, setup)
 }
 
-/// A Harness running `source` over `recorder` and `broker` with no Packs
-/// and no run services.
+/// A Harness running `source` over `recorder` and `broker` with no Packs.
 fn harness_over(recorder: &Arc<FailingRecorder>, broker: ScriptedBroker, source: &str) -> Harness {
     harness_with(source, setup(recorder.clone(), broker))
 }

@@ -1,5 +1,5 @@
 // The agent-session view: paints the service's transcript into the feed
-// and pins the chat input to the pending input wait. The transcript is
+// and maps the agent's state onto the chat input. The transcript is
 // built the way Cursor draws it: buildTranscript turns the service's items
 // into turns of keyed rows plus a tail status, and the TranscriptView
 // reconciles them by key, so a streaming delta updates its row in place
@@ -11,21 +11,23 @@
 //
 // Errors don't take rows. An error opens the composer's error popup
 // (title, message, and Try again), which re-sends the last user message
-// through the service while a wait is pinned.
+// through the service.
 //
 // The composer is the ChatBox component, which this view embeds. It maps
-// service state to the box's props (editable follows the pinned wait,
-// the action follows generating, the wait, and the model selection, the
-// mic follows dictation's state, the mode follows the toolbar's chip) and
-// routes the box's events back - `send` answers the wait, `stop` cancels
-// the turn, `mic-press` drives stt.ts, which splices the transcript into
-// the box at the cursor. The one round action button is the mic while the
-// box is empty and stays pressable whatever the state, so a click while
-// blocked names the blocker on the status bar instead of the control
-// silently disappearing. A take follows the wait it dictates into: when the
-// pinned wait dies - spent by a send, canceled by the server, or reset
-// by a new session - the live take is discarded, because a take that
-// cannot be sent is a trap.
+// service state to the box's props (the box is always editable, the
+// action follows whether the agent has started, generating, and the model
+// selection, the mic follows dictation's state, the mode follows the
+// toolbar's chip) and routes the box's events back - `send` sends the
+// operator's message, which answers the waiting agent or steers the turn
+// it works on, `stop` cancels the turn, `mic-press` drives stt.ts, which
+// splices the transcript into the box at the cursor. The one round action
+// button is the mic while the box is empty and stays pressable whatever
+// the state, so a click while blocked names the blocker on the status bar
+// instead of the control silently disappearing. Until the agent first
+// waits or works, its run takes no message, so send stays disabled. A
+// take follows the session it dictates into: a send or a new session
+// discards the live take, since the new session's agent takes no message
+// until it starts.
 
 import "./agent-session.css";
 
@@ -75,11 +77,12 @@ interface PopupError {
  * The session surface: the transcript feed over the chat box. The
  * toolbar (mode chip, model picker, context ring) mounts into the box's
  * controls slot only when the composition root threads a ModelService
- * through; a view built without one mounts none. The box is editable
- * only while a wait is pinned; a configured model service marks the send
- * action blocked until its current selection is non-empty. A send
- * answers the wait through the service, clears the box on success, and
- * pins the feed to the bottom.
+ * through; a view built without one mounts none. The box is always
+ * editable; send stays disabled until the agent first waits or works,
+ * and a configured model service marks the send action blocked until its
+ * current selection is non-empty. A send hands the operator's message to
+ * the service, clears the box on success, and pins the feed to the
+ * bottom.
  * The status sink receives dictation's local messages, selection
  * blockers, and recording LED state. While this view dictates, the
  * capture service names it by its session title and agent, and reveals
@@ -172,21 +175,15 @@ export class AgentSessionView extends Disposable {
     this._register(
       this.service.onDidChangeSession((frame) => {
         // A new session replays from index zero: the old session's error
-        // does not belong to it.
+        // and a take dictated for its agent do not belong to it.
         if (this.sessionId !== frame.session) {
           this.sessionId = frame.session;
           this.clearError();
-        }
-      }),
-    );
-    this._register(
-      this.service.onDidChangePendingInput((token) => {
-        if (token === null) {
           this.stt.discardIfRecording();
         }
-        this.renderInputState();
       }),
     );
+    this._register(this.service.onDidChangeStarted(() => this.renderInputState()));
     if (this.modelService !== undefined) {
       this._register(this.modelService.onDidChangeCurrent(() => this.renderInputState()));
     }
@@ -208,12 +205,7 @@ export class AgentSessionView extends Disposable {
       },
     };
     this.stt = this._register(
-      setupStt({ input: chatBox, liveRegionHost: this.element }, status, () => {
-        if (this.service.pendingInputToken === null) {
-          return "The agent isn't asking for input; the mic opens when it does.";
-        }
-        return null;
-      }, capture, presence),
+      setupStt({ input: chatBox, liveRegionHost: this.element }, status, () => null, capture, presence),
     );
     if (speechCapture === undefined) {
       this._register(capture);
@@ -229,7 +221,7 @@ export class AgentSessionView extends Disposable {
     this.renderInputState();
   }
 
-  /** The box's events: a send answers the wait, a mic press drives dictation. */
+  /** The box's events: a send sends the operator's message, a mic press drives dictation. */
   private onChatBoxEvent(event: ChatBoxEvent): void {
     switch (event.type) {
       case "send":
@@ -270,20 +262,20 @@ export class AgentSessionView extends Disposable {
   }
 
   /**
-   * Pins the box to the pending wait: editable only while one is open,
-   * the send action idle without one, and blocked (still clickable, so
-   * the press can say why) while a configured model service has no
-   * selection. While the agent generates the action is Stop, whatever the
-   * wait says. The popup's Try again follows the same wait.
+   * Maps the agent's state onto the box: always editable, the send action
+   * idle until the agent first waits or works, since its run takes no
+   * message before then, and blocked (still clickable, so the press can
+   * say why) while a configured model service has no selection. While the
+   * agent generates the action is Stop, which the box shows over an empty
+   * box and turns into send for a follow-up once the box holds text.
    */
   private renderInputState(): void {
-    const pinned = this.service.pendingInputToken !== null;
     const generating = this.service.generating;
     this.chatBox.update({
-      editable: pinned,
+      editable: true,
       action: generating
         ? "stop"
-        : pinned
+        : this.service.started
           ? this.modelService === undefined || this.modelService.current !== ""
             ? "send"
             : "send-blocked"
@@ -383,7 +375,7 @@ export class AgentSessionView extends Disposable {
     return null;
   }
 
-  /** Pushes the popup to the box: Try again is offered after a send and enabled only while a wait is pinned. */
+  /** Pushes the popup to the box: Try again is offered, enabled, once the operator has sent a message. */
   private renderError(): void {
     if (this.popup === null) {
       this.chatBox.update({ error: null });
@@ -396,7 +388,7 @@ export class AgentSessionView extends Disposable {
       error.title = this.popup.title;
     }
     if (this.lastUserText() !== null) {
-      error.tryAgain = this.service.pendingInputToken !== null ? "enabled" : "disabled";
+      error.tryAgain = "enabled";
     }
     this.chatBox.update({ error });
   }
@@ -404,12 +396,12 @@ export class AgentSessionView extends Disposable {
   /**
    * Try again: re-sends the last user message through the service. The
    * resend adds a second user message to the agent's history; the chat
-   * agent returns to its ask after a failed round, which is the wait this
-   * answers.
+   * agent returns to its inbox after a failed round, so the resend answers
+   * it there, or steers the turn it already went on with.
    */
   private retry(): void {
     const text = this.lastUserText();
-    if (text === null || this.service.pendingInputToken === null) {
+    if (text === null) {
       return;
     }
     this.stt.discardIfRecording();
@@ -420,16 +412,18 @@ export class AgentSessionView extends Disposable {
   }
 
   /**
-   * Answers the pending wait with the box's text, byte-exact - never
-   * trimmed, because the wire contract is what the operator typed. An
-   * empty box sends nothing; a failed send keeps the text for the retry.
+   * Sends the box's text as the operator's message, byte-exact - never
+   * trimmed, because the wire contract is what the operator typed. It
+   * answers the waiting agent or steers the turn the agent works on; the
+   * box offers send only once the agent has started. An empty box sends
+   * nothing; a failed send keeps the text for the retry.
    * A send ends a live take: what the operator sees in the box, interim
    * transcript included, is what goes; the take's polished final is
    * discarded rather than landing in a box that already sent.
    */
   private submit(): void {
     const text = this.chatBox.getText();
-    if (text === "" || this.service.pendingInputToken === null) {
+    if (text === "") {
       return;
     }
     if (this.modelService !== undefined && this.modelService.current === "") {

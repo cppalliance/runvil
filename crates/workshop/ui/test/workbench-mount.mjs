@@ -1,12 +1,12 @@
 // The bundled app mounts the whole workbench into dist/index.html: dockview
 // initializes inside #dock with the Workshop tree and the agent-session
 // panel (its menu visible, its session view hidden until a session is
-// acknowledged, its input pinned closed, its toolbar reading the shared
-// model service's snapshot selection), and the status bar boots as a
-// <footer> landmark reading "Ready" with its barberpole hidden and its
-// activity LED present. Guards the DOM contract between index.html and
-// the panel factories. Run: node test/workbench-mount.mjs (after `npm run
-// build`).
+// acknowledged, its input editable with its action idle, its toolbar
+// reading the shared model service's snapshot selection), and the status
+// bar boots as a <footer> landmark reading "Ready" with its barberpole
+// hidden and its activity LED present. Guards the DOM contract between
+// index.html and the panel factories. Run: node test/workbench-mount.mjs
+// (after `npm run build`).
 import { bootWorkbench } from "./helpers/boot.mjs";
 
 await bootWorkbench("the bundled app mounts the whole workbench", async (ctx) => {
@@ -42,8 +42,14 @@ await bootWorkbench("the bundled app mounts the whole workbench", async (ctx) =>
     const input = view?.querySelector(".ws-prompt-input__editor");
     if (!input) {
       failures.push("the ws-agent-session input did not mount");
-    } else if (input.getAttribute("contenteditable") !== "false") {
-      failures.push("the agent input must start disabled with no pending wait");
+    } else if (input.getAttribute("contenteditable") !== "true") {
+      failures.push("the agent input must start editable, as it stays at all times");
+    }
+    const action = view?.querySelector(".ws-agent-session__action");
+    if (action?.dataset.action !== "idle") {
+      failures.push(
+        `the agent's action reads "${action?.dataset.action}", expected "idle" before the agent first waits or works`,
+      );
     }
     const toolbar = view?.querySelector(".ws-agent-toolbar");
     if (!toolbar) {

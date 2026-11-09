@@ -12,8 +12,8 @@ async fn gate_streaming_delivers_text_and_reasoning_deltas_then_the_reply() {
     let mut socket = connect_chat(&server.ws_base).await;
     let _session = launch_chat(&mut socket).await;
 
-    let token = next_wait_token(&mut socket).await;
-    answer(&mut socket, &token, "ping").await;
+    next_wait(&mut socket).await;
+    answer(&mut socket, "ping").await;
     let turn = collect_turn(&mut socket).await;
 
     let reasoning: String = turn
