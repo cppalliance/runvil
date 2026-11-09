@@ -485,6 +485,8 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, status, mic, input, editable, startTake, dispose } = await setup();
+    // A first session, so the later acknowledgment replaces it.
+    wire.fire.session("replaced");
     wire.fire.awaiting();
     const socket = await startTake();
     if (socket === null) {
@@ -685,7 +687,7 @@ await assertNoLeaks(lifecycle, async () => {
     dispose();
   }
 
-  // --- The mic needs no wait; a new session discards the take ---------------
+  // --- The mic needs no wait; a session that replaces another discards the take ---
 
   {
     const { wire, status, mic, input, editable, recording, startTake, dispose } = await setup();
@@ -721,7 +723,14 @@ await assertNoLeaks(lifecycle, async () => {
       input.getText() === "hello" && !editable() && recording(),
     );
 
+    // The view's first session replaces none, so the take goes on into it.
     wire.fire.session("s1");
+    check(
+      "the first acknowledgment keeps a take started before it",
+      status.recording && recording() && input.getText() === "hello",
+    );
+
+    wire.fire.session("s2");
     check("a new session dims the recording LED", !status.recording);
     check(
       "a new session releases the mic button to idle",
@@ -741,15 +750,15 @@ await assertNoLeaks(lifecycle, async () => {
     wire.fire.awaiting();
     const reopened = await startTake();
     check("the mic starts a fresh take", reopened !== null);
-    wire.fire.session("s2");
+    wire.fire.session("s3");
     check("clearing the second take dims the recording LED", !status.recording);
 
     // A reattach to the same session keeps the take.
     const third = await startTake();
     check("a third take starts", third !== null);
-    wire.fire.session("s2");
-    check("a same-session reattach keeps the live take", status.recording && recording());
     wire.fire.session("s3");
+    check("a same-session reattach keeps the live take", status.recording && recording());
+    wire.fire.session("s4");
     check("a new session discards the live take", third?.closed === false && !status.recording && !recording());
 
     dispose();
@@ -1004,6 +1013,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, input, startTake, dispose } = await setup();
+    wire.fire.session("replaced");
     wire.fire.awaiting();
     input.setText("First test alpha");
     const socket = await startTake();
@@ -1020,6 +1030,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, status, mic, input, editable, recording, dispose } = await setup();
+    wire.fire.session("replaced");
     wire.fire.awaiting();
     input.setText("old target keep");
     input.setSelection(5, 11);
@@ -1194,6 +1205,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, status, mic, input, editable, recording, send, startTake, dispose } = await setup();
+    wire.fire.session("replaced");
     wire.fire.awaiting();
     let socket = await startTake();
     if (socket === null) {
@@ -1324,6 +1336,7 @@ await assertNoLeaks(lifecycle, async () => {
 
   {
     const { wire, mic, input, startTake, dispose } = await setup();
+    wire.fire.session("replaced");
     wire.fire.awaiting();
     const socket = await startTake();
     if (socket === null) {
@@ -1651,6 +1664,7 @@ await assertNoLeaks(lifecycle, async () => {
     });
     const a = await setup(capture);
     const b = await setup(capture);
+    b.wire.fire.session("replaced");
     a.wire.fire.awaiting();
     b.wire.fire.awaiting();
     check(

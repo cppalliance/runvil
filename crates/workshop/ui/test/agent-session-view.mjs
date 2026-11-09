@@ -15,7 +15,9 @@
 // stays editable: send stays disabled until the agent first waits or
 // works, answers the waiting agent byte-exact, and while the agent works
 // an empty box shows Stop and a box with text shows send, which steers
-// the turn; a view built with a ModelService mounts the toolbar (mode
+// the turn; Stop comes back while a round newer than the stop streams, and
+// a call the Stop dropped stops loading once the agent waits or goes on; a
+// view built with a ModelService mounts the toolbar (mode
 // chip, model picker, context ring) between the feed and the input bar.
 // Run: node test/agent-session-view.mjs
 import { readFile, writeFile } from "node:fs/promises";
@@ -1437,6 +1439,84 @@ await assertNoLeaks(lifecycle, async () => {
     check(
       "the next wait ends the turn: Stop gives way to the mic over the empty box",
       service.generating === false && send.getAttribute("data-state") === "mic" && send.getAttribute("data-action") === "send",
+    );
+    dispose();
+  }
+
+  {
+    // A stop with a message already queued: the agent goes on with it, so
+    // Stop shows again while that newer round streams.
+    const { wire, service, send, ask, dispose } = setup();
+    wire.fire.session("s-queued");
+    ask("go");
+    wire.fire.event("tool_call", '[{"id":"c1","name":"read","arguments":{}}]', { reply: 0 });
+    wire.fire.event("user_message", "then this");
+    send.click();
+    check(
+      "Stop cancels the turn and gives way",
+      wire.cancels === 1 && send.getAttribute("data-state") !== "stop",
+    );
+    wire.fire.delta("text", "on it", 1);
+    check(
+      "Stop shows while the newer round streams",
+      service.generating === true && send.getAttribute("data-state") === "stop",
+    );
+    wire.fire.awaiting();
+    check("the next wait takes Stop away", send.getAttribute("data-state") !== "stop");
+    dispose();
+  }
+
+  // --- A call a Stop dropped stops loading once its batch ends ---------------------------------
+
+  {
+    // The dropped call never gets a result. The agent's next wait ends its
+    // batch, so the following turn neither shows it loading nor names it.
+    const { wire, rows, tail, input, send, ask, dispose } = setup();
+    wire.fire.session("s-dropped");
+    ask("go");
+    wire.fire.event("tool_call", '[{"id":"c1","name":"read","tool":"fs/read","arguments":{"path":"a"}}]', {
+      reply: 0,
+    });
+    const loading = () => shimmering(rows()[1]?.querySelector(".ws-collapsible__action"));
+    check("the call loads while it runs", actionOf(rows()[1]) === "Running" && loading());
+    send.click();
+    wire.fire.awaiting();
+    input.setText("next");
+    send.click();
+    check("sending the next message leaves the dropped call idle before its echo", !loading());
+    wire.fire.event("user_message", "next");
+    check(
+      "on the following turn the dropped call no longer loads",
+      actionOf(rows()[1]) === "Ran" && !loading(),
+    );
+    check(
+      "the tail plans instead of naming the dropped call",
+      tail()?.querySelector(".ws-tail__action")?.textContent === "Planning next moves",
+    );
+    dispose();
+  }
+
+  {
+    // The next message goes out before the agent waits, so the agent goes
+    // on with it: the newer round's first frame ends the dropped call's batch.
+    const { wire, rows, tail, input, send, ask, dispose } = setup();
+    wire.fire.session("s-dropped-steer");
+    ask("go");
+    wire.fire.event("tool_call", '[{"id":"c1","name":"read","tool":"fs/read","arguments":{"path":"a"}}]', {
+      reply: 0,
+    });
+    send.click();
+    input.setText("then this");
+    send.click();
+    wire.fire.event("user_message", "then this");
+    wire.fire.event("agent_thought", "on to the next message", { reply: 1 });
+    check(
+      "once the newer round begins the dropped call no longer loads",
+      actionOf(rows()[1]) === "Ran" && !shimmering(rows()[1]?.querySelector(".ws-collapsible__action")),
+    );
+    check(
+      "the tail plans instead of naming the dropped call",
+      tail()?.querySelector(".ws-tail__action")?.textContent === "Planning next moves",
     );
     dispose();
   }

@@ -27,8 +27,9 @@
 // instead of the control silently disappearing. Until the agent first
 // waits or works, and once its run has ended, its run takes no message,
 // so send stays disabled. A take follows the session it dictates into: a
-// send or a new session discards the live take, since the new session's
-// agent takes no message until it starts.
+// send, or a new session that replaces an earlier one, discards the live
+// take. The view's first session replaces none, so a take started before
+// it goes on into that session.
 
 import "./agent-session.css";
 
@@ -154,8 +155,9 @@ export class AgentSessionView extends Disposable {
     this._register(
       this.service.onDidChangeGenerating(() => {
         this.renderFeed();
-        // Stop appears with the first generating delta and leaves with the
-        // turn's last.
+        // Stop follows `generating`: it shows from a send until the agent
+        // waits, the run ends, an error lands, or a cancel goes out, and
+        // again while a round newer than the cancel streams.
         this.renderInputState();
       }),
     );
@@ -176,11 +178,15 @@ export class AgentSessionView extends Disposable {
     this._register(
       this.service.onDidChangeSession((frame) => {
         // A new session replays from index zero: the old session's error
-        // and a take dictated for its agent do not belong to it.
+        // and a take dictated for its agent do not belong to it. The first
+        // session replaces no agent, so a take started before it stays.
         if (this.sessionId !== frame.session) {
+          const replaced = this.sessionId !== null;
           this.sessionId = frame.session;
           this.clearError();
-          this.stt.discardIfRecording();
+          if (replaced) {
+            this.stt.discardIfRecording();
+          }
         }
       }),
     );

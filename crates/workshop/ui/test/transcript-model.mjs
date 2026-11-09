@@ -1,9 +1,12 @@
 // The agent transcript model (src/parts/agent/transcript/transcript-model.ts
 // and tool-labels.ts), pure and DOM-free: session items in, turns, rows,
-// and a tail status out. Covers the turn rules, every grouping case, the
-// stable row keys, the group summary grammar and plurals, tool verbs and
-// details, the loading rule, thought labels (including title-only
-// thinking), and every tail-status rule. Run: node test/transcript-model.mjs
+// and a tail status out. Covers the turn rules (a result joining its
+// call's turn across a steering message, the open batch loading
+// whichever turn holds it, and an ended batch never loading), every
+// grouping case, the stable row keys, the group summary grammar and
+// plurals, tool verbs and details, the loading rule, thought labels
+// (including title-only thinking), and every tail-status rule.
+// Run: node test/transcript-model.mjs
 import { writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -68,7 +71,9 @@ const call = (id, name, tool, args = {}, vendor = tool === null ? null : "runvil
   vendor,
   args: JSON.stringify(args),
 });
-const batch = (...calls) => ({ kind: "tool-call", calls, text: "", model: null });
+const batch = (...calls) => ({ kind: "tool-call", calls, text: "", model: null, ended: false });
+// A batch whose work is over, as the service marks it.
+const endedBatch = (...calls) => ({ ...batch(...calls), ended: true });
 const result = (id, text = "ok") => ({ kind: "tool-result", toolCallId: id, text });
 const failure = (message) => ({ kind: "error", message, title: null });
 
@@ -141,6 +146,95 @@ const keysOf = (model, turn = 0) => rowsOf(model, turn).map((row) => row.key);
     "a result with no call, or no id, is ignored",
     buildTranscript([user("x"), result("zzz"), { kind: "tool-result", toolCallId: null, text: "t" }], false, false)
       .turns[0].rows.length === 1,
+  );
+}
+
+// --- A steering message: results join their call's turn, and the open batch loads ---
+
+{
+  const steered = buildTranscript(
+    [user("go"), batch(generic("c1")), user("steer"), result("c1", "file body")],
+    true,
+    false,
+  );
+  const first = rowsOf(steered, 0)[1];
+  check(
+    "a result after a steering message attaches to its call in the earlier turn",
+    first.step.result === "file body" && first.step.loading === false,
+  );
+  same("the steering turn holds only its human row", kindsOf(steered, 1), ["human"]);
+
+  const running = buildTranscript([user("go"), batch(search("c1", "rust")), user("steer")], true, false);
+  check(
+    "the open batch's call shows loading in the earlier turn that holds it",
+    rowsOf(running, 0)[1].step.loading === true,
+  );
+  same("the tail reads the open batch's running call", running.tail, {
+    kind: "tool",
+    action: "Searching web",
+    details: "rust",
+    callName: null,
+    inGroup: false,
+  });
+  check(
+    "the open batch stops loading when generating stops",
+    rowsOf(buildTranscript([user("go"), batch(search("c1")), user("steer")], false, false), 0)[1].step
+      .loading === false,
+  );
+
+  const half = buildTranscript(
+    [user("go"), batch(search("c1"), generic("c2", "read", "fs/read")), user("steer"), result("c1")],
+    true,
+    false,
+  );
+  same(
+    "a call answered after the steer stops loading while its sibling keeps loading",
+    rowsOf(half, 0)[1].steps.map((step) => step.loading),
+    [false, true],
+  );
+  check(
+    "the tail reads the sibling still running",
+    half.tail.kind === "tool" && half.tail.action === "Running" && half.tail.details === "read in fs",
+  );
+
+  const recycled = buildTranscript(
+    [
+      user("go"),
+      batch(generic("call_1")),
+      result("call_1", "first"),
+      user("next"),
+      batch(generic("call_1")),
+      result("call_1", "second"),
+    ],
+    false,
+    false,
+  );
+  same(
+    "a recycled id's result joins the latest call with that id",
+    [rowsOf(recycled, 0)[1].step.result, rowsOf(recycled, 1)[1].step.result],
+    ["first", "second"],
+  );
+
+  const stale = buildTranscript(
+    [user("a"), batch(search("c1")), user("b"), batch(generic("c2")), result("c2")],
+    true,
+    false,
+  );
+  check(
+    "only the open batch loads: a call left unanswered before a later batch does not",
+    rowsOf(stale, 0)[1].step.loading === false,
+  );
+
+  // A stop dropped the call, so it never gets a result, and its batch ended.
+  const dropped = buildTranscript([user("go"), endedBatch(search("c1", "rust")), user("next")], true, false);
+  check(
+    "an ended batch is not the open batch: its unanswered call does not load in the earlier turn",
+    rowsOf(dropped, 0)[1].step.loading === false,
+  );
+  check("the tail plans instead of naming an ended batch's call", dropped.tail?.kind === "planning");
+  check(
+    "an ended batch's unanswered call does not load in the last turn either",
+    rowsOf(buildTranscript([user("go"), endedBatch(search("c1"))], true, false), 0)[1].step.loading === false,
   );
 }
 
@@ -720,10 +814,12 @@ const keysOf = (model, turn = 0) => rowsOf(model, turn).map((row) => row.key);
     tailOf([user("q"), reply("done", 0)]).kind === "planning",
   );
 
-  // Only the last turn counts.
+  // An earlier turn counts only through the open batch.
   check(
-    "an unfinished tool in an earlier turn does not drive the tail",
-    tailOf([user("a"), batch(search("c1")), user("b")]).kind === "planning",
+    "an unfinished tool in an earlier turn drives the tail only as the open batch",
+    tailOf([user("a"), batch(search("c1")), user("b")]).kind === "tool" &&
+      tailOf([user("a"), batch(search("c1")), user("b"), batch(generic("c2")), result("c2")]).kind ===
+        "planning",
   );
 }
 

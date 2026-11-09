@@ -239,9 +239,10 @@ export type AgentDeltaKind = "text" | "reasoning";
  * One live streaming chunk of an agent's model round. Ephemeral: deltas
  * go out on a bounded broadcast and may drop under lag; the completed-reply
  * event is the repair path. Every delta is stamped with the `reply` id of
- * the durable event that will supersede it, so the SPA coalesces chunks by
- * that id and replaces them when the event arrives (the ACP messageId
- * chunk-vs-upsert rule).
+ * its round, the id the round's durable event carries, so the SPA
+ * coalesces chunks by that id and replaces them when the event arrives
+ * (the ACP messageId chunk-vs-upsert rule). A withdrawn round ends with no
+ * superseding event; the `user_message` that withdrew it drops its chunks.
  */
 export interface AgentDeltaFrame {
   type: "agent_delta";
@@ -274,9 +275,9 @@ export interface InputResponseFrame {
 
 /**
  * The client frame firing the session's turn-cancel. Cancellation is a
- * stop reason, never an error: the server answers with nothing, a message
- * already sent stays queued for the agent, and the agent returns to
- * waiting on its inbox.
+ * stop reason, never an error: the server answers with nothing, and the
+ * agent returns to its inbox. A message already queued there stays, so
+ * the agent goes on with it; with none queued, the agent waits.
  */
 export interface AgentCancelFrame {
   type: "cancel";

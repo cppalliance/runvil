@@ -2,16 +2,20 @@
 // scripted wire, no DOM: durable events fold into transcript items in
 // log order; ephemeral deltas coalesce into pending items by their
 // superseding reply id, per channel, and the durable event replaces
-// them; late deltas after their round settled are dropped; respond sends
-// the operator's text alone, at any time; a new session id resets the
-// transcript; errors fold as items. The turn's liveness rides along: an
-// injected clock stamps each thought's start and end, `generating` turns
-// off at `awaiting_input` and on at the next `user_message`, so a replayed
-// log ends in the right state, `started` turns on with the session's
-// first report, `run_ended` turns both off, a same-session reattach
-// before a send's echo returns to the state the log left, `reconnecting`
-// follows its rule, `cancelTurn` settles the service's own view, tool rows
-// carry their bound tool id, and errors carry their popup title.
+// them; late deltas after their round settled are dropped, a settle drops
+// every earlier round's pending items, and the operator's message drops
+// those of the round it withdrew; respond sends the operator's text alone,
+// at any time; a new session id resets the transcript; errors fold as
+// items. The turn's liveness rides along: an injected clock stamps each
+// thought's start and end, `generating` turns off at `awaiting_input` and
+// on at the next `user_message`, so a replayed log ends in the right
+// state, `started` turns on with the session's first report, `run_ended`
+// turns both off, a same-session reattach before a send's echo returns to
+// the state the log left, `reconnecting` follows its rule, a result still
+// counts across a steering message, `cancelTurn` settles the service's own
+// view until a newer round shows the agent went on, the latest batch ends
+// at the agent's wait, at the run's end, and at that newer round, tool
+// rows carry their bound tool id, and errors carry their popup title.
 // Run: node test/agent-session-service.mjs
 import { writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -236,6 +240,66 @@ await assertNoLeaks(lifecycle, () => {
       "the batch keeps its model label",
       service.items[0].model === "m",
     );
+    service.dispose();
+  }
+
+  // --- A settle drops every earlier round's pending items -------------------
+
+  {
+    const wire = makeWire();
+    const service = new AgentSessionService(wire);
+    wire.fire.session("s1");
+    wire.fire.delta("text", "cut off", 0);
+    wire.fire.delta("reasoning", "half a thought", 0);
+    wire.fire.event("agent_message", "the next round", { reply: 1 });
+    check(
+      "a round's settle drops the pending items of every earlier round",
+      service.items.length === 1 && service.items[0].reply === 1 && service.items[0].pending === false,
+    );
+    service.dispose();
+  }
+
+  // --- A steering message withdraws the round streaming as it lands ----------
+
+  {
+    const wire = makeWire();
+    const service = new AgentSessionService(wire);
+    const log = [];
+    const event = (kind, content, extra = {}) => {
+      log.push([kind, content, extra]);
+      wire.fire.event(kind, content, extra);
+    };
+    wire.fire.session("s1");
+    event("user_message", "go");
+    wire.fire.delta("reasoning", "first thoughts", 1);
+    wire.fire.delta("text", "first answ", 1);
+    check("round 1 streams two pending items", service.items.filter((item) => item.pending).length === 2);
+    event("user_message", "steer");
+    check(
+      "the steering message drops the withdrawn round's pending items",
+      !service.items.some((item) => item.pending),
+    );
+    wire.fire.delta("text", "second ", 2);
+    wire.fire.delta("text", "late", 1);
+    wire.fire.delta("reasoning", "late", 1);
+    check(
+      "a late chunk of the withdrawn round opens nothing",
+      !service.items.some((item) => item.reply === 1),
+    );
+    wire.fire.delta("text", "answer", 2);
+    event("agent_message", "second answer", { reply: 2 });
+    check("no pending item remains", !service.items.some((item) => item.pending));
+    const replayWire = makeWire();
+    const replayed = new AgentSessionService(replayWire);
+    replayWire.fire.session("s1");
+    for (const [kind, content, extra] of log) {
+      replayWire.fire.event(kind, content, extra);
+    }
+    check(
+      "a replay of the durable log gives the same items",
+      isDeepStrictEqual(replayed.items, service.items),
+    );
+    replayed.dispose();
     service.dispose();
   }
 
@@ -642,6 +706,29 @@ await assertNoLeaks(lifecycle, () => {
     service.dispose();
   }
 
+  {
+    // A steering message lands while a batch runs and one call fails: the
+    // rest of the batch still answers model calls.
+    const wire = makeWire();
+    const service = new AgentSessionService(wire);
+    wire.fire.session("s1");
+    wire.fire.awaiting();
+    service.respond("go");
+    wire.fire.event("user_message", "go");
+    wire.fire.event(
+      "tool_call",
+      '[{"id":"c1","name":"read","arguments":{}},{"id":"c2","name":"fetch","arguments":{}}]',
+      { reply: 0 },
+    );
+    service.respond("steer");
+    wire.fire.event("user_message", "steer");
+    wire.fire.error("Tool call failed in agent `chat`");
+    check("the failed call's error frame turns generating off", service.generating === false);
+    wire.fire.event("tool_call_update", "page body", { tool_call_id: "c2" });
+    check("a later result of the steered batch turns generating back on", service.generating === true);
+    service.dispose();
+  }
+
   // --- reconnecting: disconnect on, next acknowledgment off ------------------
 
   {
@@ -805,6 +892,8 @@ await assertNoLeaks(lifecycle, () => {
     wire.respondResult = true;
     wire.cancelResult = true;
     service.respond("go");
+    // Round 0 streamed before the Stop, so its later chunks are stragglers.
+    wire.fire.delta("text", "par", 0);
     service.cancelTurn();
     clock.now = 40;
     wire.fire.delta("reasoning", "late", 0);
@@ -880,6 +969,137 @@ await assertNoLeaks(lifecycle, () => {
       "a failed cancel does not end a new thought: the turn is not stopped",
       service.items[0].startedAt === 20 && service.items[0].endedAt === null,
     );
+    service.dispose();
+  }
+
+  // --- After Stop, a newer round means the agent went on with a queued message ---
+
+  {
+    const wire = makeWire();
+    const clock = { now: 10 };
+    const service = new AgentSessionService(wire, () => clock.now);
+    wire.fire.session("s1");
+    wire.fire.awaiting();
+    service.respond("go");
+    wire.fire.event("user_message", "go");
+    wire.fire.event("tool_call", '[{"id":"c1","name":"read","arguments":{}}]', { reply: 0 });
+    service.respond("then this");
+    wire.fire.event("user_message", "then this");
+    service.cancelTurn();
+    check("the cancel turns generating off", service.generating === false);
+    const seen = [];
+    service.onDidChangeGenerating((value) => seen.push(value));
+    const thought = () => service.items.find((item) => item.kind === "reasoning" && item.reply === 1);
+    clock.now = 100;
+    wire.fire.delta("reasoning", "on to the queued message", 1);
+    check("a newer round's chunk after the cancel turns generating on", service.generating === true);
+    check(
+      "its thought opens with its start, streaming",
+      thought()?.startedAt === 100 && thought()?.endedAt === null,
+    );
+    clock.now = 160;
+    wire.fire.event("agent_thought", "on to the queued message", { reply: 1 });
+    check(
+      "the durable thought keeps the round's start",
+      thought()?.pending === false && thought()?.startedAt === 100 && thought()?.endedAt === 160,
+    );
+    wire.fire.event("agent_message", "done", { reply: 1 });
+    check("the round's reply keeps the agent working", service.generating === true);
+    wire.fire.awaiting();
+    check(
+      "the next awaiting_input ends it",
+      service.generating === false && isDeepStrictEqual(seen, [true, false]),
+    );
+    service.dispose();
+  }
+
+  for (const kind of ["agent_thought", "agent_message", "tool_call"]) {
+    const wire = makeWire();
+    const service = new AgentSessionService(wire);
+    wire.fire.session("s1");
+    wire.fire.event("user_message", "go");
+    wire.fire.delta("text", "partial", 0);
+    service.cancelTurn();
+    wire.fire.event(kind, kind === "tool_call" ? "[]" : "late", { reply: 0 });
+    const afterOwn = service.generating;
+    wire.fire.event(kind, kind === "tool_call" ? "[]" : "next", { reply: 1 });
+    check(
+      `after Stop the stopped round's own ${kind} leaves generating off, and a newer round's turns it on`,
+      afterOwn === false && service.generating === true,
+    );
+    service.dispose();
+  }
+
+  {
+    // A round issued just before the Stop whose first chunk lands after it
+    // reads as a newer round: Stop comes back until the agent waits again.
+    const wire = makeWire();
+    const service = new AgentSessionService(wire);
+    wire.fire.session("s1");
+    wire.fire.awaiting();
+    service.respond("go");
+    wire.fire.event("user_message", "go");
+    wire.fire.event("tool_call", '[{"id":"c1","name":"read","arguments":{}}]', { reply: 0 });
+    wire.fire.event("tool_call_update", "body", { tool_call_id: "c1" });
+    service.cancelTurn();
+    wire.fire.delta("text", "late", 1);
+    check(
+      "a late first chunk of a round issued just before the Stop turns generating back on",
+      service.generating === true,
+    );
+    wire.fire.awaiting();
+    check("the agent waiting on its inbox ends it", service.generating === false);
+    service.dispose();
+  }
+
+  // --- The latest batch ends once its work is over ------------------------------
+
+  for (const end of ["awaiting_input", "run_ended"]) {
+    // A Stop drops the running search, which never gets a result.
+    const wire = makeWire();
+    const service = new AgentSessionService(wire);
+    wire.fire.session("s1");
+    wire.fire.event("user_message", "go");
+    wire.fire.event("tool_call", '[{"id":"c1","name":"read","arguments":{}}]', { reply: 0 });
+    wire.fire.event("tool_call_update", "body", { tool_call_id: "c1" });
+    wire.fire.event("tool_call", '[{"id":"c2","name":"search","arguments":{}}]', { reply: 1 });
+    const batches = () => service.items.filter((item) => item.kind === "tool-call");
+    const [earlier, latest] = batches();
+    check("a batch lands open, and a newer round alone ends none", earlier.ended === false && latest.ended === false);
+    service.cancelTurn();
+    let transcriptFires = 0;
+    service.onDidChangeTranscript(() => transcriptFires++);
+    wire.fire.event(end, "");
+    check(
+      `${end} after a Stop ends the latest batch by replacing its item, and announces it once`,
+      batches()[1].ended === true && batches()[1] !== latest && transcriptFires === 1,
+    );
+    check(`${end} leaves an earlier batch as it was`, batches()[0] === earlier);
+    wire.fire.event(end, "");
+    check(`a second ${end} finds the batch already ended`, transcriptFires === 1);
+    service.dispose();
+  }
+
+  {
+    // A message sent after Stop clears the stop, but the batch the stop cut
+    // still ends once the agent goes on with that message in a newer round.
+    const wire = makeWire();
+    const service = new AgentSessionService(wire);
+    wire.fire.session("s1");
+    wire.fire.awaiting();
+    service.respond("go");
+    wire.fire.event("user_message", "go");
+    wire.fire.event("tool_call", '[{"id":"c1","name":"search","arguments":{}}]', { reply: 0 });
+    const batches = () => service.items.filter((item) => item.kind === "tool-call");
+    service.cancelTurn();
+    service.respond("then this");
+    wire.fire.event("user_message", "then this");
+    wire.fire.event("agent_thought", "late", { reply: 0 });
+    check("the stopped round's own late frame leaves its batch open", batches()[0].ended === false);
+    wire.fire.delta("text", "on it", 1);
+    check("the newer round's first chunk ends the stopped batch", batches()[0].ended === true);
+    wire.fire.event("tool_call", '[{"id":"c2","name":"read","arguments":{}}]', { reply: 1 });
+    check("the newer round's own batch lands open", batches()[1].ended === false);
     service.dispose();
   }
 

@@ -8,20 +8,21 @@
 //! session streams [`AgentEventFrame`]s - the durable event log, each
 //! frame holding its log index, replayed from the top on attach - and
 //! [`AgentDeltaFrame`]s, the ephemeral live chunks, each stamped with the
-//! `reply` id of the durable event that will supersede it. The event log
-//! says when the agent waits on its empty inbox for the operator
+//! `reply` id of its round. The event log says when the agent waits on
+//! its empty inbox for the operator
 //! (`awaiting_input`), holds each message the operator sent
 //! (`user_message`), and closes with `run_ended` once the run ends, after
 //! which the run takes no more messages. `{"type":"cancel"}` fires the
 //! session's turn-cancel: cancellation is a stop reason, never an error -
-//! no error frame follows, and the agent's chat loop returns to waiting
-//! on its inbox.
+//! no error frame follows, and the agent's chat loop returns to its
+//! inbox, where it goes on with a message already queued and otherwise
+//! waits.
 //! Frames already in flight from the canceled round may still arrive
-//! after the cancel: a defined grace window, absorbed by the reply-id
-//! coalescing (the canceled round never settles, so its deltas fall to
-//! the round that eventually does), never a protocol violation. The
-//! three client requests parse as [`SessionRequest`]; the operator's
-//! message, `input_response`, stays in `workshop-protocol`.
+//! after the cancel: a defined grace window, never a protocol violation.
+//! The canceled round never settles, so the SPA drops its pending chunks
+//! once a later round settles. The three client requests parse as
+//! [`SessionRequest`]; the operator's message, `input_response`, stays in
+//! `workshop-protocol`.
 //!
 //! A session-level failure is pushed as an id-less
 //! [`ErrorFrame`](workshop_protocol::ErrorFrame): a model round that
@@ -372,9 +373,13 @@ pub(super) enum AgentDeltaKind {
 /// One live streaming chunk of an agent's model round:
 /// `{"type":"agent_delta","kind":"text","content":"...","reply":N}`.
 ///
-/// Every delta is stamped with the `reply` id of the durable event that
-/// will supersede it, so the SPA coalesces chunks by that id and replaces
-/// them when the event arrives (the ACP messageId chunk-vs-upsert rule).
+/// Every delta is stamped with the `reply` id of its round, the id the
+/// round's durable event carries, so the SPA coalesces chunks by that id
+/// and replaces them when the event arrives (the ACP messageId
+/// chunk-vs-upsert rule). A withdrawn round ends with no superseding
+/// event: a message that lands while a round streams withdraws it, and
+/// the reissued round streams under a new id, so the SPA drops the
+/// withdrawn round's chunks at that `user_message`.
 ///
 /// Delivery: ephemeral - deltas are sent on a bounded broadcast and may drop
 /// under lag; the completed-reply event is the repair path, which is why
@@ -388,13 +393,13 @@ pub(super) struct AgentDeltaFrame {
     channel: AgentDeltaKind,
     /// The chunk's text.
     content: String,
-    /// The id of the durable event that will supersede this delta.
+    /// The id of the delta's round.
     reply: u64,
 }
 
 impl AgentDeltaFrame {
     /// Builds a delta frame holding `content` on `channel`, stamped with
-    /// the superseding `reply` id.
+    /// its round's `reply` id.
     #[must_use]
     pub(super) fn new(channel: AgentDeltaKind, content: String, reply: u64) -> Self {
         Self {

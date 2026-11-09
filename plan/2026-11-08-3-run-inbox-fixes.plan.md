@@ -129,7 +129,7 @@ The language guide and the Rust docs say what the code does.
 
 ## The Workshop transcript and working state
 
-- A tool result joins the turn that holds its call, even when a steering message started a new turn in between. While the agent works, every call of the open batch that has no result shows as loading, whichever turn holds it, and the tail reads that call's label instead of "Planning next moves".
+- A tool result joins the turn that holds its call, even when a steering message started a new turn in between. While the agent works, every call of the open batch that has no result shows as loading, whichever turn holds it, and the tail reads that call's label instead of "Planning next moves". The open batch ends, and its calls without a result stop loading, once the agent waits on its inbox, its run ends, or a round newer than a sent cancel begins; the service marks that on the batch's item (`ToolCallItem.ended`).
 - A main-chain `user_message` that lands while a round streams drops that round's pending text and thought, and raises the late-chunk floor to that round, so its late chunks cannot reopen it. Each settle also drops the pending items of every earlier round.
 - After a sent cancel, a live chunk or a durable model event (`agent_thought`, `agent_message`, `tool_call`) from a round newer than any the UI saw before the cancel means the agent went on with a queued message. The UI shows it working again, with Stop.
 - A new session discards a dictation take only when it replaces an earlier session, not at a view's first acknowledgment.
@@ -379,9 +379,9 @@ pub use workshop_protocol::InputResponse;
 
 <step-6>
 
-6. **Workshop UI: steering in the transcript and the working state** (points: 8) - Keep the exported `buildTranscript` and `isToolLoading` (`crates/workshop/ui/src/parts/agent/transcript/tool-labels.ts` lines 79 to 87) and its `TurnState` as they are. In `crates/workshop/ui/src/parts/agent/transcript/transcript-model.ts`:
+6. [done] **Workshop UI: steering in the transcript and the working state** (points: 8) - Keep the exported `buildTranscript` and `isToolLoading` (`crates/workshop/ui/src/parts/agent/transcript/tool-labels.ts` lines 79 to 87) and its `TurnState` as they are. In `crates/workshop/ui/src/parts/agent/transcript/transcript-model.ts`:
    - Have `splitTurns` (lines 261 to 272) route a `tool-result` to the turn that holds its call, so `draftTurn`'s `waiting` map (lines 279 to 280 and 351 to 359) pairs it.
-   - The open batch is the transcript's latest `tool-call` item. Pass `{ last: true, generating }` for each of its calls that has no result, whichever turn holds it.
+   - The open batch is the transcript's latest `tool-call` item, unless its `ended` is set. Pass `{ last: true, generating }` for each of its calls that has no result, whichever turn holds it.
    - Let `tailStatus` (lines 491 to 535) read the open batch's loading call when the last turn has none.
    - Update the header rule (lines 12 to 13).
 
@@ -389,13 +389,14 @@ pub use workshop_protocol::InputResponse;
    - Let `answersModelCall` (lines 604 to 618) look past user items while the call has no result.
    - At a `user_message`, drop the pending reply and reasoning items of rounds above `settled` and raise `settled` to the highest of them. `foldDelta` (lines 489 to 525) then ignores their late chunks. Have `settle` (lines 543 to 561) also drop the pending items of every earlier round.
    - Remember the newest round seen when `cancelTurn` (lines 351 to 362) runs. After that, a delta or an `agent_thought`, `agent_message`, or `tool_call` from a newer round clears `stopped` and turns `generating` on, and a reasoning chunk of that round opens with its start time.
+   - Set the latest batch's `ended` (the fence below), by replacing its item, at `awaiting_input`, at `run_ended`, and when a round newer than a sent cancel begins.
 
    Fix the docs:
    - The `AgentCancelFrame` doc (`crates/workshop/ui/src/services/protocol.ts` lines 273 to 278), and the cancel and grace paragraphs of the `wire.rs` module doc (`crates/workshop/server/src/agents/wire.rs` lines 14 to 20): a stop lets the agent go on with a message already queued.
    - The `AgentDeltaFrame` doc (`wire.rs` lines 359 to 368): a withdrawn round ends with no superseding event.
    - The Stop comment at `crates/workshop/ui/src/parts/agent/agent-session-view.ts` lines 156 to 157.
 
-   In the view's session handler (`agent-session-view.ts` lines 176 to 184), discard a dictation take only when `this.sessionId` was already set, and update the header (lines 27 to 30). Tests:
+   In the view's session handler (`agent-session-view.ts` lines 176 to 184), discard a dictation take only when `this.sessionId` was already set, and update the header (lines 27 to 30). Fix the `Scheduler` method count that step 1 pushed past its allowance in `cargo test -p build-xtask` (`crates/build-xtask/src/type_size.rs`) by moving the private test helper `start_probe_chain` out of `Scheduler`, not by raising the allowance; that is this step's job as the final step. Tests:
    - In `crates/workshop/ui/test/transcript-model.mjs`, the items user, tool-call `c1`, user, tool-result `c1` attach the result to `c1`.
    - With user, tool-call `c1`, user while generating, `c1` shows loading and the tail reads its label.
    - In `crates/workshop/ui/test/agent-session-service.mjs`, take round 1's deltas, a `user_message`, then round 2's deltas and `agent_message`. No pending item remains, a late chunk of round 1 opens nothing, and a replay of the durable log gives the same items.
@@ -403,7 +404,29 @@ pub use workshop_protocol::InputResponse;
    - After `user_message`, `tool_call`, `user_message`, and `cancelTurn`, a newer round's delta turns `generating` on, with the thought keeping its start, and the next `awaiting_input` ends it.
    - A late chunk from a round issued just before the Stop turns Stop back on until `awaiting_input`; the test pins that.
    - In `crates/workshop/ui/test/agent-session-view.mjs`, Stop shows while that newer round streams.
+   - After a Stop drops a running call, the next `awaiting_input` ends its batch: on the following turn the call no longer shows loading and the tail does not name it. The same holds after `run_ended`, and after a round newer than a sent cancel begins.
    - In `crates/workshop/ui/test/agent-stt.mjs` (lines 724 to 736), a take started before the first acknowledgment survives it, and a real session replacement discards it.
-   - Score: Other changes: pairing a result with its open call across turns, loading, and the tail 3, dropping a cut round and raising the floor 1, restarting the working state after Stop on a newer round 3, the dictation discard 1, the docs 0.
+   - Score: `ToolCallItem` 0 (`ended`, scored with the loading rule). Other changes: pairing a result with its open call across turns, loading, and the tail 3, dropping a cut round and raising the floor 1, restarting the working state after Stop on a newer round 3, the dictation discard 1, the `Scheduler` method count 0, the docs 0.
+
+`crates/workshop/ui/src/services/agent-session.ts`
+
+```ts
+/** A batch of tool calls the model requested, one
+ * row per call. */
+export interface ToolCallItem {
+  // the other fields are unchanged
+  /** False as the batch lands, and true once its
+   * work is over: the agent waited on its inbox,
+   * its run ended, or a round newer than a sent
+   * cancel began. The service sets it by replacing
+   * the latest batch's item. An ended batch is not
+   * the open batch, so its calls without a result
+   * stop loading. */
+  readonly ended: boolean;
+}
+// changed, was: no `ended`
+// callers:
+// crates/workshop/ui/src/services/agent-session.ts (2)
+```
 
 </step-6>

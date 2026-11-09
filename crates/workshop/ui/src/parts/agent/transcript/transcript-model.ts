@@ -9,8 +9,12 @@
 //
 // The rules live here, in this order:
 //
-// - Turns: a user item starts a turn; a tool result attaches to its call
-//   by id within its turn and never becomes a row.
+// - Turns: a user item starts a turn; a tool result joins the turn that
+//   holds its call, even when a steering message started a later turn,
+//   attaches to that call by id, and never becomes a row. The open batch,
+//   the latest tool-call item unless it has ended, loads as the last
+//   turn's calls do, whichever turn holds it, and an ended batch's calls
+//   never load.
 // - Grouping: reasoning items and tool calls gather into an open group; a
 //   reply, a user item, or an error closes it; ask-tool calls always
 //   stand alone. A closed group with one tool call and nothing else is a
@@ -244,6 +248,10 @@ interface ToolDraft {
   readonly key: string;
   readonly call: ToolCallRow;
   readonly family: ToolKind;
+  /** True for a call of the open batch, the transcript's latest tool-call item unless it has ended. */
+  readonly open: boolean;
+  /** True for a call of an ended batch, which gets no more results. */
+  readonly ended: boolean;
   result: string | null;
 }
 
@@ -257,22 +265,55 @@ type RowDraft =
   | { readonly row: "flow"; readonly steps: readonly StepDraft[] }
   | { readonly row: "ask"; readonly draft: ToolDraft };
 
-/** Splits items into turns: a user item starts each, and the items before the first form their own. */
+/**
+ * Splits items into turns: a user item starts each, and the items before
+ * the first form their own. A tool result joins the turn holding the
+ * latest call with its id, since a steering message can start a turn
+ * while the call runs.
+ */
 function splitTurns(items: readonly TranscriptItem[]): Entry[][] {
   const turns: Entry[][] = [];
+  // The turn holding the latest call per id.
+  const holders = new Map<string, Entry[]>();
   let current: Entry[] | null = null;
   for (const [index, item] of items.entries()) {
     if (item.kind === "user" || current === null) {
       current = [];
       turns.push(current);
     }
-    current.push({ item, index });
+    if (item.kind === "tool-call") {
+      for (const call of item.calls) {
+        if (call.id !== "") {
+          holders.set(call.id, current);
+        }
+      }
+    }
+    const holder =
+      item.kind === "tool-result" && item.toolCallId !== null ? holders.get(item.toolCallId) : undefined;
+    (holder ?? current).push({ item, index });
   }
   return turns;
 }
 
-/** Gathers one turn's entries into row drafts, attaching results to calls. */
-function draftTurn(turn: number, entries: readonly Entry[]): RowDraft[] {
+/**
+ * The index of the open batch, the latest tool-call item unless it has
+ * ended, or -1 when there is none.
+ */
+function openBatchIndex(items: readonly TranscriptItem[]): number {
+  for (let index = items.length - 1; index >= 0; index--) {
+    const item = items[index];
+    if (item?.kind === "tool-call") {
+      return item.ended ? -1 : index;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Gathers one turn's entries into row drafts, attaching results to calls
+ * and marking the calls of the item at `openBatch`.
+ */
+function draftTurn(turn: number, entries: readonly Entry[], openBatch: number): RowDraft[] {
   const drafts: RowDraft[] = [];
   let open: StepDraft[] = [];
   const used = new Set<string>();
@@ -333,6 +374,8 @@ function draftTurn(turn: number, entries: readonly Entry[]): RowDraft[] {
             key: claim(call.id === "" ? `c:${turn}:${slot}` : `c:${turn}:${call.id}`, slot),
             call,
             family: toolKind(qualifiedTool(call)),
+            open: index === openBatch,
+            ended: item.ended,
             result: null,
           };
           if (call.id !== "") {
@@ -368,7 +411,10 @@ function draftTurn(turn: number, entries: readonly Entry[]): RowDraft[] {
 }
 
 function toolStep(draft: ToolDraft, state: TurnState): ToolStep {
-  const loading = isToolLoading(draft.family, draft.result !== null, state);
+  // A steering message can start a later turn while the open batch runs,
+  // and an ended batch's calls get no more results.
+  const turn: TurnState = draft.open ? { last: true, generating: state.generating } : state;
+  const loading = !draft.ended && isToolLoading(draft.family, draft.result !== null, turn);
   return {
     step: "tool",
     key: draft.key,
@@ -478,6 +524,36 @@ function makeTail(kind: TailKind, action: string, inGroup: boolean, rest: Partia
   };
 }
 
+function toolTail(step: ToolStep, inGroup: boolean): TailStatus {
+  return makeTail("tool", step.label.action, inGroup, {
+    details: step.label.details,
+    callName: step.label.callName,
+  });
+}
+
+/**
+ * The newest loading call in the turns before the last. Only the open
+ * batch's calls load outside the last turn, so this is the open batch's
+ * running call when a steering message started a turn after it.
+ */
+function runningBefore(turns: readonly TranscriptTurn[]): ToolStep | null {
+  for (let number = turns.length - 2; number >= 0; number--) {
+    const rows = turns[number]?.rows ?? [];
+    for (let index = rows.length - 1; index >= 0; index--) {
+      const row = rows[index];
+      const steps: readonly GroupStep[] =
+        row?.kind === "group" ? row.steps : row?.kind === "tool" ? [row.step] : [];
+      for (let at = steps.length - 1; at >= 0; at--) {
+        const step = steps[at];
+        if (step?.step === "tool" && step.loading) {
+          return step;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * The status line under the last turn. None when nothing is generating
  * or the last row is streaming assistant text (the text is the status).
@@ -485,14 +561,17 @@ function makeTail(kind: TailKind, action: string, inGroup: boolean, rest: Partia
  * the rows don't already show: a running tool inside a group gives its
  * loading verb and details, streaming thinking inside a group gives
  * "Thinking" - and a standalone tool row or a thought row already
- * shimmers on its own, so the tail stays out of its way. With no
- * activity at all it plans.
+ * shimmers on its own, so the tail stays out of its way. When the last
+ * turn has no loading call, the open batch's running call in an earlier
+ * turn gives its loading verb and details. With no activity at all it
+ * plans.
  */
 function tailStatus(
-  turn: TranscriptTurn | undefined,
+  turns: readonly TranscriptTurn[],
   generating: boolean,
   reconnecting: boolean,
 ): TailStatus | null {
+  const turn = turns[turns.length - 1];
   if (!generating || turn === undefined) {
     return null;
   }
@@ -520,16 +599,17 @@ function tailStatus(
       for (let at = row.steps.length - 1; at >= 0; at--) {
         const step = row.steps[at];
         if (step?.step === "tool" && step.loading) {
-          return makeTail("tool", step.label.action, inGroup, {
-            details: step.label.details,
-            callName: step.label.callName,
-          });
+          return toolTail(step, inGroup);
         }
         if (step?.step === "thought" && step.streaming) {
           return makeTail("thinking", "Thinking", inGroup);
         }
       }
     }
+  }
+  const running = runningBefore(turns);
+  if (running !== null) {
+    return toolTail(running, inGroup);
   }
   return makeTail("planning", "Planning next moves", inGroup);
 }
@@ -545,13 +625,14 @@ export function buildTranscript(
   reconnecting: boolean,
 ): TranscriptModel {
   const split = splitTurns(items);
+  const openBatch = openBatchIndex(items);
   const turns = split.map((entries, number): TranscriptTurn => {
     const first = entries[0];
     const state: TurnState = { last: number === split.length - 1, generating };
     return {
       key: first?.item.kind === "user" ? `u:${first.index}` : "u:start",
-      rows: finishTurn(draftTurn(number, entries), state),
+      rows: finishTurn(draftTurn(number, entries, openBatch), state),
     };
   });
-  return { turns, tail: tailStatus(turns[turns.length - 1], generating, reconnecting) };
+  return { turns, tail: tailStatus(turns, generating, reconnecting) };
 }

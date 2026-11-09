@@ -5,9 +5,11 @@
 // derived from the durable event stream plus the ephemeral deltas:
 // deltas coalesce into pending items keyed by the reply id stamped on
 // every chunk, and the durable event stamped with that id replaces them (the
-// ACP chunk-vs-upsert rule the wire layer documents). Views subscribe to
-// the change events and read the snapshots; nothing here touches the
-// DOM.
+// ACP chunk-vs-upsert rule the wire layer documents). A round that never
+// gets that event, one the operator's message withdrew or a stop cut
+// short, loses its pending items at that message or once a later round
+// settles. Views subscribe to the change events and read the snapshots;
+// nothing here touches the DOM.
 //
 // Beyond the items, the service keeps the turn's liveness: `generating`
 // (the agent is working, so the composer offers stop over an empty box and
@@ -18,8 +20,12 @@
 // agent waiting on its inbox ends the working state and the operator's
 // message starts it again, both read from the durable log, so a replayed
 // log ends in the right state; the run's end (`run_ended`) turns off both
-// the working state and `started`. The clock is injectable so tests stamp
-// exact durations.
+// the working state and `started`. After a sent cancel, a frame from a
+// round newer than any seen before it means the agent went on with a
+// message already queued, so the working state comes back. The wait, the
+// run's end, and that newer round also end the latest tool-call batch,
+// since a stop can leave a call without a result for good. The clock is
+// injectable so tests stamp exact durations.
 
 import { Emitter, type Event } from "@workshop/platform/event";
 import { Disposable } from "@workshop/platform/lifecycle";
@@ -117,6 +123,14 @@ export interface ToolCallItem {
   /** The raw batch content: the fallback when the JSON did not parse. */
   readonly text: string;
   readonly model: string | null;
+  /**
+   * False as the batch lands, and true once its work is over: the agent
+   * waited on its inbox, its run ended, or a round newer than a sent
+   * cancel began. The service sets it by replacing the latest batch's
+   * item. An ended batch is not the open batch, so its calls without a
+   * result stop loading.
+   */
+  readonly ended: boolean;
 }
 
 /** The result of one dispatched tool call. */
@@ -202,20 +216,33 @@ export class AgentSessionService extends Disposable {
   private acknowledged: AgentSessionFrame | null = null;
   private transcript: TranscriptItem[] = [];
   /**
-   * The highest reply id a durable `agent_message` or `tool_call` event
-   * has settled. Deltas at or below it are late chunks from the cancel
-   * grace window; folding them in would open a pending item nothing will
-   * ever supersede.
+   * The highest reply id settled: by its durable `agent_message` or
+   * `tool_call` event, or by the operator's message, which withdraws the
+   * round that streams as it lands. Deltas at or below it are late chunks
+   * (the cancel grace window's among them); folding them in would open a
+   * pending item nothing will ever supersede.
    */
   private settled = -1;
   /**
    * True from a sent cancel until the turn's work restarts or ends (a
-   * message, the agent waiting on its inbox, the run's end, or a session
-   * acknowledgment). A reasoning chunk that arrives in that window is a
-   * late straggler from the cancel grace period; it opens already ended,
-   * so the thought never reads as streaming under an idle composer.
+   * message, a frame from a round newer than `stopRound`, the agent
+   * waiting on its inbox, the run's end, or a session acknowledgment). A
+   * reasoning chunk that arrives in that window is a late straggler from
+   * the cancel grace period; it opens already ended, so the thought never
+   * reads as streaming under an idle composer.
    */
   private stopped = false;
+  /** The newest round a delta or a model-round event has named. */
+  private newest = -1;
+  /** `newest` when the last cancel was sent. */
+  private stopRound = -1;
+  /**
+   * True from a sent cancel until the latest batch ends. The stop drops a
+   * running call, which then never gets a result, so the first frame from
+   * a round newer than `stopRound` ends the batch, even after a message
+   * cleared `stopped`.
+   */
+  private batchStopped = false;
   private begun = false;
   private working = false;
   /**
@@ -309,11 +336,12 @@ export class AgentSessionService extends Disposable {
 
   /**
    * True while the agent is working: on after a send, at the operator's
-   * message in the log, and at an answered model tool call; off when the
-   * agent waits on its inbox, its run ends, an error arrives, or a cancel
-   * is sent. A reply alone leaves it on, since a message that lands as the
-   * reply does makes the agent go on. A same-session reattach before a
-   * send's echo returns it to what the log left.
+   * message in the log, at an answered model tool call, and after a
+   * cancel at a frame from a round newer than any seen before it; off
+   * when the agent waits on its inbox, its run ends, an error arrives, or
+   * a cancel is sent. A reply alone leaves it on, since a message that
+   * lands as the reply does makes the agent go on. A same-session reattach
+   * before a send's echo returns it to what the log left.
    */
   get generating(): boolean {
     return this.working;
@@ -364,14 +392,21 @@ export class AgentSessionService extends Disposable {
    * Cancels the running turn. The server answers a cancel with nothing -
    * cancellation is a stop reason, not an error - so after a successful
    * send the service settles its own view: `generating` turns off and any
-   * open thinking ends. False when the socket is down, with nothing
-   * changed.
+   * open thinking ends. The agent goes on with a message already queued,
+   * so a frame from a round newer than any seen before the cancel turns
+   * `generating` back on; so does the first frame of a round issued just
+   * before the cancel, which reads the same. The first such frame also
+   * ends the latest batch, whose running calls the stop dropped, even
+   * when a message sent since already turned `generating` on. False when
+   * the socket is down, with nothing changed.
    */
   cancelTurn(): boolean {
     if (!this.wire.cancelTurn()) {
       return false;
     }
     this.stopped = true;
+    this.stopRound = this.newest;
+    this.batchStopped = true;
     const closed = this.closeThinking(null);
     this.setGenerating(false);
     if (closed) {
@@ -399,6 +434,8 @@ export class AgentSessionService extends Disposable {
     if (changedSession) {
       this.transcript = [];
       this.settled = -1;
+      this.newest = -1;
+      this.batchStopped = false;
       this.unechoed = false;
       this.setLogWorking(false);
       this.setStarted(false);
@@ -422,30 +459,39 @@ export class AgentSessionService extends Disposable {
     switch (event.kind) {
       case "awaiting_input": {
         // The agent waits on its empty inbox for the operator: no thinking
-        // is still running, nothing is generating until a message lands,
-        // and the cancel grace window is over.
+        // is still running, the latest batch's work is over, nothing is
+        // generating until a message lands, and the cancel grace window is
+        // over.
         const closed = this.closeThinking(null);
+        const ended = this.endBatch();
         this.stopped = false;
+        this.batchStopped = false;
         this.setLogWorking(false);
-        if (closed) {
+        if (closed || ended) {
           this._onDidChangeTranscript.fire();
         }
         return;
       }
       case "run_ended": {
         // The run ended and takes no more messages: no thinking is still
-        // running, nothing is generating, and the cancel grace window is
-        // over.
+        // running, the latest batch's work is over, nothing is generating,
+        // and the cancel grace window is over.
         const closed = this.closeThinking(null);
+        const ended = this.endBatch();
         this.stopped = false;
+        this.batchStopped = false;
         this.setLogWorking(false);
         this.setStarted(false);
-        if (closed) {
+        if (closed || ended) {
           this._onDidChangeTranscript.fire();
         }
         return;
       }
       case "user_message": {
+        // The message withdraws the round that streams as it lands, and
+        // the reissue streams under a new id, so nothing else settles the
+        // withdrawn round.
+        this.settle(this.highestPending());
         this.transcript.push({ kind: "user", text: event.content });
         // The operator's message sets the agent working, live or replayed,
         // and echoes a sent one.
@@ -455,6 +501,7 @@ export class AgentSessionService extends Disposable {
         break;
       }
       case "agent_message": {
+        this.noteRound(reply);
         this.settle(reply);
         this.transcript.push({
           kind: "reply",
@@ -474,6 +521,7 @@ export class AgentSessionService extends Disposable {
         // durable item inherits the pending item's clock; a round that
         // never streamed text (a tool-call round) has no text delta to
         // end its thinking, so the durable thought ends it.
+        this.noteRound(reply);
         const pending = this.pendingReasoning(reply);
         const startedAt = pending?.startedAt ?? null;
         const endedAt = pending?.endedAt ?? (startedAt === null ? null : this.now());
@@ -490,19 +538,21 @@ export class AgentSessionService extends Disposable {
         break;
       }
       case "tool_call": {
+        this.noteRound(reply);
         this.settle(reply);
         this.transcript.push({
           kind: "tool-call",
           calls: parseToolCalls(event.content),
           text: event.content,
           model: event.model ?? null,
+          ended: false,
         });
         break;
       }
       case "tool_call_update": {
         // An answered model call means the agent has its result and is
-        // working again. Checked before the result lands so the scan reads
-        // only the calls.
+        // working again. Checked before the result lands, so only earlier
+        // results count as a call's answer.
         const toolCallId = event.tool_call_id ?? null;
         if (toolCallId !== null && this.answersModelCall(toolCallId)) {
           this.setLogWorking(true);
@@ -534,9 +584,10 @@ export class AgentSessionService extends Disposable {
     // A live chunk is the session's run reporting, so it has begun.
     this.setStarted(true);
     if (frame.reply <= this.settled) {
-      // A late chunk whose durable superseder already rendered.
+      // A late chunk of a round already settled or withdrawn.
       return;
     }
+    this.noteRound(frame.reply);
     const kind: StreamKind = frame.kind === "reasoning" ? "reasoning" : "reply";
     if (kind === "reply") {
       this.closeThinking(frame.reply);
@@ -583,14 +634,79 @@ export class AgentSessionService extends Disposable {
   /**
    * Marks a round settled by its durable reply or tool-call event: both
    * channels' pending items die, superseded by the event that follows.
+   * So do every earlier round's, such as a round a stop cut short, which
+   * nothing else settles.
    */
   private settle(reply: number | null): void {
     if (reply === null) {
       return;
     }
     this.settled = Math.max(this.settled, reply);
-    this.dropPending(reply, "reply");
-    this.dropPending(reply, "reasoning");
+    for (let index = this.transcript.length - 1; index >= 0; index--) {
+      const item = this.transcript[index];
+      if (
+        (item?.kind === "reply" || item?.kind === "reasoning") &&
+        item.pending &&
+        item.reply !== null &&
+        item.reply <= reply
+      ) {
+        this.transcript.splice(index, 1);
+      }
+    }
+  }
+
+  /** The highest round with a pending item, or null when none is pending. */
+  private highestPending(): number | null {
+    let highest: number | null = null;
+    for (const item of this.transcript) {
+      if ((item.kind === "reply" || item.kind === "reasoning") && item.pending && item.reply !== null) {
+        highest = highest === null ? item.reply : Math.max(highest, item.reply);
+      }
+    }
+    return highest;
+  }
+
+  /**
+   * Notes a frame from round `reply`. A round newer than any seen before
+   * the last cancel means the agent went on with a message: its first
+   * frame ends the latest batch, whose running calls the stop dropped,
+   * and while the cancel stands the stop ends and the agent is working
+   * again. The caller owns announcing the transcript change.
+   */
+  private noteRound(reply: number | null): void {
+    if (reply === null) {
+      return;
+    }
+    if (reply > this.stopRound) {
+      if (this.batchStopped) {
+        this.batchStopped = false;
+        this.endBatch();
+      }
+      if (this.stopped) {
+        this.stopped = false;
+        this.setGenerating(true);
+      }
+    }
+    this.newest = Math.max(this.newest, reply);
+  }
+
+  /**
+   * Ends the latest batch by replacing its item, unless it has already
+   * ended. Returns whether anything changed; the caller owns announcing
+   * it.
+   */
+  private endBatch(): boolean {
+    for (let index = this.transcript.length - 1; index >= 0; index--) {
+      const item = this.transcript[index];
+      if (item?.kind === "tool-call") {
+        if (item.ended) {
+          return false;
+        }
+        this.transcript[index] = { ...item, ended: true };
+        return true;
+      }
+    }
+    return false;
   }
 
   /** Removes the pending item for one round's channel, if it is open. */
@@ -640,21 +756,22 @@ export class AgentSessionService extends Disposable {
   }
 
   /**
-   * True when `toolCallId` names a call of a model tool-call batch in the
-   * current turn: the scan runs back from the tail and stops at the
-   * turn's user item, because providers recycle ids like `call_1` across
-   * turns.
+   * True when `toolCallId` names a call of a model tool-call batch. The
+   * scan runs back from the tail through the current turn, and past its
+   * user items only to a call that has no result yet: a steering message
+   * can land while the batch runs, and providers recycle ids like
+   * `call_1` across turns.
    */
   private answersModelCall(toolCallId: string): boolean {
-    for (let index = this.transcript.length - 1; index >= 0; index--) {
+    let pastUser = false;
+    let answered = false;
+    for (let index = this.transcript.length - 1; index >= 0 && !(pastUser && answered); index--) {
       const item = this.transcript[index];
-      if (item === undefined) {
-        continue;
-      }
-      if (item.kind === "user") {
-        return false;
-      }
-      if (item.kind === "tool-call" && item.calls.some((call) => call.id === toolCallId)) {
+      if (item?.kind === "user") {
+        pastUser = true;
+      } else if (item?.kind === "tool-result" && item.toolCallId === toolCallId) {
+        answered = true;
+      } else if (item?.kind === "tool-call" && item.calls.some((call) => call.id === toolCallId)) {
         return true;
       }
     }
