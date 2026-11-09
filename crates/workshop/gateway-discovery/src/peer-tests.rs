@@ -3,8 +3,7 @@ use std::path::{Path, PathBuf};
 
 use super::{
     GATEWAY_BUNDLE_NAME, Layout, WORKSHOP_APPIMAGE_NAME, WORKSHOP_BUNDLE_NAME, app_bundle,
-    bundle_exe, first_file, gateway_candidates, installed_gateway, running_appimage,
-    translocated,
+    bundle_exe, first_file, gateway_candidates, installed_gateway, running_appimage, translocated,
 };
 
 /// Plants an empty executable file at `root/relative`, creating its

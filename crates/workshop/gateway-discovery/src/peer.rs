@@ -76,7 +76,6 @@ impl Layout {
             Self::MacOs | Self::Linux => "runvil-gateway",
         }
     }
-
 }
 
 /// The AppImage Workshop runs from, given its `$APPIMAGE` and `$APPDIR`.

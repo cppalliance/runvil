@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 use workshop_server_api::discovery::GatewayDiscoveryFile;
 
 use super::{
-    dead_pid, exe_dir, fixture_gateway, installed_in, live_file, owned_candidate,
-    probe_own_image, probe_read_failure,
+    dead_pid, exe_dir, fixture_gateway, installed_in, live_file, owned_candidate, probe_own_image,
+    probe_read_failure,
 };
 #[cfg(windows)]
 use crate::gateway::boot::spawn_detached_windows_with;
@@ -230,7 +230,12 @@ fn a_resolve_error_still_launches_the_sibling_exe() {
     let run = tempfile::TempDir::new().expect("tempdir");
     let (_exe, exe_dir) = exe_dir(true);
 
-    let plan = plan_gateway(run.path(), installed_in(&exe_dir), false, probe_read_failure);
+    let plan = plan_gateway(
+        run.path(),
+        installed_in(&exe_dir),
+        false,
+        probe_read_failure,
+    );
     assert!(
         matches!(plan, GatewayPlan::Launch(_)),
         "a discovery error must not read as no-gateway: {plan:?}"
