@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Installer>
+    <Name>Runvil</Name>
+    <Version>{{VERSION}}</Version>
+    <Title>Runvil {{VERSION}}</Title>
+    <Publisher>The C++ Alliance, Inc.</Publisher>
+    <ProductUrl>https://github.com/cppalliance/runvil</ProductUrl>
+    <TargetDir>{{TARGET_DIR}}</TargetDir>
+    <WizardStyle>Modern</WizardStyle>
+    <WizardShowPageList>false</WizardShowPageList>
+    <WizardDefaultWidth>720</WizardDefaultWidth>
+    <WizardDefaultHeight>540</WizardDefaultHeight>
+    <Logo>installer-logo.png</Logo>
+    <Watermark>installer-watermark.png</Watermark>
+    <InstallerApplicationIcon>icon</InstallerApplicationIcon>
+    <InstallerWindowIcon>icon.png</InstallerWindowIcon>
+    <DisableAuthorizationFallback>true</DisableAuthorizationFallback>
+</Installer>

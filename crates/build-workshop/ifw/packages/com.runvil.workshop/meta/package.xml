@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package>
+    <DisplayName>Runvil Workshop</DisplayName>
+    <Description>The desktop app for writing and running prompts. Without the Gateway component it uses the gateway its configuration names.</Description>
+    <Version>{{VERSION}}</Version>
+    <ReleaseDate>{{RELEASE_DATE}}</ReleaseDate>
+    <Default>true</Default>
+    <SortingPriority>300</SortingPriority>
+    <Licenses>
+        <License name="Boost Software License 1.0" file="LICENSE.txt"/>
+    </Licenses>
+    <Script>installscript.qs</Script>
+</Package>

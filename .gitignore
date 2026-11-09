@@ -19,7 +19,8 @@
 /crates/gateway/config-ui/ui/dist/
 # tauri-build's generated ACL schemas, regenerated on every workshop build.
 /crates/workshop/desktop/gen/
-# The gateway sidecar staged for bundle.externalBin by CI before
-# `tauri build` (crates/workshop/desktop/tauri.conf.json); a build artifact.
+# The Windows gateway sidecar staged for bundle.externalBin before
+# `tauri build` (crates/workshop/desktop/tauri.windows.conf.json); a build
+# artifact.
 /crates/workshop/desktop/binaries/
 /plan-dist-manifest.json

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package>
+    <DisplayName>Runvil Gateway</DisplayName>
+    <Description>The local gateway that serves models to Workshop and other clients, with its tray icon and Settings page. It writes its default configuration, which includes speech to text, the first time it starts.</Description>
+    <Version>{{VERSION}}</Version>
+    <ReleaseDate>{{RELEASE_DATE}}</ReleaseDate>
+    <Default>true</Default>
+    <SortingPriority>200</SortingPriority>
+    <Licenses>
+        <License name="Boost Software License 1.0" file="LICENSE.txt"/>
+    </Licenses>
+    <Script>installscript.qs</Script>
+</Package>

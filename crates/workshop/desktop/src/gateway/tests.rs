@@ -191,13 +191,26 @@ fn get(url: &str, path: &str) -> String {
     response
 }
 
-/// An executable directory, with or without the sibling Gateway.
+/// An executable directory, with or without the Gateway beside Workshop.
 fn exe_dir(with_gateway: bool) -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::TempDir::new().expect("tempdir");
     if with_gateway {
-        std::fs::write(dir.path().join(gateway_boot::GATEWAY_EXE_NAME), b"")
-            .expect("plant the sibling exe");
+        let exe = dir.path().join(gateway_boot::GATEWAY_EXE_NAME);
+        std::fs::write(&exe, b"").expect("plant the sibling exe");
+        // The installed-Gateway lookup skips a file it cannot run.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755))
+                .expect("mark the sibling exe executable");
+        }
     }
     let path = dir.path().to_owned();
     (dir, path)
+}
+
+/// The Gateway the installed-Gateway lookup finds for a Workshop running
+/// from `exe_dir`.
+fn installed_in(exe_dir: &Path) -> Option<PathBuf> {
+    workshop_server_api::discovery::installed_gateway(&exe_dir.join("runvil-workshop"), None)
 }

@@ -23,6 +23,8 @@ import type { ParseError } from "@workshop/platform/context-key-expr";
 import type { Result } from "../../services/error-catalog";
 import { KeybindingsRegistry } from "@workshop/platform/keybinding-registry";
 import { MenuId } from "@workshop/platform/menu-registry";
+import { getServiceOrNull } from "@workshop/platform/service-registry";
+import { UPDATES } from "../../services/update-service";
 import { showAboutDialog } from "./about-dialog";
 import { closeWindow, toggleFullScreen } from "./window-chrome";
 import { resetZoom, zoomIn, zoomOut } from "./zoom";
@@ -118,7 +120,7 @@ addAction({
   f1: true,
   menu: [{ id: MenuId.MenubarHelpMenu, group: "z_about" }],
   run: () => {
-    showAboutDialog();
+    showAboutDialog(getServiceOrNull(UPDATES) ?? undefined);
   },
 });
 

@@ -1,110 +1,151 @@
 //! The build pipeline: host discovery, product builds, sidecar staging, and cleanup.
 
 use std::ffi::OsString;
+use std::fs;
 use std::io;
-use std::path::PathBuf;
+use std::path::Path;
 
+use super::args::valid_target_triple;
+use super::sidecar::{self, GatewaySource};
 use super::{
-    BuildEnvironment, BuildError, BuildRequest, CancelPolicy, CommandRunner, CommandSpec,
-    GATEWAY_SIDECAR_VARIABLE, OutputMode, Profile, StepError, valid_target_triple,
+    BuildEnvironment, BuildError, BuildRequest, CommandRunner, CommandSpec, OutputMode, Profile,
+    StepError,
 };
-
-/// Where the staged Gateway sidecar comes from this run.
-#[derive(Debug, PartialEq, Eq)]
-pub(super) enum GatewaySource {
-    /// Stage the binary at this path: `--gateway-binary`, or the
-    /// `RUNVIL_GATEWAY_SIDECAR` environment variable a CI job sets.
-    Given(PathBuf),
-    /// A sidecar file is already in place; use it untouched. Nothing is
-    /// staged or removed, so a downloaded or hand-staged Gateway
-    /// survives the run and the next `cargo workshop` reuses it too.
-    ///
-    /// The flag is true when that file is a compile-only stub, so the run
-    /// says so instead of quietly producing an app with no Gateway.
-    Staged { stub: bool },
-    /// No sidecar is staged and none was named. The Gateway is its own
-    /// product in `cppalliance/runvil-gateway`, so there is nothing here
-    /// to build: the run stops and names the fetch script.
-    Missing,
-}
 
 pub(super) fn build_workshop(
     request: &BuildRequest,
     environment: &BuildEnvironment,
     runner: &mut impl CommandRunner,
 ) -> Result<(), BuildError> {
-    let target = match &request.target {
-        Some(target) => target.clone(),
-        None => discover_host_target(environment, runner).map_err(|error| BuildError {
-            primary: error.message,
-            cleanup: None,
-        })?,
-    };
-    let source = gateway_source(request, environment, &target);
-    if let GatewaySource::Staged { stub: true } = &source {
+    let target = resolve_target(request.target.as_deref(), environment, runner)?;
+    let given = request
+        .gateway_binary
+        .as_deref()
+        .or(environment.gateway_sidecar.as_deref());
+    let source = sidecar::gateway_source(given, &environment.workspace_root, &target)
+        .map_err(StepError::failed)?;
+    if source == (GatewaySource::Staged { stub: true }) {
         eprintln!(
-            "warning: reusing a compile-only stub Gateway at {}; it cannot run. \
-             Run `node tools/fetch-gateway-sidecar.mjs --target {target}` for a real one, \
-             or pass --gateway-binary.",
-            sidecar_path(environment, &target).display()
+            "warning: the Gateway staged at {} is a compile-only stub and cannot run; run \
+             `node tools/fetch-gateway-sidecar.mjs --target {target}` for the pinned release, \
+             or pass --gateway-binary",
+            sidecar::sidecar_path(&environment.workspace_root, &target).display()
         );
     }
-    let mut staging_started = false;
-    let primary = build_products(
-        request,
-        &target,
-        &source,
+    with_staged_sidecar(
         environment,
+        &target,
         runner,
-        &mut staging_started,
+        "Workshop build",
+        &source,
+        |runner| {
+            run_checked(
+                runner,
+                &cargo_build_command(environment, request, "workshop"),
+                "Workshop build",
+            )?;
+            if sidecar::bundles_sidecar(&target) {
+                return Ok(());
+            }
+            // Workshop finds the Gateway beside its own executable in a
+            // development tree, as tauri-build arranges on Windows.
+            let mut beside = environment.target_root.clone();
+            if request.target.is_some() {
+                beside.push(&target);
+            }
+            beside.push(request.profile.directory());
+            beside.push(sidecar::gateway_binary_name(&target));
+            let gateway = source.binary(&environment.workspace_root, &target);
+            // Copying a file onto itself would truncate it.
+            if fs::canonicalize(&gateway).ok() == fs::canonicalize(&beside).ok() && beside.exists()
+            {
+                return Ok(());
+            }
+            fs::copy(&gateway, &beside).map(|_| ()).map_err(|error| {
+                StepError::failed(format!(
+                    "cannot copy the Gateway {} beside Workshop at {}: {error}",
+                    gateway.display(),
+                    beside.display()
+                ))
+            })
+        },
+    )
+}
+
+pub(super) fn resolve_target(
+    target: Option<&str>,
+    environment: &BuildEnvironment,
+    runner: &mut impl CommandRunner,
+) -> Result<String, BuildError> {
+    match target {
+        Some(target) => Ok(target.to_owned()),
+        None => discover_host_target(environment, runner).map_err(BuildError::from),
+    }
+}
+
+/// Runs `build_workshop` (named `workshop_label` in diagnostics). For a
+/// target whose Workshop bundle carries the Gateway and a `source` that
+/// names a binary, it stages that binary as the Tauri sidecar first and
+/// removes it whatever happened, unless a cancel arrived before
+/// anything was staged. A Gateway already staged is used in place and left
+/// there.
+pub(super) fn with_staged_sidecar<R: CommandRunner>(
+    environment: &BuildEnvironment,
+    target: &str,
+    runner: &mut R,
+    workshop_label: &str,
+    source: &GatewaySource,
+    build_workshop: impl FnOnce(&mut R) -> Result<(), StepError>,
+) -> Result<(), BuildError> {
+    let given = match source {
+        GatewaySource::Given(path) if sidecar::bundles_sidecar(target) => path,
+        _ => {
+            build_workshop(runner)?;
+            if runner.cancel_observed() {
+                return Err(canceled_after_completion(workshop_label).into());
+            }
+            return Ok(());
+        }
+    };
+    // Staging over a downloaded Gateway, then removing it, would lose the
+    // download and leave its marker behind.
+    let slot = sidecar::sidecar_path(&environment.workspace_root, target);
+    if slot.exists() {
+        return Err(StepError::failed(format!(
+            "--gateway-binary or {} names a Gateway for {target}, but one is already staged \
+             at {}; remove that file and its .pinned marker, or drop the named Gateway to use \
+             the staged one",
+            sidecar::GATEWAY_SIDECAR_VARIABLE,
+            slot.display()
+        ))
+        .into());
+    }
+    let mut staged = false;
+    let primary = build_around_sidecar(
+        environment,
+        target,
+        runner,
+        &mut staged,
+        given,
+        build_workshop,
     );
     let mut primary = match primary {
-        Err(error) if error.canceled && !staging_started => {
-            return Err(BuildError {
-                primary: error.message,
-                cleanup: None,
-            });
-        }
+        Err(error) if error.canceled && !staged => return Err(error.into()),
         result => result,
     };
     if primary.is_ok() && runner.cancel_observed() {
-        primary = Err(StepError {
-            message: "Workshop build canceled after child completion".to_owned(),
-            canceled: true,
-            command_started: true,
-        });
+        primary = Err(canceled_after_completion(workshop_label));
     }
-    // Cleanup removes only what this run put there. A sidecar that was
-    // already staged belongs to whoever staged it, and deleting it would
-    // undo the download the next build is meant to reuse.
-    let cleanup = if matches!(
-        source,
-        GatewaySource::Staged { .. } | GatewaySource::Missing
-    ) {
-        Ok(())
-    } else {
-        run_checked(
-            runner,
-            &sidecar_command(environment, "remove", &target, None),
-            "Gateway sidecar cleanup",
-            CancelPolicy::AllowExisting,
-        )
+    let cleanup = sidecar::remove(&environment.workspace_root, target)
         .map(|_| ())
-    };
+        .map_err(|error| StepError::failed(format!("Gateway sidecar cleanup failed: {error}")));
     if primary.is_ok() && cleanup.is_ok() && runner.cancel_observed() {
-        primary = Err(StepError {
-            message: "Workshop build canceled after child completion".to_owned(),
-            canceled: true,
-            command_started: true,
-        });
+        primary = Err(canceled_after_completion(workshop_label));
     }
 
     match (primary, cleanup) {
         (Ok(()), Ok(())) => Ok(()),
-        (Err(error), Ok(())) | (Ok(()), Err(error)) => Err(BuildError {
-            primary: error.message,
-            cleanup: None,
-        }),
+        (Err(error), Ok(())) | (Ok(()), Err(error)) => Err(error.into()),
         (Err(primary), Err(cleanup)) => Err(BuildError {
             primary: primary.message,
             cleanup: Some(cleanup.message),
@@ -112,61 +153,33 @@ pub(super) fn build_workshop(
     }
 }
 
-/// Decides where this run's sidecar comes from: the CLI flag, then the
-/// environment variable, then a sidecar already in place. There is no
-/// build fallback, because the Gateway is its own product.
-pub(super) fn gateway_source(
-    request: &BuildRequest,
+fn build_around_sidecar<R: CommandRunner>(
     environment: &BuildEnvironment,
     target: &str,
-) -> GatewaySource {
-    if let Some(path) = &request.gateway_binary {
-        return GatewaySource::Given(path.clone());
+    runner: &mut R,
+    staged: &mut bool,
+    source: &Path,
+    build_workshop: impl FnOnce(&mut R) -> Result<(), StepError>,
+) -> Result<(), StepError> {
+    if runner.cancel_observed() {
+        return Err(StepError {
+            message: "Gateway sidecar staging canceled".to_owned(),
+            canceled: true,
+        });
     }
-    if let Some(path) = &environment.gateway_sidecar {
-        return GatewaySource::Given(path.clone());
-    }
-    let staged = sidecar_path(environment, target);
-    if staged.is_file() {
-        // `tools/fetch-gateway-sidecar.mjs` records what it staged beside
-        // the file. A stub is reused like any other, but the run says so:
-        // a developer who left one behind would otherwise build an app
-        // with no Gateway and no clue why.
-        let stub = sidecar_pin_is_stub(environment, target);
-        return GatewaySource::Staged { stub };
-    }
-    GatewaySource::Missing
+    // A copy that fails partway may leave a file behind, so cleanup counts
+    // from the attempt.
+    *staged = true;
+    sidecar::stage(&environment.workspace_root, target, source)
+        .map_err(|error| StepError::failed(format!("Gateway sidecar staging failed: {error}")))?;
+    build_workshop(runner)
 }
 
-/// Whether the staged sidecar's marker says it is a compile-only stub.
-/// A missing or unreadable marker means it was not staged by the fetch
-/// script, so it is treated as a real Gateway and nothing is said.
-fn sidecar_pin_is_stub(environment: &BuildEnvironment, target: &str) -> bool {
-    let mut marker = sidecar_path(environment, target).into_os_string();
-    marker.push(".pinned");
-    let Ok(text) = std::fs::read_to_string(PathBuf::from(marker)) else {
-        return false;
-    };
-    // The marker is JSON written by the fetch script; a substring check is
-    // enough here and keeps this crate to the dependencies it already has.
-    text.contains("\"kind\": \"stub\"") || text.contains("\"kind\":\"stub\"")
-}
-
-/// The path `tauri.conf.json`'s `externalBin` entry resolves for `target`:
-/// Tauri's sidecar naming rule applied under the desktop crate.
-///
-/// `tools/stage-gateway-sidecar.mjs` owns that rule; the
-/// `sidecar_path_matches_the_staging_script` test runs the script and
-/// compares, so the two cannot drift quietly.
-pub(super) fn sidecar_path(environment: &BuildEnvironment, target: &str) -> PathBuf {
-    let extension = if is_windows(target) { ".exe" } else { "" };
-    environment
-        .workspace_root
-        .join("crates")
-        .join("workshop")
-        .join("desktop")
-        .join("binaries")
-        .join(format!("runvil-gateway-{target}{extension}"))
+fn canceled_after_completion(workshop_label: &str) -> StepError {
+    StepError {
+        message: format!("{workshop_label} canceled after child completion"),
+        canceled: true,
+    }
 }
 
 fn discover_host_target(
@@ -179,97 +192,27 @@ fn discover_host_target(
             program: environment.cargo.clone(),
             args: vec![OsString::from("-vV")],
             current_dir: environment.workspace_root.clone(),
-            env: Vec::new(),
+            envs: Vec::new(),
             output_mode: OutputMode::Capture,
         },
         "Cargo host discovery",
-        CancelPolicy::RejectExisting,
     )?;
     output
         .lines()
         .find_map(|line| line.strip_prefix("host: "))
         .filter(|target| valid_target_triple(target))
         .map(str::to_owned)
-        .ok_or_else(|| StepError {
-            message: "Cargo host triple was absent or malformed in `cargo -vV` output".to_owned(),
-            canceled: false,
-            command_started: true,
+        .ok_or_else(|| {
+            StepError::failed(
+                "Cargo host triple was absent or malformed in `cargo -vV` output".to_owned(),
+            )
         })
 }
 
-fn build_products(
-    request: &BuildRequest,
-    target: &str,
-    source: &GatewaySource,
-    environment: &BuildEnvironment,
-    runner: &mut impl CommandRunner,
-    staging_started: &mut bool,
-) -> Result<(), StepError> {
-    let staged_source = match source {
-        GatewaySource::Staged { .. } => {
-            return build_workshop_product(request, environment, runner, None);
-        }
-        GatewaySource::Given(path) => path.clone(),
-        GatewaySource::Missing => {
-            return Err(StepError {
-                message: format!(
-                    "no Gateway sidecar for {target}; the Gateway is a separate product, so run \
-                     `node tools/fetch-gateway-sidecar.mjs --target {target}` to stage the release \
-                     gateway-pin/pin.json names, or pass --gateway-binary"
-                ),
-                canceled: false,
-                command_started: false,
-            });
-        }
-    };
-
-    match run_checked(
-        runner,
-        &sidecar_command(environment, "stage", target, Some(staged_source)),
-        "Gateway sidecar staging",
-        CancelPolicy::RejectExisting,
-    ) {
-        Ok(_) => *staging_started = true,
-        Err(error) => {
-            *staging_started = error.command_started;
-            return Err(error);
-        }
-    }
-    // The Workshop build is told where the sidecar is, so the desktop
-    // build script copies exactly this file. The path Tauri resolves is
-    // the same one.
-    let staged = sidecar_path(environment, target);
-    build_workshop_product(request, environment, runner, Some(staged))
-}
-
-fn build_workshop_product(
-    request: &BuildRequest,
-    environment: &BuildEnvironment,
-    runner: &mut impl CommandRunner,
-    gateway_sidecar: Option<PathBuf>,
-) -> Result<(), StepError> {
-    let env = match gateway_sidecar {
-        Some(path) => vec![(
-            OsString::from(GATEWAY_SIDECAR_VARIABLE),
-            path.into_os_string(),
-        )],
-        None => Vec::new(),
-    };
-    run_checked(
-        runner,
-        &cargo_command(environment, request, "workshop", env),
-        "Workshop build",
-        CancelPolicy::RejectExisting,
-    )?;
-    Ok(())
-}
-
-/// A `cargo build -p <package>` spec, with `env` passed to the child.
-fn cargo_command(
+fn cargo_build_command(
     environment: &BuildEnvironment,
     request: &BuildRequest,
     package: &str,
-    env: Vec<(OsString, OsString)>,
 ) -> CommandSpec {
     let mut args = vec![
         OsString::from("build"),
@@ -287,65 +230,24 @@ fn cargo_command(
         program: environment.cargo.clone(),
         args,
         current_dir: environment.workspace_root.clone(),
-        env,
+        envs: environment.cargo_envs(),
         output_mode: OutputMode::Inherit,
     }
 }
 
-fn sidecar_command(
-    environment: &BuildEnvironment,
-    action: &str,
-    target: &str,
-    source: Option<PathBuf>,
-) -> CommandSpec {
-    let mut args = vec![
-        environment
-            .workspace_root
-            .join("tools")
-            .join("stage-gateway-sidecar.mjs")
-            .into_os_string(),
-        OsString::from(action),
-        OsString::from("--target"),
-        OsString::from(target),
-    ];
-    if let Some(source) = source {
-        args.push(OsString::from("--source"));
-        args.push(source.into_os_string());
-    }
-    CommandSpec {
-        program: environment.node.clone(),
-        args,
-        current_dir: environment.workspace_root.clone(),
-        env: Vec::new(),
-        output_mode: OutputMode::Inherit,
-    }
-}
-
-fn is_windows(target: &str) -> bool {
-    target.split('-').any(|part| part == "windows")
-}
-
-fn run_checked(
+pub(super) fn run_checked(
     runner: &mut impl CommandRunner,
     command: &CommandSpec,
     label: &str,
-    cancel_policy: CancelPolicy,
 ) -> Result<String, StepError> {
-    let result = runner.run(command, cancel_policy);
-    let command_started = runner.last_command_started();
-    let result = result.map_err(|error| {
+    let result = runner.run(command).map_err(|error| {
         if error.kind() == io::ErrorKind::Interrupted {
             StepError {
                 message: format!("{label} canceled: {error}"),
                 canceled: true,
-                command_started,
             }
         } else {
-            StepError {
-                message: format!("{label} could not start: {error}"),
-                canceled: false,
-                command_started,
-            }
+            StepError::failed(format!("{label} could not start: {error}"))
         }
     })?;
     if result.success {
@@ -356,9 +258,5 @@ fn run_checked(
     } else {
         format!(": {}", result.stderr.trim())
     };
-    Err(StepError {
-        message: format!("{label} failed{detail}"),
-        canceled: false,
-        command_started,
-    })
+    Err(StepError::failed(format!("{label} failed{detail}")))
 }

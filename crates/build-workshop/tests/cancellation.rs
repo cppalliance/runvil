@@ -10,21 +10,11 @@ use tempfile::TempDir;
 
 const WAIT_BOUND: Duration = Duration::from_secs(15);
 
-#[cfg(windows)]
+// Only Windows targets stage a given Gateway as the sidecar. The fake Cargo
+// builds nothing, so the Windows target serves on every host.
 const TARGET: &str = "x86_64-pc-windows-msvc";
-#[cfg(not(windows))]
-const TARGET: &str = "x86_64-unknown-linux-gnu";
-
-#[cfg(windows)]
+const GATEWAY_NAME: &str = "runvil-gateway.exe";
 const SIDECAR_NAME: &str = "runvil-gateway-x86_64-pc-windows-msvc.exe";
-#[cfg(not(windows))]
-const SIDECAR_NAME: &str = "runvil-gateway-x86_64-unknown-linux-gnu";
-
-/// The name the staging script requires a source binary to carry.
-#[cfg(windows)]
-const GATEWAY_SOURCE_NAME: &str = "runvil-gateway.exe";
-#[cfg(not(windows))]
-const GATEWAY_SOURCE_NAME: &str = "runvil-gateway";
 
 struct StagingGuard {
     path: PathBuf,
@@ -54,7 +44,7 @@ fn cancel_signal_after_staging_kills_child_cleans_and_fails() {
         .join("binaries")
         .join(SIDECAR_NAME);
     let temp = tempfile::tempdir().expect("temporary test root");
-    // A pre-staged sidecar (a local `cargo build -p workshop`) must not
+    // A Gateway `tools/fetch-gateway-sidecar.mjs` staged must not
     // fail this test: move it aside so the orchestrator's staging and
     // cleanup are still exercised, and let the guard restore it after.
     let preserved = if staged.exists() {
@@ -69,27 +59,22 @@ fn cancel_signal_after_staging_kills_child_cleans_and_fails() {
         preserved,
     };
     let fake_cargo = write_fake_cargo(&temp);
-    let target_root = temp.path().join("target");
+    let gateway = temp.path().join(GATEWAY_NAME);
+    fs::write(&gateway, "gateway").expect("given Gateway");
     let blocked_marker = temp.path().join("workshop-blocked");
     let stdout_path = temp.path().join("orchestrator.stdout");
     let stderr_path = temp.path().join("orchestrator.stderr");
     let stdout = File::create(&stdout_path).expect("stdout file");
     let stderr = File::create(&stderr_path).expect("stderr file");
-    // The Gateway is a separate product, so the run stages a binary it is
-    // given rather than building one. The staging script requires the
-    // source to carry the Gateway's own binary name; nothing here runs it.
-    let gateway_binary = temp.path().join(GATEWAY_SOURCE_NAME);
-    fs::write(&gateway_binary, b"gateway").expect("given gateway binary");
 
     let mut command = Command::new(env!("CARGO_BIN_EXE_build-workshop"));
     command
         .arg("--target")
         .arg(TARGET)
         .arg("--gateway-binary")
-        .arg(&gateway_binary)
+        .arg(&gateway)
         .env("CARGO", fake_cargo)
-        .env("CARGO_TARGET_DIR", &target_root)
-        .env("BUILD_WORKSHOP_TEST_TARGET", TARGET)
+        .current_dir(temp.path())
         .env("BUILD_WORKSHOP_BLOCKED_MARKER", &blocked_marker)
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));

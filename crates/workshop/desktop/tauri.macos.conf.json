@@ -1,15 +1,9 @@
 {
   "bundle": {
+    "targets": ["app"],
     "macOS": {
       "entitlements": "./Entitlements.plist",
-      "infoPlist": "./Info.plist",
-      "dmg": {
-        "background": "icons/dmg-background.png",
-        "windowSize": {
-          "width": 540,
-          "height": 380
-        }
-      }
+      "infoPlist": "./Info.plist"
     }
   }
 }

@@ -27,6 +27,9 @@
 //!    with [`request_shutdown`], which posts its bearer key to
 //!    `POST /shutdown`.
 //!
+//! Before any Gateway runs, Workshop finds the installed one it launches
+//! with [`installed_gateway`], which knows each installer's layout.
+//!
 //! URLs normalize to a literal `127.0.0.1`, never `localhost`, and probes
 //! send the bound address as the `Host` header, matching the Gateway's
 //! loopback `Host` allowlist.
@@ -63,6 +66,7 @@ mod file;
 mod health;
 mod lock;
 mod paths;
+mod peer;
 mod shutdown;
 mod stale;
 mod sys;
@@ -81,6 +85,10 @@ pub use crate::paths::{
     GATEWAY_DISCOVERY_FILE_NAME, GATEWAY_LOG_FILE_NAME, INSTANCE_LOCK_FILE_NAME, LOCK_FILE_NAME,
     default_run_dir, gateway_discovery_file_path, gateway_log_path, instance_lock_file_path,
     lock_file_path, run_dir,
+};
+pub use crate::peer::{
+    GATEWAY_BUNDLE_NAME, WORKSHOP_APPIMAGE_NAME, WORKSHOP_BUNDLE_NAME, app_bundle,
+    gateway_search_paths, installed_gateway, running_appimage, translocated, translocation_remedy,
 };
 pub use crate::shutdown::{ShutdownError, request_shutdown, request_shutdown_before};
 #[cfg(any(test, feature = "test-fixtures"))]

@@ -9,13 +9,29 @@ You write the model's instructions as prose and the logic as Lua, side by side i
 
 ![Workshop with a folder open, a file in the editor, and an agent answering in the chat panel](images/workshop-window.jpg)
 
+Workshop is the desktop app for writing prompts, running them against local or remote models, and reviewing every run it records. One installer per platform installs it with the gateway:
+
+| Platform | Installer |
+|---|---|
+| Windows x64 | [Runvil-setup.exe](https://github.com/cppalliance/runvil/releases/download/workshop-latest/Runvil-setup.exe) |
+| macOS, Apple silicon | [Runvil-arm64.dmg](https://github.com/cppalliance/runvil/releases/download/workshop-latest/Runvil-arm64.dmg) |
+| macOS, Intel | [Runvil-x64.dmg](https://github.com/cppalliance/runvil/releases/download/workshop-latest/Runvil-x64.dmg) |
+| Linux x64 (Ubuntu 22.04, Debian 12, or later) | [Runvil-x64.run](https://github.com/cppalliance/runvil/releases/download/workshop-latest/Runvil-x64.run) |
+| Linux ARM64 (Ubuntu 24.04, Debian 13, or later) | [Runvil-arm64.run](https://github.com/cppalliance/runvil/releases/download/workshop-latest/Runvil-arm64.run) |
+
+The [latest release](https://github.com/cppalliance/runvil/releases/latest) holds the same installers under versioned names, with a `SHA256SUMS` file that lists them by those names. On Linux, make the `.run` file executable and run it from your desktop session.
+
+The installer offers Workshop, the desktop app, and the Gateway, the local gateway described below, with its tray icon and Settings page. On Windows it also offers Speech to Text, which needs the Gateway. The Gateway downloads its speech runtime and two speech models, about 0.6 GB, the first time it starts with speech configured, so dictation works offline after that. Workshop installed without the Gateway attaches to a gateway already running for you, or else uses the one `~/.runvil/workshop.toml` names. By default, Windows installs into `%LOCALAPPDATA%\Runvil`, macOS into `/Applications/Runvil`, and Linux into `~/Runvil`.
+
+Workshop checks for updates when it starts and offers each new version, which it installs when you accept. The Gateway is its own product with its own releases, at [cppalliance/runvil-gateway](https://github.com/cppalliance/runvil-gateway); each installer carries the Gateway release this repository pins in `gateway-pin/pin.json`.
+
+The installers are not code-signed yet. On Windows, SmartScreen may stop the setup: choose More info, then Run anyway. On macOS, the first open is refused: open System Settings, then Privacy & Security, choose Open Anyway, and open the installer again. Until the apps are signed, the gateway's Launch at Login does not work on macOS.
+
 ## Workshop
 
 Workshop is the desktop app. You open your folders in it, edit files, and work with agents in the chat panel beside the editor. Every agent is a Runvil prompt: the built-in chat agent is one, and any prompt you put in your agents folder shows up next to it. Agents can search and read the web, ask you questions, and use the MCP servers you configure, and Workshop records each run in a local log that only ever grows.
 
-Installers for Windows, macOS (Apple Silicon and Intel), and Linux (AppImage and .deb, x86_64 and ARM64) are on the [nightly release](https://github.com/cppalliance/runvil/releases/tag/nightly). Nightly is a prerelease built from the latest code, and it doesn't update itself, so install a newer nightly to upgrade.
-
-Every installer includes the Gateway. Workshop connects to a Gateway that's already running or starts its own, and the Gateway stays in the system tray after you close the window, so your loaded models stay loaded. The Gateway is its own product with its own releases, at [cppalliance/runvil-gateway](https://github.com/cppalliance/runvil-gateway).
+Workshop connects to a Gateway that's already running or starts the installed one, and the Gateway stays in the system tray after you close the window, so your loaded models stay loaded.
 
 ## What a prompt looks like
 

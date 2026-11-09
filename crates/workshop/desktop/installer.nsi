@@ -83,12 +83,12 @@ Var NoShortcutMode
 Var WixMode
 Var OldMainBinaryName
 ; Set when a running runvil-gateway.exe was stopped in the Gateway
-; section, so the Finalize section can relaunch it after the update.
+; section, so the -Relaunch section can relaunch it after the update.
 Var GatewayWasRunning
 
 ; Persists one component's checkbox state as a DWORD (1 = installed,
-; 0 = declined) under the product key, so update and passive installs can
-; re-apply the original selection (see RestoreComponentSelections).
+; 0 = declined) under the product key, so every later install starts from
+; it (see RestoreComponentSelections).
 !macro PersistComponent SECTION_ID VALUE_NAME
  SectionGetFlags ${SECTION_ID} $0
  IntOp $0 $0 & ${SF_SELECTED}
@@ -420,9 +420,10 @@ Function PageLeaveReinstall
  reinst_done:
 FunctionEnd
 
-; 4b. Components page: Gateway, Workshop, and STT are independently
-; checkable, all checked by default. Skipped in passive and update modes,
-; where .onInit forces the persisted selection onto the sections instead.
+; 4b. Components page: Gateway, Workshop, and STT are checkable, checked
+; as the previous install left them, or all checked on a first install;
+; STT requires Gateway (.onSelChange). Skipped in passive and update
+; modes, which install the selection .onInit applied.
 !define MUI_COMPONENTSPAGE_NODESC
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassiveOrUpdate
 !insertmacro MUI_PAGE_COMPONENTS
@@ -568,13 +569,13 @@ Function .onInit
  StrCpy $UpdateMode 1
  ${EndIf}
 
- ; Passive and update installs skip the components page; force the
- ; persisted component selection onto the sections instead, so an update
- ; never resurrects a component the user declined at the original install.
- ${If} $UpdateMode = 1
- ${OrIf} $PassiveMode = 1
+ ; Start from the persisted component selection, so no install resurrects
+ ; a component the user declined before: passive and update installs skip
+ ; the components page and install it as is, and the page starts from it.
+ ; A /COMPONENTS= list then replaces it.
  Call RestoreComponentSelections
- ${EndIf}
+ Call SelectComponentsFromCommandLine
+ Call EnforceSttNeedsGateway
 
  !if "${DISPLAYLANGUAGESELECTOR}" == "true"
  !insertmacro MUI_LANGDLL_DISPLAY
@@ -788,10 +789,10 @@ Section "Runvil Gateway" SecGateway
  ; process name through nsis_tauri_utils - parsing
  ; %USERPROFILE%\.runvil\run\gateway.json for the pid in NSIS buys
  ; nothing when the image name is unique - stop it through the same
- ; CheckIfAppIsRunning, and relaunch it in the Finalize section. Living inside the Gateway section, the stop runs
- ; only when the component is selected: a declined section leaves the
- ; payload untouched, and a daemon the install does not overwrite is
- ; not the installer's to kill.
+ ; CheckIfAppIsRunning, and relaunch it in the -Relaunch section. Living
+ ; inside the Gateway section, the stop runs only when the component is
+ ; selected: a declined section leaves the payload untouched, and a
+ ; daemon the install does not overwrite is not the installer's to kill.
  !if "${INSTALLMODE}" == "currentUser"
  nsis_tauri_utils::FindProcessCurrentUser "runvil-gateway.exe"
  !else
@@ -810,9 +811,10 @@ Section "Runvil Gateway" SecGateway
  {{/each}}
 SectionEnd
 
-Section "Speech to Text (Transcription)" SecSTT
+Section "Speech to Text (downloads about 0.6 GB, 1.1 GB with an NVIDIA GPU)" SecSTT
  ; No files: STT is a config gate. The Finalize section records the
- ; selection for the gateway's first-run config generation.
+ ; selection, and the Gateway downloads the speech runtime and models the
+ ; first time it starts with them in its config.
 SectionEnd
 
 Section "-Finalize"
@@ -857,15 +859,17 @@ Section "-Finalize"
  WriteRegStr SHCTX "${UNINSTKEY}" "HelpLink" "${HOMEPAGE}"
  !endif
 
- ; Persist the component selection so update and passive installs can
- ; re-apply it (see RestoreComponentSelections).
+ ; Persist the component selection so every later install starts from it
+ ; (see RestoreComponentSelections).
  !insertmacro PersistComponent ${SecGateway} Gateway
  !insertmacro PersistComponent ${SecWorkshop} Workshop
  !insertmacro PersistComponent ${SecSTT} STT
 
- ; The STT checkbox writes the first-run config gate: checked deletes the
- ; value (absent = STT on), unchecked writes 0. Update mode never touches
- ; it - the user's first run already consumed the original choice.
+ ; The STT checkbox writes the Gateway's first-run config gate, which the
+ ; pinned Gateway release reads when it writes its default config:
+ ; checked deletes the value (absent = STT on), unchecked writes 0. Update
+ ; mode never touches it, since the first run already consumed the
+ ; original choice.
  ${If} $UpdateMode <> 1
  SectionGetFlags ${SecSTT} $0
  IntOp $0 $0 & ${SF_SELECTED}
@@ -881,9 +885,12 @@ Section "-Finalize"
  !insertmacro DeleteComponentPayloadIfDeclined ${SecGateway} $INSTDIR\runvil-gateway.exe
  !insertmacro DeleteComponentPayloadIfDeclined ${SecWorkshop} $INSTDIR\${MAINBINARYNAME}.exe
 
+SectionEnd
+
+Section "-Relaunch"
  ; Relaunch the gateway when the install stopped one and the component
- ; stays installed. `--login` keeps the relaunch headless: no
- ; browser, no window.
+ ; stays installed. `--login` keeps the relaunch headless: no browser, no
+ ; window.
  ${If} $GatewayWasRunning = 1
  SectionGetFlags ${SecGateway} $0
  IntOp $0 $0 & ${SF_SELECTED}
@@ -1032,11 +1039,10 @@ Section Uninstall
  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "RunvilGateway"
  ${EndIf}
 
- ; Remove the persisted component selection and the STT first-run gate
- ; when not updating (updates preserve both).
+ ; Remove the STT first-run gate when not updating (updates preserve
+ ; it).
  ${If} $UpdateMode <> 1
  DeleteRegValue HKCU "${MANUPRODUCTKEY}" "InstallSTT"
- DeleteRegKey HKCU "${MANUPRODUCTKEY}\Components"
  ${EndIf}
 
  ; Delete app data if the checkbox is selected
@@ -1049,6 +1055,12 @@ Section Uninstall
 
  ; Clear the install language from registry
  DeleteRegValue HKCU "${MANUPRODUCTKEY}" "Installer Language"
+ ; The persisted component selection lives as long as the config it
+ ; shaped: a reinstall over a kept speechless config would otherwise offer
+ ; Speech to Text checked, which that config ignores. SHCTX above already removed it on a
+ ; currentUser install; this covers a perMachine one, which keeps it in
+ ; HKCU.
+ DeleteRegKey HKCU "${MANUPRODUCTKEY}\Components"
  DeleteRegKey /ifempty HKCU "${MANUPRODUCTKEY}"
  DeleteRegKey /ifempty HKCU "${MANUKEY}"
 
@@ -1092,9 +1104,11 @@ Function SkipIfPassiveOrUpdate
  ${EndIf}
 FunctionEnd
 
-; Forces the persisted component selection onto the sections in passive
-; and update mode, which skip the components page. Values absent from the
-; registry (installs that predate persistence) keep the default:
+; Forces the persisted component selection onto the sections, the
+; selection passive and update installs install and the components page
+; starts from. Values absent from the registry (a first install, one
+; after an uninstall that deleted app data or ran an earlier release's
+; uninstaller, or one predating persistence) keep the default:
 ; everything selected.
 Function RestoreComponentSelections
  ClearErrors
@@ -1127,6 +1141,75 @@ Function RestoreComponentSelections
  ${EndIf}
  ${EndIf}
 FunctionEnd
+
+; STT is a setting of the Gateway's config, so it requires Gateway: with
+; Gateway unchecked, STT is cleared.
+Function EnforceSttNeedsGateway
+ SectionGetFlags ${SecGateway} $0
+ IntOp $0 $0 & ${SF_SELECTED}
+ ${If} $0 <> ${SF_SELECTED}
+ !insertmacro UnselectSection ${SecSTT}
+ ${EndIf}
+FunctionEnd
+
+Function .onSelChange
+ Call EnforceSttNeedsGateway
+FunctionEnd
+
+; Selects exactly the sections a /COMPONENTS= list names, for silent
+; installs in CI: /COMPONENTS=gateway,stt. Names are workshop, gateway,
+; and stt, comma separated, in any case. An empty list, any other name,
+; or stt without gateway quits with exit code 2 rather than install a
+; selection nobody asked for.
+!macro SelectComponentIfListed LIST NAME SECTION_ID
+ ${StrLoc} $1 "${LIST}" ",${NAME}," ">"
+ ${If} $1 == ""
+ SectionSetFlags ${SECTION_ID} 0
+ ${Else}
+ SectionSetFlags ${SECTION_ID} ${SF_SELECTED}
+ ${EndIf}
+!macroend
+
+; Passive mode never prompts, so it reports through the exit code alone.
+!macro RejectComponentsList MESSAGE
+ ${If} $PassiveMode <> 1
+ MessageBox MB_OK|MB_ICONSTOP "${MESSAGE}" /SD IDOK
+ ${EndIf}
+ SetErrorLevel 2
+ Quit
+!macroend
+
+Function SelectComponentsFromCommandLine
+ ClearErrors
+ ${GetOptions} $CMDLINE "/COMPONENTS=" $0
+ ${If} ${Errors}
+ Return
+ ${EndIf}
+ ${StrCase} $0 ",$0," "L"
+ ; Strip every known name from a copy until nothing changes; a valid
+ ; list leaves only its outer comma. Repeating covers a repeated name,
+ ; whose adjacent matches share a comma.
+ StrCpy $1 $0
+ ${Do}
+ StrCpy $2 $1
+ ${WordReplace} $1 ",workshop," "," "+" $1
+ ${WordReplace} $1 ",gateway," "," "+" $1
+ ${WordReplace} $1 ",stt," "," "+" $1
+ ${LoopUntil} $1 == $2
+ ${If} $1 != ","
+ !insertmacro RejectComponentsList "/COMPONENTS= lists unknown or empty names (left after removing the known ones: $1); the names are workshop, gateway, and stt, comma separated, without spaces."
+ ${EndIf}
+ ${StrLoc} $1 $0 ",stt," ">"
+ ${StrLoc} $2 $0 ",gateway," ">"
+ ${If} $1 != ""
+ ${AndIf} $2 == ""
+ !insertmacro RejectComponentsList "/COMPONENTS= lists stt without gateway; speech to text is a Gateway setting, so list gateway too."
+ ${EndIf}
+ !insertmacro SelectComponentIfListed $0 workshop ${SecWorkshop}
+ !insertmacro SelectComponentIfListed $0 gateway ${SecGateway}
+ !insertmacro SelectComponentIfListed $0 stt ${SecSTT}
+FunctionEnd
+
 Function un.SkipIfPassive
  ${IfThen} $PassiveMode = 1 ${|} Abort ${|}
 FunctionEnd

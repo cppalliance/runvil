@@ -3,9 +3,10 @@
 //! `tauri::generate_context!` sees the config-derived environment it
 //! requires.
 //!
-//! `tauri.conf.json` declares the Gateway as an `externalBin`, so on every
-//! workshop build tauri-build copies `binaries/runvil-gateway-<target-triple>`
-//! to `target/<profile>/runvil-gateway`. The sidecar step decides what that
+//! On Windows, `tauri.windows.conf.json` declares the Gateway as an
+//! `externalBin`, so on every workshop build tauri-build copies
+//! `binaries/runvil-gateway-<target-triple>.exe` to
+//! `target/<profile>/runvil-gateway.exe`. The sidecar step decides what that
 //! slot holds before tauri-build reads it, and leaves an empty slot for
 //! tauri-build to report.
 //!
@@ -17,6 +18,9 @@
 //! 2. Whatever `tools/fetch-gateway-sidecar.mjs` left in place: a stub for
 //!    compile-only jobs or the pinned release binary. Nothing here touches
 //!    it, so a downloaded Gateway survives every rebuild.
+//!
+//! macOS and Linux bundle no Gateway: their installers place it beside
+//! Workshop, so those targets skip the step.
 
 use std::env;
 use std::error::Error;
@@ -38,12 +42,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 /// `RUNVIL_GATEWAY_SIDECAR` file when one is named, else what is already
 /// staged, with a warning when the staged file is the stub.
 fn install_gateway_sidecar() -> Result<(), Box<dyn Error>> {
+    if env::var("CARGO_CFG_TARGET_OS")? != "windows" {
+        return Ok(());
+    }
     let target = env::var("TARGET")?;
-    let exe_suffix = if env::var("CARGO_CFG_TARGET_OS")? == "windows" {
-        ".exe"
-    } else {
-        ""
-    };
+    let exe_suffix = ".exe";
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     let sidecar = manifest_dir
         .join("binaries")

@@ -7,14 +7,14 @@ use std::time::{Duration, Instant};
 use workshop_server_api::discovery::GatewayDiscoveryFile;
 
 use super::{
-    dead_pid, exe_dir, fixture_gateway, live_file, owned_candidate, probe_own_image,
-    probe_read_failure,
+    dead_pid, exe_dir, fixture_gateway, installed_in, live_file, owned_candidate,
+    probe_own_image, probe_read_failure,
 };
 #[cfg(windows)]
 use crate::gateway::boot::spawn_detached_windows_with;
 use crate::gateway::boot::{
     GATEWAY_EXE_NAME, GatewayPlan, no_gateway_error, placeholder_gateway_error, plan_gateway,
-    sibling_gateway, sibling_is_placeholder, spawn_detached,
+    sibling_is_placeholder, spawn_detached,
 };
 use crate::gateway::identity::GatewayAttachment;
 use crate::gateway::supervisor::RECOVERY_POLL_INTERVAL;
@@ -140,7 +140,7 @@ fn a_live_file_attaches_without_looking_for_a_sibling_exe() {
     file.write_to(run.path()).expect("write");
     let (_exe, exe_dir) = exe_dir(false);
 
-    match plan_gateway(run.path(), &exe_dir, false, probe_own_image) {
+    match plan_gateway(run.path(), installed_in(&exe_dir), false, probe_own_image) {
         GatewayPlan::Attach(attached) => assert_eq!(attached, file),
         other => panic!("a live gateway must be attached, not {other:?}"),
     }
@@ -151,7 +151,7 @@ fn no_file_and_a_sibling_exe_launches() {
     let run = tempfile::TempDir::new().expect("tempdir");
     let (_exe, exe_dir) = exe_dir(true);
 
-    match plan_gateway(run.path(), &exe_dir, false, probe_own_image) {
+    match plan_gateway(run.path(), installed_in(&exe_dir), false, probe_own_image) {
         GatewayPlan::Launch(exe) => assert_eq!(exe, exe_dir.join(GATEWAY_EXE_NAME)),
         other => panic!("a full install with no running gateway must launch, not {other:?}"),
     }
@@ -163,7 +163,7 @@ fn no_file_and_no_sibling_exe_falls_through_to_explicit_config() {
     let (_exe, exe_dir) = exe_dir(false);
 
     assert_eq!(
-        plan_gateway(run.path(), &exe_dir, true, probe_own_image),
+        plan_gateway(run.path(), installed_in(&exe_dir), true, probe_own_image),
         GatewayPlan::ConfigOnly,
         "a Workshop-only install attaches to the configured LAN gateway"
     );
@@ -175,7 +175,7 @@ fn no_file_no_sibling_exe_and_no_config_fails() {
     let (_exe, exe_dir) = exe_dir(false);
 
     assert_eq!(
-        plan_gateway(run.path(), &exe_dir, false, probe_own_image),
+        plan_gateway(run.path(), installed_in(&exe_dir), false, probe_own_image),
         GatewayPlan::Fail,
         "nothing to connect to must fail loud, not serve a broken window"
     );
@@ -192,7 +192,7 @@ fn a_stale_file_is_cleaned_and_the_sibling_exe_launches() {
     .expect("write");
     let (_exe, exe_dir) = exe_dir(true);
 
-    let plan = plan_gateway(run.path(), &exe_dir, false, probe_own_image);
+    let plan = plan_gateway(run.path(), installed_in(&exe_dir), false, probe_own_image);
     assert!(
         matches!(plan, GatewayPlan::Launch(_)),
         "a stale file must not block the relaunch: {plan:?}"
@@ -215,7 +215,7 @@ fn a_stale_file_with_no_sibling_exe_falls_through_to_explicit_config() {
     let (_exe, exe_dir) = exe_dir(false);
 
     assert_eq!(
-        plan_gateway(run.path(), &exe_dir, true, probe_own_image),
+        plan_gateway(run.path(), installed_in(&exe_dir), true, probe_own_image),
         GatewayPlan::ConfigOnly,
         "a stale file must not wedge the LAN fallback"
     );
@@ -230,7 +230,7 @@ fn a_resolve_error_still_launches_the_sibling_exe() {
     let run = tempfile::TempDir::new().expect("tempdir");
     let (_exe, exe_dir) = exe_dir(true);
 
-    let plan = plan_gateway(run.path(), &exe_dir, false, probe_read_failure);
+    let plan = plan_gateway(run.path(), installed_in(&exe_dir), false, probe_read_failure);
     assert!(
         matches!(plan, GatewayPlan::Launch(_)),
         "a discovery error must not read as no-gateway: {plan:?}"
@@ -238,18 +238,18 @@ fn a_resolve_error_still_launches_the_sibling_exe() {
 }
 
 #[test]
-fn the_sibling_probe_finds_only_the_gateway_exe_beside_the_desktop_app() {
+fn the_installed_lookup_finds_only_the_gateway_exe_beside_the_desktop_app() {
     let (_dir, with) = exe_dir(true);
     assert_eq!(
-        sibling_gateway(&with),
+        installed_in(&with),
         Some(with.join(GATEWAY_EXE_NAME)),
         "the installed sibling is found"
     );
     let (_dir, without) = exe_dir(false);
     assert_eq!(
-        sibling_gateway(&without),
+        installed_in(&without),
         None,
-        "a Workshop-only install has no sibling"
+        "a Workshop-only install has no Gateway"
     );
 }
 

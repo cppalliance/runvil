@@ -1,0 +1,570 @@
+name: Installers
+run-name: Runvil installers (${{ github.event_name == 'push' && github.ref_name || github.event_name == 'pull_request' && 'pull request' || 'dispatched' }})
+
+# Builds the five installers (Windows x64, macOS ARM and Intel, Linux x64
+# and ARM64), installs and runs component selections on a fresh machine of
+# each kind, and assembles and verifies latest.json and SHA256SUMS. A
+# vX.Y.Z tag then publishes the release; any failed cell means no release.
+#
+# Modes, which prepare reads from the event:
+# - release: a pushed vX.Y.Z tag naming the workspace version. Signs with
+#   the release key and publishes.
+# - full: a dispatched run on any ref. Every cell runs; the installers stay
+#   as workflow artifacts for 7 days and nothing is published.
+# - pull-request: a pull request touching the installer paths below. Two
+#   cells per platform.
+# Every mode builds with --sign. Outside release the key is a run key that
+# prepare generates and nothing trusts, so the manifest job checks the same
+# signatures a release has.
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/installers.yml
+      - .github/installers/**
+      - crates/build-workshop/**
+      - crates/workshop/desktop/installer.nsi
+      - crates/workshop/desktop/tauri*.conf.json
+      - crates/workshop/desktop/icons/**
+      - crates/workshop/package.json
+      - crates/workshop/package-lock.json
+      - crates/workshop/gateway-discovery/src/peer*.rs
+      - gateway-pin/**
+      - tools/fetch-gateway-sidecar.mjs
+      - tools/gateway-archive.mjs
+      - tools/gateway-pin.mjs
+      - tools/stage-gateway-sidecar.mjs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installers-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      execution-sha: ${{ steps.identity.outputs.sha }}
+      version: ${{ steps.identity.outputs.version }}
+      mode: ${{ steps.identity.outputs.mode }}
+      cells: ${{ steps.cells.outputs.cells }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Report the execution identity
+        id: identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha=$(git rev-parse HEAD)
+          [ "$sha" = "$GITHUB_SHA" ] || { echo "checkout $sha does not match event SHA $GITHUB_SHA"; exit 1; }
+          version=$(python3 - <<'PY'
+          import tomllib
+
+          with open("Cargo.toml", "rb") as manifest:
+              print(tomllib.load(manifest)["workspace"]["package"]["version"])
+          PY
+          )
+          case "$GITHUB_EVENT_NAME" in
+            push)
+              mode=release
+              [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+                { echo "release tag $GITHUB_REF_NAME must be vX.Y.Z"; exit 1; }
+              tag_version="${GITHUB_REF_NAME#v}"
+              [ "$tag_version" = "$version" ] ||
+                { echo "tag $GITHUB_REF_NAME names version $tag_version, but the workspace version in Cargo.toml is $version"; exit 1; }
+              ;;
+            workflow_dispatch) mode=full ;;
+            pull_request) mode=pull-request ;;
+            *) echo "event $GITHUB_EVENT_NAME starts no mode"; exit 1 ;;
+          esac
+          {
+            echo "sha=$sha"
+            echo "version=$version"
+            echo "mode=$mode"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "Execution SHA: $sha"
+            echo "Workspace version: $version"
+            echo "Mode: $mode"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # A job's `if` cannot read `matrix`, so the cells each mode runs are
+      # chosen here.
+      - name: Choose the cells
+        id: cells
+        shell: bash
+        env:
+          MODE: ${{ steps.identity.outputs.mode }}
+        run: |
+          set -euo pipefail
+          cells=$(python3 - <<'PY'
+          import json
+          import os
+
+          platforms = [
+              ("windows", "windows-latest"),
+              ("macos-arm", "macos-latest"),
+              ("macos-intel", "macos-15-intel"),
+              ("linux", "ubuntu-22.04"),
+              ("linux-arm", "ubuntu-24.04-arm"),
+          ]
+          # Only the Windows setup offers Speech to Text: elsewhere the
+          # Gateway always configures speech at its first start.
+          def selections(platform):
+              if os.environ["MODE"] == "pull-request":
+                  return ["all", "workshop"]
+              if platform == "windows":
+                  return ["all", "workshop", "gateway", "gateway-stt"]
+              return ["all", "workshop", "gateway"]
+
+          cells = [
+              {"platform": platform, "runner": runner, "selection": selection}
+              for platform, runner in platforms
+              for selection in selections(platform)
+          ]
+          if os.environ["MODE"] != "pull-request":
+              cells.append({"platform": "windows", "runner": "windows-latest", "selection": "rejections"})
+          print(json.dumps({"include": cells}))
+          PY
+          )
+          echo "cells=$cells" >> "$GITHUB_OUTPUT"
+          echo "Cells: $(jq '.include | length' <<< "$cells")" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-node@v4
+        if: steps.identity.outputs.mode != 'release'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/workshop/package-lock.json
+
+      # Nothing trusts this key: released Workshops embed only the release
+      # key, and tauri build only warns when the key does not match
+      # plugins.updater.pubkey. So fork pull requests without secrets build
+      # signed too, and the key showing in a log or the artifact list costs
+      # nothing.
+      - name: Generate the run key
+        if: steps.identity.outputs.mode != 'release'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --prefix crates/workshop
+          mkdir -p "$RUNNER_TEMP/run-key"
+          node crates/workshop/node_modules/@tauri-apps/cli/tauri.js signer generate --ci -w "$RUNNER_TEMP/run-key/run.key"
+          test -s "$RUNNER_TEMP/run-key/run.key"
+          test -s "$RUNNER_TEMP/run-key/run.key.pub"
+
+      - name: Upload the run key
+        if: steps.identity.outputs.mode != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-signing-key
+          path: ${{ runner.temp }}/run-key
+          if-no-files-found: error
+          # As long as the installers, so a rerun of a failed build or
+          # manifest job still finds it.
+          retention-days: 7
+
+  build:
+    name: build (${{ matrix.platform }})
+    needs: prepare
+    # The slowest build so far took about 20 minutes; a hung one should not
+    # hold the run for GitHub's 6-hour default.
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: windows-latest
+            triple: x86_64-pc-windows-msvc
+          - platform: macos-arm
+            runner: macos-latest
+            triple: aarch64-apple-darwin
+            ifw-archive: mac_x64/ifw/tools_ifw_411/qt.tools.ifw.411/4.11.0-0-202603311245ifw-mac-universal.7z
+            ifw-sha256: 140397cb4776a00a8efb76e5b8a362f8e6adc9a213da7a074e81b9b912f0c8f3
+          - platform: macos-intel
+            runner: macos-latest
+            triple: x86_64-apple-darwin
+            ifw-archive: mac_x64/ifw/tools_ifw_411/qt.tools.ifw.411/4.11.0-0-202603311245ifw-mac-universal.7z
+            ifw-sha256: 140397cb4776a00a8efb76e5b8a362f8e6adc9a213da7a074e81b9b912f0c8f3
+          # ubuntu-22.04 keeps the AppImage and the Gateway at the glibc 2.35
+          # floor.
+          - platform: linux
+            runner: ubuntu-22.04
+            triple: x86_64-unknown-linux-gnu
+            ifw-archive: linux_x64/ifw/tools_ifw_411/qt.tools.ifw.411/4.11.0-0-202603231357ifw-linux-x64.7z
+            ifw-sha256: 79ef906970c7e4be9ec15447fd5acb0a8ae2ab41aef5f9184086ce3972eddbc7
+          # The arm64 IFW needs glibc 2.38, so Linux ARM64 builds on 24.04.
+          - platform: linux-arm
+            runner: ubuntu-24.04-arm
+            triple: aarch64-unknown-linux-gnu
+            ifw-archive: linux_arm64/ifw/tools_ifw_411/qt.tools.ifw.411/4.11.0-0-202603231357ifw-linux-arm64.7z
+            ifw-sha256: 6d02441a14bc14fea5555690b63a5d8d6ef262d7ef8eb1a009d1a541b2ef0adb
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.execution-sha }}
+
+      - name: Report the execution SHA
+        shell: bash
+        run: |
+          actual=$(git rev-parse HEAD)
+          expected="${{ needs.prepare.outputs.execution-sha }}"
+          [ "$actual" = "$expected" ] || { echo "checkout $actual does not match execution SHA $expected"; exit 1; }
+          echo "Execution SHA: $actual"
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+
+      - name: Add the Rust target
+        run: rustup target add ${{ matrix.triple }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: ${{ matrix.triple }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/workshop/package-lock.json
+
+      # The workshop install brings the pinned Tauri CLI.
+      - name: Install UI dependencies
+        shell: bash
+        run: npm ci --prefix crates/workshop
+
+      # The Gateway is its own product: every installer carries the release
+      # gateway-pin/pin.json names, which the fetch verifies against the
+      # pin's sha256 and stages where cargo workshop installer reads it.
+      - name: Stage the pinned Gateway
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/fetch-gateway-sidecar.mjs --target ${{ matrix.triple }}
+
+      - name: Install the Linux build packages
+        if: startsWith(matrix.platform, 'linux')
+        run: |
+          sudo apt-get update
+          # xdg-utils: the AppImage bundler shells out to xdg-open, which the
+          # ARM runner images do not preinstall (the x64 image does).
+          # https://github.com/tauri-apps/tauri-action/issues/1319
+          # The xcb, font, and D-Bus libraries: the IFW binaries load them
+          # even in command-line mode. p7zip-full extracts the IFW archive.
+          # The GStreamer plugins and patchelf: bundleMediaFramework
+          # (tauri.linux.conf.json) copies every installed plugin into the
+          # AppImage beside the GStreamer core WebKitGTK already brings, and
+          # patchelf sets their rpath. Without them the bundled core finds no
+          # microphone, since it cannot load a system's plugins built for
+          # another GStreamer version. https://v2.tauri.app/distribute/appimage/
+          sudo apt-get install -y --no-install-recommends \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-pulseaudio \
+            gstreamer1.0-alsa patchelf \
+            libwebkit2gtk-4.1-dev libssl-dev librsvg2-dev xdg-utils p7zip-full \
+            libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-xfixes0 \
+            libxcb-xkb1 libxcb-util1 libfontconfig1 libfreetype6 libdbus-1-3
+          # Tauri's linuxdeploy is an AppImage; extracting it needs no FUSE,
+          # which the 24.04 image may lack.
+          # https://github.com/AppImage/AppImageKit/wiki/FUSE
+          echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
+
+      - name: Install Qt IFW 4.11.0
+        if: matrix.platform != 'windows'
+        shell: bash
+        env:
+          ARCHIVE: ${{ matrix.ifw-archive }}
+          REQUIRED: ${{ matrix.ifw-sha256 }}
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/qtifw.7z"
+          curl --fail --location --retry 3 -o "$archive" "https://download.qt.io/online/qtsdkrepository/$ARCHIVE"
+          actual=$(shasum -a 256 "$archive" | cut -d ' ' -f 1)
+          [ "$actual" = "$REQUIRED" ] || { echo "Qt IFW archive $ARCHIVE has SHA-256 $actual, required $REQUIRED"; exit 1; }
+          dir="$RUNNER_TEMP/qtifw"
+          mkdir -p "$dir"
+          if [ "$RUNNER_OS" = macOS ]; then
+            bsdtar -xf "$archive" -C "$dir"
+          else
+            7z x -o"$dir" "$archive" > /dev/null
+          fi
+          found=$(find "$dir" -path '*/bin/binarycreator' -type f)
+          count=$(printf '%s' "$found" | grep -c . || true)
+          [ "$count" = 1 ] || { echo "the Qt IFW archive must hold exactly one bin/binarycreator, found $count: $found"; exit 1; }
+          echo "QTIFWDIR=$(dirname "$(dirname "$found")")" >> "$GITHUB_ENV"
+
+      # The Gateway version check inside cargo workshop installer runs the
+      # x86_64 Gateway.
+      - name: Install Rosetta
+        if: matrix.platform == 'macos-intel'
+        run: |
+          if ! arch -x86_64 /usr/bin/true 2>/dev/null; then
+            sudo softwareupdate --install-rosetta --agree-to-license
+          fi
+          arch -x86_64 /usr/bin/true || { echo "Rosetta is required to run the x86_64 Gateway, and it does not run"; exit 1; }
+
+      - name: Download the run key
+        if: needs.prepare.outputs.mode != 'release'
+        uses: actions/download-artifact@v4
+        with:
+          name: run-signing-key
+          path: ${{ runner.temp }}/run-key
+
+      - name: Build the signed installer
+        shell: bash
+        env:
+          MODE: ${{ needs.prepare.outputs.mode }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ needs.prepare.outputs.mode == 'release' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ needs.prepare.outputs.mode == 'release' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+        run: |
+          set -euo pipefail
+          if [ "$MODE" != release ]; then
+            TAURI_SIGNING_PRIVATE_KEY=$(cat "$RUNNER_TEMP/run-key/run.key")
+            TAURI_SIGNING_PRIVATE_KEY_PASSWORD=
+            export TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+          fi
+          cargo workshop installer --target ${{ matrix.triple }} --sign
+
+      # The Gateway reaches the setup only through tauri.windows.conf.json's
+      # externalBin; 7-Zip lists an NSIS setup's files.
+      - name: The setup carries the Gateway
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: |
+          setup=$(ls target/installer/x86_64-pc-windows-msvc/publish/Runvil_*_x64-setup.exe)
+          listing=$(7z l "$setup")
+          grep -F runvil-gateway.exe <<< "$listing" || { echo "$listing"; echo "runvil-gateway.exe is not in $setup"; exit 1; }
+
+      - name: Clean tree
+        shell: bash
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "the installer build dirtied the repository:"
+            git status --porcelain
+            exit 1
+          fi
+
+      - name: Upload the installer and updater files
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.platform }}
+          path: target/installer/${{ matrix.triple }}/publish/*
+          if-no-files-found: error
+          retention-days: 7
+
+  test:
+    needs: [prepare, build]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.cells) }}
+    name: test (${{ matrix.platform }}, ${{ matrix.selection }})
+    runs-on: ${{ matrix.runner }}
+    # The Speech to Text cells download about 600 MB.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.execution-sha }}
+
+      - name: Report the execution SHA
+        shell: bash
+        run: |
+          actual=$(git rev-parse HEAD)
+          expected="${{ needs.prepare.outputs.execution-sha }}"
+          [ "$actual" = "$expected" ] || { echo "checkout $actual does not match execution SHA $expected"; exit 1; }
+          echo "Execution SHA: $actual"
+
+      - name: Download the installer
+        uses: actions/download-artifact@v4
+        with:
+          name: installers-${{ matrix.platform }}
+          path: dist
+
+      # FUSE 2 lets the AppImage mount and set $APPIMAGE as on a user's
+      # machine, which the installed-peer lookup reads; the .run embeds
+      # IFW's installerbase, which loads the xcb libraries. The AppImage
+      # leaves EGL, HarfBuzz, FriBidi, and the Wayland client library to
+      # the system, as the AppImage excludelist says
+      # (https://github.com/AppImageCommunity/pkg2appimage/blob/master/excludelist),
+      # and Workshop opens GLES at run time; every GTK desktop has all five.
+      # The runner images lack EGL, and a bare Ubuntu image the others.
+      - name: Install the Linux test packages
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          . /etc/os-release
+          if [ "$VERSION_ID" = 22.04 ]; then fuse=libfuse2; else fuse=libfuse2t64; fi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb xauth desktop-file-utils lsof "$fuse" \
+            libegl1 libegl-mesa0 libgles2 libharfbuzz0b libfribidi0 libwayland-client0 \
+            libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-xfixes0 \
+            libxcb-xkb1 libxcb-util1 libfontconfig1 libfreetype6 libdbus-1-3
+
+      - name: Install and check (macOS and Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          CELL_LOGS: ${{ runner.temp }}/cell-logs
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          installers=(dist/*-setup.dmg dist/*-setup.run)
+          [ "${#installers[@]}" -eq 1 ] || { echo "the artifact must hold one installer, found ${#installers[@]}"; ls dist; exit 1; }
+          bash .github/installers/cell.sh "${installers[0]}" "${{ matrix.selection }}" "${{ needs.prepare.outputs.version }}"
+
+      - name: Install and check (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CELL_LOGS: ${{ runner.temp }}/cell-logs
+        run: |
+          $setups = @(Get-ChildItem dist | Where-Object { $_.Name -like '*-setup.exe' })
+          if ($setups.Count -ne 1) { throw "the artifact must hold one setup, found $($setups.Count)" }
+          & .github/installers/cell.ps1 $setups[0].FullName '${{ matrix.selection }}' '${{ needs.prepare.outputs.version }}'
+
+      # cancelled() covers the job timeout, so a hung cell keeps its logs.
+      - name: Upload the cell's logs
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cell-${{ matrix.platform }}-${{ matrix.selection }}
+          path: ${{ runner.temp }}/cell-logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+  manifest:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.execution-sha }}
+
+      - name: Report the execution SHA
+        shell: bash
+        run: |
+          actual=$(git rev-parse HEAD)
+          expected="${{ needs.prepare.outputs.execution-sha }}"
+          [ "$actual" = "$expected" ] || { echo "checkout $actual does not match execution SHA $expected"; exit 1; }
+          echo "Execution SHA: $actual"
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+
+      # manifest refuses subdirectories, so every platform's files land in
+      # one directory.
+      - name: Download every platform's files
+        uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          path: ${{ runner.temp }}/release
+          merge-multiple: true
+
+      - name: Download the run key
+        if: needs.prepare.outputs.mode != 'release'
+        uses: actions/download-artifact@v4
+        with:
+          name: run-signing-key
+          path: ${{ runner.temp }}/run-key
+
+      # A release verifies against plugins.updater.pubkey in tauri.conf.json,
+      # the key every installed copy trusts; other modes against the run key.
+      - name: Assemble and verify latest.json and SHA256SUMS
+        shell: bash
+        env:
+          MODE: ${{ needs.prepare.outputs.mode }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          key=()
+          if [ "$MODE" != release ]; then
+            key=(--public-key "$RUNNER_TEMP/run-key/run.key.pub")
+          fi
+          cargo workshop manifest --assets "$RUNNER_TEMP/release" \
+            --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION" "${key[@]}"
+          cat "$RUNNER_TEMP/release/latest.json" "$RUNNER_TEMP/release/SHA256SUMS"
+
+      - name: Upload the manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest
+          path: |
+            ${{ runner.temp }}/release/latest.json
+            ${{ runner.temp }}/release/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    needs: [prepare, test, manifest]
+    if: needs.prepare.outputs.mode == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download every platform's files
+        uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          path: dist
+          merge-multiple: true
+
+      - name: Download the manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: release-manifest
+          path: dist
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Runvil ${{ github.ref_name }}
+          make_latest: true
+          files: dist/*
+
+      # Copies made only after the release exists: latest.json names the
+      # versioned release's files, so they must be published before any
+      # updater can read it.
+      - name: Stage version-free installer names
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p evergreen
+          cp "dist/Runvil_${VERSION}_x64-setup.exe" evergreen/Runvil-setup.exe
+          cp "dist/Runvil_${VERSION}_aarch64-setup.dmg" evergreen/Runvil-arm64.dmg
+          cp "dist/Runvil_${VERSION}_x86_64-setup.dmg" evergreen/Runvil-x64.dmg
+          cp "dist/Runvil_${VERSION}_amd64-setup.run" evergreen/Runvil-x64.run
+          cp "dist/Runvil_${VERSION}_aarch64-setup.run" evergreen/Runvil-arm64.run
+          ls -l evergreen
+
+      - name: Publish the stable updater pointer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view workshop-latest >/dev/null 2>&1; then
+            gh release upload workshop-latest dist/latest.json evergreen/* --clobber
+          else
+            gh release create workshop-latest \
+              --target "$GITHUB_SHA" \
+              --title "Runvil updater" \
+              --notes "The updater manifest and version-free installers of the latest tested Runvil release." \
+              --latest=false \
+              dist/latest.json evergreen/*
+          fi

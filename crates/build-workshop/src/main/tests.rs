@@ -1,30 +1,63 @@
-//! Unit tests for argument parsing and the build command sequence.
+//! Unit tests for the build command sequence, with the fake runner and
+//! test workspace every mode's tests share.
 
 use std::collections::VecDeque;
+use std::path::Path;
 
 use tempfile::TempDir;
 
 use super::*;
+use args::InstallerRequest;
 
-#[path = "tests-failures.rs"]
+#[path = "tests/args.rs"]
+mod args_tests;
+#[path = "tests/bundle.rs"]
+mod bundle_tests;
+#[path = "tests/collect.rs"]
+mod collect_tests;
+#[path = "tests/failures.rs"]
 mod failures;
-#[path = "tests-gateway-source.rs"]
-mod source;
+#[path = "tests/gateway.rs"]
+mod gateway_tests;
+#[path = "tests/ifw.rs"]
+mod ifw_tests;
+#[path = "tests/installer.rs"]
+mod installer_tests;
+#[path = "tests/sidecar.rs"]
+mod sidecar_tests;
+#[path = "tests/stage.rs"]
+mod stage_tests;
 
-#[derive(Debug)]
 enum FakeResponse {
     Completed(CommandResult),
     CompletedAndCanceled,
     CanceledBeforeStart,
     CanceledAfterStart,
     SpawnFailed(io::ErrorKind, &'static str),
+    /// Runs the effect, standing in for what the real child does to the
+    /// filesystem, then answers with the inner response.
+    Act(Box<dyn FnOnce()>, Box<FakeResponse>),
+}
+
+impl fmt::Debug for FakeResponse {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Completed(result) => write!(formatter, "Completed({result:?})"),
+            Self::CompletedAndCanceled => formatter.write_str("CompletedAndCanceled"),
+            Self::CanceledBeforeStart => formatter.write_str("CanceledBeforeStart"),
+            Self::CanceledAfterStart => formatter.write_str("CanceledAfterStart"),
+            Self::SpawnFailed(kind, message) => {
+                write!(formatter, "SpawnFailed({kind:?}, {message})")
+            }
+            Self::Act(_, response) => write!(formatter, "Act({response:?})"),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
 struct FakeRunner {
     responses: VecDeque<FakeResponse>,
     commands: Vec<CommandSpec>,
-    last_command_started: bool,
     cancel_observed: bool,
 }
 
@@ -33,33 +66,14 @@ impl FakeRunner {
         Self {
             responses: responses.into(),
             commands: Vec::new(),
-            last_command_started: false,
             cancel_observed: false,
         }
     }
-}
 
-impl CommandRunner for FakeRunner {
-    fn run(
-        &mut self,
-        command: &CommandSpec,
-        cancel_policy: CancelPolicy,
-    ) -> io::Result<CommandResult> {
-        self.commands.push(command.clone());
-        self.last_command_started = false;
-        if cancel_policy == CancelPolicy::RejectExisting && self.cancel_observed {
-            return Err(io::Error::new(
-                io::ErrorKind::Interrupted,
-                "canceled before child start",
-            ));
-        }
-        match self.responses.pop_front().expect("unexpected command") {
-            FakeResponse::Completed(result) => {
-                self.last_command_started = true;
-                Ok(result)
-            }
+    fn answer(&mut self, response: FakeResponse) -> io::Result<CommandResult> {
+        match response {
+            FakeResponse::Completed(result) => Ok(result),
             FakeResponse::CompletedAndCanceled => {
-                self.last_command_started = true;
                 self.cancel_observed = true;
                 Ok(CommandResult {
                     success: true,
@@ -67,21 +81,30 @@ impl CommandRunner for FakeRunner {
                     stderr: String::new(),
                 })
             }
-            FakeResponse::CanceledBeforeStart => {
-                self.cancel_observed = true;
-                Err(io::Error::new(io::ErrorKind::Interrupted, "canceled"))
-            }
-            FakeResponse::CanceledAfterStart => {
-                self.last_command_started = true;
+            FakeResponse::CanceledBeforeStart | FakeResponse::CanceledAfterStart => {
                 self.cancel_observed = true;
                 Err(io::Error::new(io::ErrorKind::Interrupted, "canceled"))
             }
             FakeResponse::SpawnFailed(kind, message) => Err(io::Error::new(kind, message)),
+            FakeResponse::Act(effect, response) => {
+                effect();
+                self.answer(*response)
+            }
         }
     }
+}
 
-    fn last_command_started(&self) -> bool {
-        self.last_command_started
+impl CommandRunner for FakeRunner {
+    fn run(&mut self, command: &CommandSpec) -> io::Result<CommandResult> {
+        self.commands.push(command.clone());
+        if self.cancel_observed {
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "canceled before child start",
+            ));
+        }
+        let response = self.responses.pop_front().expect("unexpected command");
+        self.answer(response)
     }
 
     fn cancel_observed(&self) -> bool {
@@ -105,24 +128,148 @@ fn failure(stderr: &str) -> FakeResponse {
     })
 }
 
+fn act(effect: impl FnOnce() + 'static, response: FakeResponse) -> FakeResponse {
+    FakeResponse::Act(Box::new(effect), Box::new(response))
+}
+
+/// A Workshop build that asserts the sidecar is staged while it runs.
+fn workshop_built_with_sidecar(sidecar: PathBuf, response: FakeResponse) -> FakeResponse {
+    act(
+        move || assert!(sidecar.is_file(), "sidecar not staged during the build"),
+        response,
+    )
+}
+
+/// A Workshop build that asserts no sidecar is staged while it runs.
+fn workshop_built_without_sidecar(sidecar: PathBuf, response: FakeResponse) -> FakeResponse {
+    act(
+        move || assert!(!sidecar.exists(), "sidecar staged for a target without one"),
+        response,
+    )
+}
+
+/// A Workshop build that creates its profile directory, as Cargo does, so
+/// a macOS or Linux build can copy the Gateway beside Workshop.
+fn workshop_built_into(profile: PathBuf, response: FakeResponse) -> FakeResponse {
+    act(
+        move || write_file(&profile.join("runvil-workshop"), b"workshop"),
+        response,
+    )
+}
+
+fn repository_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("repository root")
+        .to_path_buf()
+}
+
+fn write_file(path: &Path, contents: &[u8]) {
+    std::fs::create_dir_all(path.parent().expect("parent")).expect("parent directory");
+    std::fs::write(path, contents).expect("write file");
+}
+
 struct TestEnvironment {
-    _temp: TempDir,
+    temp: TempDir,
     environment: BuildEnvironment,
 }
+
+impl TestEnvironment {
+    fn sidecar(&self, target: &str) -> PathBuf {
+        sidecar::sidecar_path(&self.environment.workspace_root, target)
+    }
+
+    /// Stages a release Gateway in `target`'s slot with the fetch script's
+    /// marker, as `tools/fetch-gateway-sidecar.mjs` leaves it.
+    fn stage_gateway(&self, target: &str) -> PathBuf {
+        self.stage_gateway_kind(target, "release")
+    }
+
+    /// Stages `tools/fetch-gateway-sidecar.mjs --stub`'s compile-only file.
+    fn stage_stub(&self, target: &str) -> PathBuf {
+        self.stage_gateway_kind(target, "stub")
+    }
+
+    fn stage_gateway_kind(&self, target: &str, kind: &str) -> PathBuf {
+        let slot = self.sidecar(target);
+        write_file(&slot, b"gateway");
+        let mut marker = slot.clone().into_os_string();
+        marker.push(".pinned");
+        write_file(
+            Path::new(&marker),
+            format!("{{\n  \"kind\": \"{kind}\"\n}}\n").as_bytes(),
+        );
+        slot
+    }
+
+    /// A Gateway binary outside the slot, as `--gateway-binary` or
+    /// `RUNVIL_GATEWAY_SIDECAR` names one.
+    fn given_gateway(&self, target: &str) -> PathBuf {
+        let path = self
+            .temp
+            .path()
+            .join("given")
+            .join(sidecar::gateway_binary_name(target));
+        write_file(&path, b"given gateway");
+        path
+    }
+
+    /// Writes `gateway-pin/pin.json` naming `version`.
+    fn pin(&self, version: &str) {
+        let pin = self
+            .environment
+            .workspace_root
+            .join("gateway-pin")
+            .join("pin.json");
+        write_file(
+            &pin,
+            serde_json::json!({ "version": version })
+                .to_string()
+                .as_bytes(),
+        );
+    }
+}
+
+/// The Gateway version the test workspace's pin names, apart from
+/// Workshop's own so a test can tell the two apart.
+const GATEWAY_VERSION: &str = "0.9.3";
 
 fn environment() -> TestEnvironment {
     let temp = tempfile::tempdir().expect("temporary workspace");
     let workspace_root = temp.path().join("repo");
+    let target_root = temp.path().join("cargo-target");
+    let tauri_cli = temp.path().join("tauri-cli").join("tauri.js");
     std::fs::create_dir_all(&workspace_root).expect("workspace root");
-    TestEnvironment {
-        _temp: temp,
+    write_file(&tauri_cli, b"");
+    let sources = installer::bundle::BundleSources::in_workspace(&repository_root());
+    let copies = installer::bundle::BundleSources::in_workspace(&workspace_root);
+    for (source, copy) in [
+        (sources.info_plist, copies.info_plist),
+        (sources.icon, copies.icon),
+    ] {
+        write_file(&copy, &std::fs::read(source).expect("bundle source"));
+    }
+    ifw_tests::copy_sources(&repository_root(), &workspace_root);
+    let qtifw_dir = Some(ifw_tests::fake_ifw(temp.path()).into_os_string());
+    let test_environment = TestEnvironment {
+        temp,
         environment: BuildEnvironment {
             workspace_root,
+            target_root,
+            target_root_from_env: true,
             cargo: PathBuf::from("selected-cargo"),
             node: PathBuf::from("selected-node"),
+            tauri_cli,
+            signing_key: None,
             gateway_sidecar: None,
+            qtifw_dir,
+            path: None,
+            release_date: "2026-10-11".to_owned(),
         },
-    }
+    };
+    test_environment.pin(GATEWAY_VERSION);
+    test_environment
 }
 
 fn strings(values: &[&str]) -> Vec<OsString> {
@@ -139,153 +286,49 @@ fn command(
         program: PathBuf::from(program),
         args: strings(args),
         current_dir: environment.workspace_root.clone(),
-        env: Vec::new(),
+        envs: Vec::new(),
         output_mode,
     }
 }
 
-/// The staging script's absolute path, as the pipeline passes it.
-fn staging_script(environment: &BuildEnvironment) -> String {
-    environment
-        .workspace_root
-        .join("tools")
-        .join("stage-gateway-sidecar.mjs")
-        .to_str()
-        .expect("UTF-8 script")
-        .to_owned()
+/// The environment a child that runs Cargo gets: the test target root
+/// stands in for an absolute `CARGO_TARGET_DIR`.
+fn target_root_env(environment: &BuildEnvironment) -> Vec<(OsString, OsString)> {
+    vec![(
+        OsString::from("CARGO_TARGET_DIR"),
+        environment.target_root.clone().into_os_string(),
+    )]
 }
 
-/// The `stage` command's arguments, spelled once for both order tests.
-fn stage_arguments(environment: &BuildEnvironment, target: &str, source: &str) -> Vec<String> {
-    vec![
-        staging_script(environment),
-        "stage".to_owned(),
-        "--target".to_owned(),
-        target.to_owned(),
-        "--source".to_owned(),
-        source.to_owned(),
-    ]
-}
-
-/// The `remove` command's arguments.
-fn remove_arguments(environment: &BuildEnvironment, target: &str) -> Vec<String> {
-    vec![
-        staging_script(environment),
-        "remove".to_owned(),
-        "--target".to_owned(),
-        target.to_owned(),
-    ]
-}
-
-/// A command spec from owned argument strings.
-fn owned_command(
-    environment: &BuildEnvironment,
-    program: &str,
-    args: &[String],
-    output_mode: OutputMode,
-) -> CommandSpec {
+/// A Cargo build, which runs with the absolute target root.
+fn cargo_build(environment: &BuildEnvironment, args: &[&str]) -> CommandSpec {
     CommandSpec {
-        program: PathBuf::from(program),
-        args: args.iter().map(OsString::from).collect(),
-        current_dir: environment.workspace_root.clone(),
-        env: Vec::new(),
-        output_mode,
+        envs: target_root_env(environment),
+        ..command(environment, "selected-cargo", args, OutputMode::Inherit)
     }
 }
 
-/// The Workshop build's spec: the one command that carries the sidecar
-/// path in its environment.
-fn workshop_command(environment: &BuildEnvironment, target: &str, args: &[&str]) -> CommandSpec {
-    let mut spec = command(environment, "selected-cargo", args, OutputMode::Inherit);
-    spec.env = vec![(
-        OsString::from(GATEWAY_SIDECAR_VARIABLE),
-        super::pipeline::sidecar_path(environment, target).into_os_string(),
-    )];
-    spec
+/// Sets the key the release secrets set.
+fn set_signing_key(environment: &mut BuildEnvironment) {
+    environment.signing_key = Some(OsString::from("dW50cnVzdGVkIGNvbW1lbnQ6"));
 }
 
 #[test]
-fn parses_only_the_documented_profile_and_target_options() {
-    assert_eq!(
-        parse_arguments(&[]).expect("debug request"),
-        BuildRequest {
-            profile: Profile::Debug,
-            target: None,
-            gateway_binary: None,
-        }
-    );
-    assert_eq!(
-        parse_arguments(&[
-            "--target".to_owned(),
-            "aarch64-apple-darwin".to_owned(),
-            "--release".to_owned(),
-            "--gateway-binary".to_owned(),
-            "../gateway/target/debug/runvil-gateway".to_owned(),
-        ])
-        .expect("release target request"),
-        BuildRequest {
-            profile: Profile::Release,
-            target: Some("aarch64-apple-darwin".to_owned()),
-            gateway_binary: Some(PathBuf::from("../gateway/target/debug/runvil-gateway")),
-        }
-    );
-}
-
-#[test]
-fn rejects_product_features_and_other_unsupported_arguments() {
-    for args in [
-        vec!["--features".to_owned(), "local".to_owned()],
-        vec!["--profile".to_owned(), "dist".to_owned()],
-        vec!["gateway".to_owned()],
-    ] {
-        let error = parse_arguments(&args)
-            .expect_err("unsupported argument")
-            .to_string();
-        assert!(error.contains("unsupported argument"), "{error}");
-        assert!(error.contains(USAGE), "{error}");
-    }
-}
-
-#[test]
-fn rejects_duplicate_or_incomplete_options() {
-    for args in [
-        vec!["--release".to_owned(), "--release".to_owned()],
-        vec!["--target".to_owned()],
-        vec![
-            "--target".to_owned(),
-            "x86_64-pc-windows-msvc".to_owned(),
-            "--target".to_owned(),
-            "x86_64-unknown-linux-gnu".to_owned(),
-        ],
-        vec!["--gateway-binary".to_owned()],
-        vec![
-            "--gateway-binary".to_owned(),
-            "a/runvil-gateway".to_owned(),
-            "--gateway-binary".to_owned(),
-            "b/runvil-gateway".to_owned(),
-        ],
-    ] {
-        assert!(parse_arguments(&args).is_err(), "{args:?}");
-    }
-}
-
-#[test]
-fn default_build_derives_host_and_cleans_up_in_order() {
+fn default_build_derives_host_and_uses_the_staged_gateway_in_place() {
     let test_environment = environment();
     let environment = &test_environment.environment;
+    let triple = "x86_64-pc-windows-msvc";
+    let staged = test_environment.stage_gateway(triple);
     let mut runner = FakeRunner::with_responses(vec![
         success("cargo 1.89.0\nhost: x86_64-pc-windows-msvc\n"),
-        success(""),
-        success(""),
-        success(""),
+        workshop_built_with_sidecar(staged.clone(), success("")),
     ]);
-    let given = PathBuf::from("/ci/staged/runvil-gateway.exe");
 
     build_workshop(
         &BuildRequest {
             profile: Profile::Debug,
             target: None,
-            gateway_binary: Some(given.clone()),
+            gateway_binary: None,
         },
         environment,
         &mut runner,
@@ -296,44 +339,35 @@ fn default_build_derives_host_and_cleans_up_in_order() {
         runner.commands,
         vec![
             command(environment, "selected-cargo", &["-vV"], OutputMode::Capture),
-            owned_command(
-                environment,
-                "selected-node",
-                &stage_arguments(
-                    environment,
-                    "x86_64-pc-windows-msvc",
-                    given.to_str().expect("UTF-8 source"),
-                ),
-                OutputMode::Inherit,
-            ),
-            workshop_command(
-                environment,
-                "x86_64-pc-windows-msvc",
-                &["build", "-p", "workshop"],
-            ),
-            owned_command(
-                environment,
-                "selected-node",
-                &remove_arguments(environment, "x86_64-pc-windows-msvc"),
-                OutputMode::Inherit,
-            ),
+            cargo_build(environment, &["build", "-p", "workshop"]),
         ]
+    );
+    assert!(staged.is_file(), "a staged Gateway must outlive the build");
+    // Windows carries the Gateway inside Workshop, never beside it.
+    assert!(
+        !environment
+            .target_root
+            .join("debug")
+            .join("runvil-gateway.exe")
+            .exists()
     );
 }
 
 #[test]
-fn explicit_release_target_uses_target_output_without_a_host_probe() {
+fn explicit_linux_release_target_copies_the_gateway_beside_workshop() {
     let test_environment = environment();
     let environment = &test_environment.environment;
     let triple = "aarch64-unknown-linux-gnu";
-    let mut runner = FakeRunner::with_responses(vec![success(""), success(""), success("")]);
-    let given = PathBuf::from("/ci/staged/runvil-gateway");
+    let staged = test_environment.stage_gateway(triple);
+    let profile = environment.target_root.join(triple).join("release");
+    let mut runner =
+        FakeRunner::with_responses(vec![workshop_built_into(profile.clone(), success(""))]);
 
     build_workshop(
         &BuildRequest {
             profile: Profile::Release,
             target: Some(triple.to_owned()),
-            gateway_binary: Some(given),
+            gateway_binary: None,
         },
         environment,
         &mut runner,
@@ -342,24 +376,44 @@ fn explicit_release_target_uses_target_output_without_a_host_probe() {
 
     assert_eq!(
         runner.commands,
-        vec![
-            owned_command(
-                environment,
-                "selected-node",
-                &stage_arguments(environment, triple, "/ci/staged/runvil-gateway"),
-                OutputMode::Inherit,
-            ),
-            workshop_command(
-                environment,
-                triple,
-                &["build", "-p", "workshop", "--release", "--target", triple,],
-            ),
-            owned_command(
-                environment,
-                "selected-node",
-                &remove_arguments(environment, triple),
-                OutputMode::Inherit,
-            ),
-        ]
+        vec![cargo_build(
+            environment,
+            &["build", "-p", "workshop", "--release", "--target", triple]
+        )]
+    );
+    assert_eq!(
+        std::fs::read(profile.join("runvil-gateway")).expect("Gateway beside Workshop"),
+        b"gateway"
+    );
+    assert!(staged.is_file(), "a staged Gateway must outlive the build");
+}
+
+#[test]
+fn a_target_root_from_cargo_configuration_is_left_to_cargo() {
+    let mut test_environment = environment();
+    test_environment.environment.target_root_from_env = false;
+    let environment = &test_environment.environment;
+    let triple = "aarch64-unknown-linux-gnu";
+    test_environment.stage_gateway(triple);
+    let profile = environment.target_root.join(triple).join("release");
+    let mut runner = FakeRunner::with_responses(vec![workshop_built_into(profile, success(""))]);
+
+    build_workshop(
+        &BuildRequest {
+            profile: Profile::Release,
+            target: Some(triple.to_owned()),
+            gateway_binary: None,
+        },
+        environment,
+        &mut runner,
+    )
+    .expect("Workshop build");
+
+    assert_eq!(runner.commands.len(), 1);
+    assert!(
+        runner
+            .commands
+            .iter()
+            .all(|command| command.envs.is_empty())
     );
 }

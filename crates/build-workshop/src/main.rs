@@ -1,13 +1,10 @@
-//! Builds Workshop and stages its Gateway sidecar for Tauri.
-//!
-//! The sidecar comes from one of three places, in this order: the
-//! `--gateway-binary` flag, the `RUNVIL_GATEWAY_SIDECAR` environment
-//! variable, or a sidecar already staged under
-//! `crates/workshop/desktop/binaries/`. The Gateway is its own product in
-//! `cppalliance/runvil-gateway`, so nothing here compiles it: with no
-//! sidecar anywhere, the run stops and names
-//! `node tools/fetch-gateway-sidecar.mjs`, which downloads the release
-//! `gateway-pin/pin.json` names.
+//! Builds Workshop or each platform's installer around the pinned Gateway
+//! release. For Windows targets the Gateway is Tauri's sidecar inside
+//! Workshop's bundle; macOS and Linux payloads carry it beside Workshop, and
+//! Qt IFW packages them into one installer. The Gateway is its own product
+//! in `cppalliance/runvil-gateway`, so nothing here compiles it. The
+//! `manifest` mode verifies every platform's published files as one release
+//! and writes its `latest.json` and `SHA256SUMS`.
 
 use std::ffi::OsString;
 use std::fmt;
@@ -16,43 +13,39 @@ use std::path::PathBuf;
 use std::process::{Child, ExitCode};
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
+#[path = "main/args.rs"]
+mod args;
+#[path = "main/installer.rs"]
+mod installer;
+#[path = "main/manifest.rs"]
+mod manifest;
 #[path = "main/pipeline.rs"]
 mod pipeline;
 #[path = "main/runner.rs"]
 mod runner;
+#[path = "main/sidecar.rs"]
+mod sidecar;
 
+use args::{Request, parse_arguments};
+use installer::build_installer;
 use pipeline::build_workshop;
 use runner::install_cancel_handler;
-
-/// The environment variable naming a Gateway binary to stage, so CI can
-/// point at a staged file without passing a flag through Tauri.
-const GATEWAY_SIDECAR_VARIABLE: &str = "RUNVIL_GATEWAY_SIDECAR";
-
-const USAGE: &str = "\
-Build Workshop, staging its Gateway sidecar.
-
-USAGE:
-    cargo workshop [--release] [--target <triple>] [--gateway-binary <path>]
-
-OPTIONS:
-    --release                 Build Workshop with Cargo's release profile
-    --target <triple>         Build for this target triple
-    --gateway-binary <path>   Stage this Gateway binary
-    -h, --help                Print this help
-
-The Gateway sidecar comes from --gateway-binary, then the
-RUNVIL_GATEWAY_SIDECAR environment variable, then a sidecar already staged
-under crates/workshop/desktop/binaries/. The Gateway is a separate product,
-so this never builds it: run `node tools/fetch-gateway-sidecar.mjs` to stage
-the release gateway-pin/pin.json names. A sidecar that was already staged is
-left in place, so the next build reuses it.
-";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Profile {
     Debug,
     Release,
+}
+
+impl Profile {
+    fn directory(self) -> &'static str {
+        match self {
+            Self::Debug => "debug",
+            Self::Release => "release",
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -73,7 +66,7 @@ struct CommandSpec {
     program: PathBuf,
     args: Vec<OsString>,
     current_dir: PathBuf,
-    env: Vec<(OsString, OsString)>,
+    envs: Vec<(OsString, OsString)>,
     output_mode: OutputMode,
 }
 
@@ -85,13 +78,8 @@ struct CommandResult {
 }
 
 trait CommandRunner {
-    fn run(
-        &mut self,
-        command: &CommandSpec,
-        cancel_policy: CancelPolicy,
-    ) -> io::Result<CommandResult>;
-
-    fn last_command_started(&self) -> bool;
+    /// Refuses to start once a cancel has been requested.
+    fn run(&mut self, command: &CommandSpec) -> io::Result<CommandResult>;
 
     fn cancel_observed(&self) -> bool;
 }
@@ -99,13 +87,6 @@ trait CommandRunner {
 #[derive(Debug)]
 struct ProcessRunner {
     cancel: CancelController,
-    last_command_started: bool,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum CancelPolicy {
-    RejectExisting,
-    AllowExisting,
 }
 
 #[derive(Clone, Debug)]
@@ -123,12 +104,22 @@ struct CancelState {
 #[derive(Debug)]
 struct BuildEnvironment {
     workspace_root: PathBuf,
+    target_root: PathBuf,
+    /// Whether `CARGO_TARGET_DIR` chose `target_root`; otherwise Cargo's
+    /// own configuration does, and children are left to it.
+    target_root_from_env: bool,
     cargo: PathBuf,
     node: PathBuf,
-    /// The Gateway binary named by `RUNVIL_GATEWAY_SIDECAR`, when set: the
-    /// path a CI job stages and points the build at, so no flag has to pass
-    /// through Tauri.
+    tauri_cli: PathBuf,
+    signing_key: Option<OsString>,
+    /// The Gateway binary `RUNVIL_GATEWAY_SIDECAR` names, when set.
     gateway_sidecar: Option<PathBuf>,
+    /// `QTIFWDIR` and `PATH`, where the macOS and Linux installers find
+    /// Qt IFW.
+    qtifw_dir: Option<OsString>,
+    path: Option<OsString>,
+    /// Today's UTC date, `YYYY-MM-DD`, for the IFW packages' `ReleaseDate`.
+    release_date: String,
 }
 
 impl BuildEnvironment {
@@ -144,27 +135,81 @@ impl BuildEnvironment {
                 )
             })?
             .to_path_buf();
+        let configured_target = std::env::var_os("CARGO_TARGET_DIR");
+        let target_root_from_env = configured_target.is_some();
+        let target_root = match configured_target {
+            Some(value) if value.is_empty() => {
+                return Err(anyhow::anyhow!("CARGO_TARGET_DIR must not be empty"));
+            }
+            Some(value) => {
+                let path = PathBuf::from(value);
+                if path.is_absolute() {
+                    path
+                } else {
+                    std::env::current_dir()
+                        .map_err(|error| {
+                            anyhow::anyhow!("cannot read the current directory: {error}")
+                        })?
+                        .join(path)
+                }
+            }
+            None => workspace_root.join("target"),
+        };
         let cargo = std::env::var_os("CARGO")
             .or_else(|| option_env!("CARGO").map(OsString::from))
             .map(PathBuf::from)
             .ok_or_else(|| {
                 anyhow::anyhow!("Cargo did not provide the executable used for this command")
             })?;
-        let gateway_sidecar = match std::env::var_os(GATEWAY_SIDECAR_VARIABLE) {
+        let tauri_cli = workspace_root
+            .join("crates")
+            .join("workshop")
+            .join("node_modules")
+            .join("@tauri-apps")
+            .join("cli")
+            .join("tauri.js");
+        let signing_key =
+            std::env::var_os("TAURI_SIGNING_PRIVATE_KEY").filter(|key| !key.is_empty());
+        let gateway_sidecar = match std::env::var_os(sidecar::GATEWAY_SIDECAR_VARIABLE) {
             Some(value) if value.is_empty() => {
                 return Err(anyhow::anyhow!(
-                    "{GATEWAY_SIDECAR_VARIABLE} must not be empty"
+                    "{} must not be empty",
+                    sidecar::GATEWAY_SIDECAR_VARIABLE
                 ));
             }
             Some(value) => Some(PathBuf::from(value)),
             None => None,
         };
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| anyhow::anyhow!("the system clock is before 1970: {error}"))?;
         Ok(Self {
             workspace_root,
+            target_root,
+            target_root_from_env,
             cargo,
             node: PathBuf::from("node"),
+            tauri_cli,
+            signing_key,
             gateway_sidecar,
+            qtifw_dir: std::env::var_os("QTIFWDIR"),
+            path: std::env::var_os("PATH"),
+            release_date: installer::ifw::utc_date(now.as_secs()),
         })
+    }
+
+    /// Cargo resolves a relative `CARGO_TARGET_DIR` against its own working
+    /// directory, which differs between children (the Tauri CLI runs from
+    /// `crates/workshop/desktop`), so every child that runs Cargo gets the
+    /// absolute root this process reads its outputs from.
+    fn cargo_envs(&self) -> Vec<(OsString, OsString)> {
+        if !self.target_root_from_env {
+            return Vec::new();
+        }
+        vec![(
+            OsString::from("CARGO_TARGET_DIR"),
+            self.target_root.clone().into_os_string(),
+        )]
     }
 }
 
@@ -178,7 +223,24 @@ struct BuildError {
 struct StepError {
     message: String,
     canceled: bool,
-    command_started: bool,
+}
+
+impl StepError {
+    fn failed(message: String) -> Self {
+        Self {
+            message,
+            canceled: false,
+        }
+    }
+}
+
+impl From<StepError> for BuildError {
+    fn from(error: StepError) -> Self {
+        Self {
+            primary: error.message,
+            cleanup: None,
+        }
+    }
 }
 
 impl fmt::Display for BuildError {
@@ -191,83 +253,13 @@ impl fmt::Display for BuildError {
     }
 }
 
-fn parse_arguments(args: &[String]) -> Result<BuildRequest, anyhow::Error> {
-    let mut profile = Profile::Debug;
-    let mut release_seen = false;
-    let mut target = None;
-    let mut gateway_binary = None;
-    let mut index = 0;
-    while index < args.len() {
-        match args[index].as_str() {
-            "--release" if release_seen => {
-                return Err(anyhow::anyhow!("duplicate argument `--release`\n\n{USAGE}"));
-            }
-            "--release" => {
-                profile = Profile::Release;
-                release_seen = true;
-                index += 1;
-            }
-            "--target" if target.is_some() => {
-                return Err(anyhow::anyhow!("duplicate argument `--target`\n\n{USAGE}"));
-            }
-            "--target" => {
-                let value = args.get(index + 1).ok_or_else(|| {
-                    anyhow::anyhow!("argument `--target` needs a target triple\n\n{USAGE}")
-                })?;
-                if value.starts_with('-') || !valid_target_triple(value) {
-                    return Err(anyhow::anyhow!(
-                        "argument `--target` needs a valid target triple, got `{value}`\n\n{USAGE}"
-                    ));
-                }
-                target = Some(value.clone());
-                index += 2;
-            }
-            "--gateway-binary" if gateway_binary.is_some() => {
-                return Err(anyhow::anyhow!(
-                    "duplicate argument `--gateway-binary`\n\n{USAGE}"
-                ));
-            }
-            "--gateway-binary" => {
-                let value = args.get(index + 1).ok_or_else(|| {
-                    anyhow::anyhow!("argument `--gateway-binary` needs a path\n\n{USAGE}")
-                })?;
-                if value.starts_with('-') || value.trim().is_empty() {
-                    return Err(anyhow::anyhow!(
-                        "argument `--gateway-binary` needs a path, got `{value}`\n\n{USAGE}"
-                    ));
-                }
-                gateway_binary = Some(PathBuf::from(value));
-                index += 2;
-            }
-            argument => {
-                return Err(anyhow::anyhow!(
-                    "unsupported argument `{argument}`\n\n{USAGE}"
-                ));
-            }
-        }
-    }
-    Ok(BuildRequest {
-        profile,
-        target,
-        gateway_binary,
-    })
-}
-
-fn valid_target_triple(target: &str) -> bool {
-    let parts: Vec<&str> = target.split('-').collect();
-    parts.len() >= 3
-        && parts.iter().all(|part| {
-            !part.is_empty()
-                && part
-                    .chars()
-                    .all(|character| character.is_ascii_alphanumeric() || character == '_')
-        })
-}
-
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if matches!(args.as_slice(), [argument] if argument == "-h" || argument == "--help") {
-        print!("{USAGE}");
+    if args
+        .iter()
+        .any(|argument| argument == "-h" || argument == "--help")
+    {
+        print!("{}", args::USAGE);
         return ExitCode::SUCCESS;
     }
     let request = match parse_arguments(&args) {
@@ -284,20 +276,46 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let cancel = match install_cancel_handler() {
-        Ok(cancel) => cancel,
-        Err(error) => {
-            eprintln!("build-workshop failed: {error}");
-            return ExitCode::FAILURE;
+    let result = match &request {
+        Request::Build(request) => {
+            with_process_runner(|runner| build_workshop(request, &environment, runner))
         }
+        Request::Installer(request) => {
+            with_process_runner(|runner| build_installer(request, &environment, runner))
+        }
+        Request::Manifest(request) => run_manifest(request, &environment),
     };
-    match build_workshop(&request, &environment, &mut ProcessRunner::new(cancel)) {
+    match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("build-workshop failed: {error}");
             ExitCode::FAILURE
         }
     }
+}
+
+fn with_process_runner(
+    build: impl FnOnce(&mut ProcessRunner) -> Result<(), BuildError>,
+) -> Result<(), String> {
+    let cancel = install_cancel_handler().map_err(|error| error.to_string())?;
+    build(&mut ProcessRunner::new(cancel)).map_err(|error| error.to_string())
+}
+
+fn run_manifest(
+    request: &args::ManifestRequest,
+    environment: &BuildEnvironment,
+) -> Result<(), String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("the system clock is before 1970: {error}"))?;
+    manifest::write(request, &environment.workspace_root, now.as_secs())?;
+    println!(
+        "wrote {} and {} in {}",
+        manifest::MANIFEST,
+        manifest::CHECKSUMS,
+        request.assets.display()
+    );
+    Ok(())
 }
 
 #[cfg(test)]

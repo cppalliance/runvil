@@ -29,7 +29,7 @@ import { TOAST_STACK } from "./services/toast-service";
 import { toastCommandFailures } from "./services/command-failure-toasts";
 import { TREE_STATE, TreeStateService } from "./services/tree-state-service";
 import { createUiStorage, UI_STORAGE } from "./services/ui-storage";
-import { UpdateService } from "./services/update-service";
+import { UPDATES, UpdateService } from "./services/update-service";
 import { WorkbenchService } from "./services/workbench-service";
 import { WorkshopSocket } from "./services/workshop-socket";
 import { CommandCenter } from "./parts/chrome/command-center";
@@ -153,6 +153,8 @@ registerService(
 // view (@workshop/look) and appends it as the body's full-width footer.
 const statusBar = disposables.add(new StatusBar());
 const updates = disposables.add(new UpdateService());
+// Help > About resolves it for its update button.
+registerService(UPDATES, () => updates);
 // The shared toast stack shows the update notifications, the views'
 // confirmations (a copied message), a status-bar error, and a failed
 // command; it registers so those views reach it without importing the app.
