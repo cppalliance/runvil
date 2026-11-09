@@ -1412,6 +1412,7 @@ Audit of everything published on 2026-10-07 (requested in the team thread): what
     - On Windows the tray menu opens on right-click, and a setup run over a running install asks to kill Runvil and the Gateway.
     - Not verified by anyone: the Windows local model path with the pinned Gateway, and dictation without a model on a real desktop.
   - A macOS ARM install of that run's installer on the maintainer's machine: the headless install to `/Applications/Runvil` offered two components and downloaded nothing; opening Runvil started the Gateway, which wrote its config, downloaded speech (626 MB), and logged "speech runtime loaded" 5 minutes 14 seconds after its first start, on the Metal runtime. The maintainer dictated in the empty chat with no chat model, which confirms the review's reading that dictation no longer needs one. The installer's wizard was not run.
+  - The maintainer's call (2026-11-09): no Linux retest on this build. The container test, the CI cells, and rounds 1 and 2 on real desktops stand as the Linux result; anything found later is fixed later.
 
 </step-12>
 
