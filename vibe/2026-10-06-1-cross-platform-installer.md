@@ -1421,6 +1421,7 @@ Audit of everything published on 2026-10-07 (requested in the team thread): what
     - The About dialog's button is disabled while an update downloads or installs.
     - The peer lookup lost four exports nothing called. The `installers.yml` pull-request filter gained the desktop build script, the desktop Gateway code, the plists, `gateway-discovery`, `Cargo.toml`, `Cargo.lock`, and `LICENSE`.
     - Left open by choice: the filter leaves out `crates/workshop/ui/**` and the rest of the desktop source, since five installer builds on most Workshop pull requests cost more than they buy and a release gates on every cell; a check from About that finds no update returns to "Check for Updates..." with no "up to date" label; the desktop build script's early return has no test, being a build script; release mode of `installers.yml` has still never run.
+    - After the loop, at `ecf099f18`: the full local gate set passed except the two failures that also fail on upstream; #25's checks passed; and the dispatched full run [42717204841](https://github.com/gregjkal/runvil/actions/runs/42717204841) passed every build, every install cell, and `manifest`.
 
 </step-12>
 
