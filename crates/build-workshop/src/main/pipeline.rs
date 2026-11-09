@@ -64,6 +64,8 @@ pub(super) fn build_workshop(
             // `beside`, and writing into a running program's file fails on
             // Linux. A rename replaces the name and leaves that file alone.
             let fresh = beside.with_extension("new");
+            // One left by a build that stopped mid-copy may be read-only.
+            let _ = fs::remove_file(&fresh);
             copy_executable(&gateway, &fresh)
                 .and_then(|()| {
                     fs::rename(&fresh, &beside).map_err(|error| {

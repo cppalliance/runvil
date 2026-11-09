@@ -241,6 +241,18 @@ fn linux_unsigned_from_the_host_publishes_only_the_installer() {
         1
     );
     assert!(staged.is_file(), "a staged Gateway must outlive the build");
+    // The Gateway package carries the pin's version, not Workshop's.
+    let package = output_root
+        .join("ifw")
+        .join("packages")
+        .join("com.runvil.gateway")
+        .join("meta")
+        .join("package.xml");
+    let package = std::fs::read_to_string(package).expect("Gateway package");
+    assert!(
+        package.contains(&format!("<Version>{GATEWAY_VERSION}</Version>")),
+        "{package}"
+    );
 }
 
 #[test]

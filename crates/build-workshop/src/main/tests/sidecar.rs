@@ -53,6 +53,26 @@ fn names_the_sidecar_with_tauri_s_target_suffix() {
     }
 }
 
+/// A link to a Gateway stages as a regular file, the same as naming a copy.
+#[cfg(unix)]
+#[test]
+fn stages_the_file_a_symlink_names() {
+    let temp = tempfile::tempdir().expect("temporary root");
+    let root = temp.path().join("repo");
+    let built = temp.path().join("build").join("gateway-build");
+    write_file(&built, b"gateway bytes");
+    let link = temp.path().join("named").join("runvil-gateway.exe");
+    std::fs::create_dir_all(link.parent().expect("parent")).expect("directory");
+    std::os::unix::fs::symlink(&built, &link).expect("symlink");
+    let target = "x86_64-pc-windows-msvc";
+
+    let staged = sidecar::stage(&root, target, &link).expect("stage");
+
+    let metadata = std::fs::symlink_metadata(&staged).expect("staged");
+    assert!(metadata.is_file(), "the slot holds a link");
+    assert_eq!(std::fs::read(&staged).expect("staged"), b"gateway bytes");
+}
+
 #[test]
 fn stages_a_copy_and_removes_it() {
     let temp = tempfile::tempdir().expect("temporary root");

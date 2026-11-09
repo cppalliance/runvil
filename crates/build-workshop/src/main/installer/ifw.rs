@@ -154,12 +154,22 @@ fn placeholders(
     [
         ("VERSION", VERSION.to_owned()),
         // The Gateway is its own product with its own version, the pin's.
-        ("GATEWAY_VERSION", gateway_version.to_owned()),
+        ("GATEWAY_VERSION", ifw_version(gateway_version).to_owned()),
         ("RELEASE_DATE", release_date.to_owned()),
         ("TARGET_DIR", target_dir.to_owned()),
         ("GATEWAY_EXECUTABLE", gateway),
         ("WORKSHOP_EXECUTABLE", workshop),
     ]
+}
+
+/// The part of `version` an IFW `<Version>` accepts. IFW takes digits
+/// joined by `.` or `-` and refuses anything else, so a prerelease or build
+/// suffix such as `-rc.1` is left off: `0.4.0-rc.1` becomes `0.4.0`.
+pub(crate) fn ifw_version(version: &str) -> &str {
+    let core = version
+        .find(|character: char| !(character.is_ascii_digit() || character == '.'))
+        .map_or(version, |end| &version[..end]);
+    core.trim_end_matches('.')
 }
 
 /// The checked-in files the stage is built from.

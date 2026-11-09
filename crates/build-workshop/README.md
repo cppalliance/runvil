@@ -18,7 +18,7 @@ The gateway is its own product, in [cppalliance/runvil-gateway](https://github.c
 node tools/fetch-gateway-sidecar.mjs --target <triple>
 ```
 
-The script downloads the release asset, checks its SHA-256 against the pin, and stages the executable in `crates/workshop/desktop/binaries/`, where every later build reuses it. `--gateway-binary <path>`, or the `RUNVIL_GATEWAY_SIDECAR` environment variable, names another gateway instead. The installer build runs the gateway's `--version` and refuses one that is not the pinned version.
+The script downloads the release asset, checks its SHA-256 against the pin, and stages the executable in `crates/workshop/desktop/binaries/`, where every later build reuses it. `--gateway-binary <path>`, or the `RUNVIL_GATEWAY_SIDECAR` environment variable, names another gateway instead; for a Windows target, remove the staged one first, because a named gateway never replaces it. The installer build runs the gateway's `--version` and refuses one that is not the pinned version.
 
 ## Building an installer
 

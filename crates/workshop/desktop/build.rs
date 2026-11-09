@@ -94,7 +94,8 @@ fn install_gateway_sidecar() -> Result<(), Box<dyn Error>> {
 fn copy_forward(source: &Path, sidecar: &Path) -> std::io::Result<()> {
     // `cargo workshop` stages the file it names here before this script
     // runs. Copying it again would fail on Windows when the file is
-    // read-only, since the first copy carries that attribute to the slot.
+    // read-only, since the first copy carries that attribute to the slot:
+    // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-copyfilew
     if fs::read(sidecar).is_ok_and(|staged| fs::read(source).is_ok_and(|named| named == staged)) {
         return Ok(());
     }

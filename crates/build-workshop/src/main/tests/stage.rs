@@ -7,8 +7,6 @@ use crate::installer::Platform;
 use crate::installer::ifw::{self, Sources};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-/// Differs from `VERSION`, so a package carrying the wrong one fails.
-const GATEWAY_VERSION: &str = "9.8.7";
 const RELEASE_DATE: &str = "2026-10-11";
 
 /// A payload as `collect` leaves it, with executables `0755`.
@@ -373,5 +371,16 @@ fn the_release_date_is_the_utc_calendar_date() {
         (4_107_542_400, "2100-03-01"),
     ] {
         assert_eq!(ifw::utc_date(seconds), date, "{seconds}");
+    }
+}
+
+#[test]
+fn a_prerelease_or_build_suffix_is_left_off_the_ifw_version() {
+    for (version, expected) in [
+        ("0.3.0", "0.3.0"),
+        ("0.4.0-rc.1", "0.4.0"),
+        ("1.2.3+build.7", "1.2.3"),
+    ] {
+        assert_eq!(ifw::ifw_version(version), expected, "{version}");
     }
 }
