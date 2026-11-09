@@ -160,7 +160,7 @@ pub(super) fn build_installer(
     )
     .map_err(failure)?;
     let installer = match &ifw {
-        Some(ifw) => build_ifw_installer(ifw, environment, platform, &output, runner)?,
+        Some(ifw) => build_ifw_installer(ifw, environment, platform, &gateway, &output, runner)?,
         None => output
             .join("publish")
             .join(collect::installer_name(platform)),
@@ -199,6 +199,7 @@ fn build_ifw_installer(
     ifw: &ifw::Ifw,
     environment: &BuildEnvironment,
     platform: Platform,
+    gateway: &Gateway,
     output: &Path,
     runner: &mut impl CommandRunner,
 ) -> Result<PathBuf, BuildError> {
@@ -209,6 +210,7 @@ fn build_ifw_installer(
         &output.join("payload"),
         platform,
         &environment.release_date,
+        &gateway.version,
         &stage,
     )
     .map_err(failure)?;

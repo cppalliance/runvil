@@ -26,6 +26,9 @@ on:
     paths:
       - .github/workflows/installers.yml
       - .github/installers/**
+      - Cargo.toml
+      - Cargo.lock
+      - LICENSE
       - crates/build-workshop/**
       - crates/workshop/desktop/installer.nsi
       - crates/workshop/desktop/build.rs

@@ -133,7 +133,11 @@ pub(crate) fn check_version(ifw: &Ifw, printed: &str) -> Result<(), String> {
 }
 
 /// What the definition's placeholders become for one platform.
-fn placeholders(platform: Platform, release_date: &str) -> [(&'static str, String); 5] {
+fn placeholders(
+    platform: Platform,
+    release_date: &str,
+    gateway_version: &str,
+) -> [(&'static str, String); 6] {
     let (target_dir, gateway, workshop) = match platform.system {
         System::MacOs => (
             "@ApplicationsDir@/Runvil",
@@ -149,6 +153,8 @@ fn placeholders(platform: Platform, release_date: &str) -> [(&'static str, Strin
     };
     [
         ("VERSION", VERSION.to_owned()),
+        // The Gateway is its own product with its own version, the pin's.
+        ("GATEWAY_VERSION", gateway_version.to_owned()),
         ("RELEASE_DATE", release_date.to_owned()),
         ("TARGET_DIR", target_dir.to_owned()),
         ("GATEWAY_EXECUTABLE", gateway),
@@ -184,9 +190,10 @@ pub(crate) fn stage(
     payload: &Path,
     platform: Platform,
     release_date: &str,
+    gateway_version: &str,
     stage: &Path,
 ) -> Result<(), String> {
-    let values = placeholders(platform, release_date);
+    let values = placeholders(platform, release_date, gateway_version);
     copy_definition(&sources.definition, stage, &values)?;
     let config = stage.join("config");
     for icon in ["icon.icns", "icon.png"] {

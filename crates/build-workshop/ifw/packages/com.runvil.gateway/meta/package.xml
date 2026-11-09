@@ -2,7 +2,7 @@
 <Package>
     <DisplayName>Runvil Gateway</DisplayName>
     <Description>The local gateway that serves models to Workshop and other clients, with its tray icon and Settings page. It writes its default configuration, which includes speech to text, the first time it starts.</Description>
-    <Version>{{VERSION}}</Version>
+    <Version>{{GATEWAY_VERSION}}</Version>
     <ReleaseDate>{{RELEASE_DATE}}</ReleaseDate>
     <Default>true</Default>
     <SortingPriority>200</SortingPriority>

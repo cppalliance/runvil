@@ -7,6 +7,8 @@ use crate::installer::Platform;
 use crate::installer::ifw::{self, Sources};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Differs from `VERSION`, so a package carrying the wrong one fails.
+const GATEWAY_VERSION: &str = "9.8.7";
 const RELEASE_DATE: &str = "2026-10-11";
 
 /// A payload as `collect` leaves it, with executables `0755`.
@@ -111,6 +113,7 @@ fn the_staged_definition_is_filled_for_each_platform_with_the_payload_in_place()
             &payload,
             platform,
             RELEASE_DATE,
+            GATEWAY_VERSION,
             &stage,
         )
         .expect("stage");
@@ -139,10 +142,10 @@ fn check_templates(stage: &Path, target: &str, target_dir: &str) {
         assert!(config.contains(&expected), "{target}: {config}");
     }
     let packages = stage.join("packages");
-    for package in ["workshop", "gateway"] {
+    for (package, version) in [("workshop", VERSION), ("gateway", GATEWAY_VERSION)] {
         let xml = read(&packages.join(format!("com.runvil.{package}/meta/package.xml")));
         for expected in [
-            format!("<Version>{VERSION}</Version>"),
+            format!("<Version>{version}</Version>"),
             format!("<ReleaseDate>{RELEASE_DATE}</ReleaseDate>"),
         ] {
             assert!(xml.contains(&expected), "{target}: {xml}");
@@ -236,6 +239,7 @@ fn an_unknown_placeholder_fails_naming_the_file_and_the_placeholder() {
         &payload,
         platform,
         RELEASE_DATE,
+        GATEWAY_VERSION,
         &temp.path().join("ifw"),
     )
     .expect_err("unknown placeholder");
@@ -261,6 +265,7 @@ fn a_symlink_in_the_payload_is_refused_naming_its_path() {
         &payload,
         platform,
         RELEASE_DATE,
+        GATEWAY_VERSION,
         &temp.path().join("ifw"),
     )
     .expect_err("symlink");

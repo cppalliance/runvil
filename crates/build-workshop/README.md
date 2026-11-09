@@ -7,6 +7,7 @@ This crate is `cargo workshop`, the one build path for Runvil's desktop products
 - `cargo workshop [--release] [--target <triple>] [--gateway-binary <path>]` builds Workshop with Cargo. For a Windows target the gateway is Workshop's sidecar; elsewhere the build copies it beside Workshop in the target directory, where a development Workshop finds it.
 - `cargo workshop installer [--target <triple>] [--sign] [--gateway-binary <path>]` builds one platform's installer in release.
 - `cargo workshop manifest --assets <dir> --base-url <url> [--public-key <file>]` checks that a directory holds exactly one release's files for every platform, verifies each updater signature, and writes `latest.json` and `SHA256SUMS` beside them.
+
 `cargo workshop --help` prints the full usage.
 
 ## The gateway

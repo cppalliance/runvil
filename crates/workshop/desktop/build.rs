@@ -92,6 +92,12 @@ fn install_gateway_sidecar() -> Result<(), Box<dyn Error>> {
 /// Copies `source` over `sidecar`, creating the directory and reporting
 /// the copy so a surprising sidecar is visible in the build log.
 fn copy_forward(source: &Path, sidecar: &Path) -> std::io::Result<()> {
+    // `cargo workshop` stages the file it names here before this script
+    // runs. Copying it again would fail on Windows when the file is
+    // read-only, since the first copy carries that attribute to the slot.
+    if fs::read(sidecar).is_ok_and(|staged| fs::read(source).is_ok_and(|named| named == staged)) {
+        return Ok(());
+    }
     if let Some(parent) = sidecar.parent() {
         fs::create_dir_all(parent)?;
     }

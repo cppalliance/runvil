@@ -150,7 +150,7 @@ pub(super) fn sidecar_path(workspace_root: &Path, target: &str) -> PathBuf {
 }
 
 pub(super) fn stage(workspace_root: &Path, target: &str, source: &Path) -> Result<PathBuf, String> {
-    let metadata = match fs::symlink_metadata(source) {
+    let metadata = match fs::metadata(source) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             return Err(format!(

@@ -193,6 +193,39 @@ fn a_host_build_copies_a_given_gateway_into_the_profile_directory() {
     assert!(!test_environment.sidecar(target).exists());
 }
 
+/// A Gateway from an earlier run may still be running from the profile
+/// directory, so the copy must replace the name and leave that file alone.
+#[cfg(unix)]
+#[test]
+fn a_host_build_replaces_the_gateway_beside_workshop_without_writing_into_it() {
+    use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+
+    let test_environment = environment();
+    let environment = &test_environment.environment;
+    let target = "aarch64-unknown-linux-gnu";
+    let given = test_environment.given_gateway(target);
+    std::fs::set_permissions(&given, std::fs::Permissions::from_mode(0o644)).expect("mode");
+    let profile = environment.target_root.join(target).join("debug");
+    let beside = profile.join("runvil-gateway");
+    write_file(&beside, b"an earlier gateway");
+    let earlier = std::fs::metadata(&beside).expect("earlier").ino();
+    let mut runner =
+        FakeRunner::with_responses(vec![workshop_built_into(profile.clone(), success(""))]);
+
+    build_workshop(
+        &build_request(Some(target), Some(given)),
+        environment,
+        &mut runner,
+    )
+    .expect("Workshop build");
+
+    assert_eq!(std::fs::read(&beside).expect("replaced"), b"given gateway");
+    let metadata = std::fs::metadata(&beside).expect("replaced");
+    assert_eq!(metadata.permissions().mode() & 0o777, 0o755);
+    assert_ne!(metadata.ino(), earlier, "the earlier file was written into");
+    assert!(!profile.join("runvil-gateway.new").exists());
+}
+
 #[test]
 fn an_unpinned_gateway_refuses_the_installer_before_any_command() {
     let test_environment = environment();

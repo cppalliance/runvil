@@ -149,6 +149,14 @@ export function showAboutDialog(updates?: UpdateService): IDisposable {
     } else if (snapshot.phase === "checking") {
       check.textContent = "Checking for Updates...";
       check.disabled = true;
+    } else if (
+      snapshot.phase === "downloading" ||
+      snapshot.phase === "installing" ||
+      snapshot.phase === "restarting"
+    ) {
+      // A new check would close the update handle the install is using.
+      check.textContent = "Installing Update...";
+      check.disabled = true;
     } else if (snapshot.phase === "available" || snapshot.phase === "dismissed") {
       check.textContent = "Download Update";
       check.disabled = false;

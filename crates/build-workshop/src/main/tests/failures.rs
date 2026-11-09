@@ -298,8 +298,9 @@ fn a_failed_unstartable_or_canceled_bundle_collects_nothing_and_removes_only_a_g
             let test_environment = environment();
             let environment = &test_environment.environment;
             let mut installer_request = request(target, false);
+            let named = given.then(|| test_environment.given_gateway(target));
             if given {
-                installer_request.gateway_binary = Some(test_environment.given_gateway(target));
+                installer_request.gateway_binary.clone_from(&named);
             } else {
                 test_environment.stage_gateway(target);
             }
@@ -318,6 +319,15 @@ fn a_failed_unstartable_or_canceled_bundle_collects_nothing_and_removes_only_a_g
                 .expect_err("bundle failure");
 
             assert!(error.primary.contains(expected), "{target}: {error}");
+            // The bundle's build script copies what this variable names
+            // into the slot, so the bundle is told the checked Gateway.
+            let bundle = runner.commands.last().expect("the bundle command");
+            let told = bundle
+                .envs
+                .iter()
+                .find(|(key, _)| key == "RUNVIL_GATEWAY_SIDECAR")
+                .map(|(_, value)| PathBuf::from(value));
+            assert_eq!(told, named, "{target}");
             assert_eq!(
                 test_environment.sidecar(target).exists(),
                 !given,

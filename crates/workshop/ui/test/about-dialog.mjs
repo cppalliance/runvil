@@ -151,6 +151,28 @@ check(
   window.document.querySelector(".ws-about-dialog-overlay") === null,
 );
 
+// While an update downloads and installs, the button offers no new check:
+// a check would close the update handle the install is using.
+let finishInstall;
+answer = async () => ({
+  currentVersion: "0.3.0",
+  version: "0.4.0",
+  body: "",
+  downloadAndInstall: () =>
+    new Promise((resolve) => {
+      finishInstall = resolve;
+    }),
+  close: async () => undefined,
+});
+await updates.checkNow();
+const installing = updates.install();
+await settle();
+await Commands.execute(ABOUT);
+check("a running install disables the button", buttonReads("Installing Update...", false));
+closeDialog("Close dismisses the dialog during an install");
+finishInstall();
+await installing;
+
 // A package-managed install leaves updates to the package manager.
 supported = false;
 await updates.checkNow();
