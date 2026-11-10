@@ -32,10 +32,11 @@ pub(super) fn findings(loaded: &Loaded, surface: &Surface, visits: &[Visit<'_>])
     findings
 }
 
-/// Both spellings of every internal crate name, sorted.
+/// Both spellings of every container crate's name, sorted. A public crate
+/// the facade passes on is one dependents can use, so docs may name it.
 fn spellings(surface: &Surface) -> Vec<String> {
     let mut names: Vec<String> = surface
-        .internal
+        .private
         .iter()
         .flat_map(|name| [name.clone(), name.replace('_', "-")])
         .collect();

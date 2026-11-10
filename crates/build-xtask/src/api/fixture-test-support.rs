@@ -2,7 +2,8 @@
 //! crate over one internal crate, `runvil-inner`, plus a stand-in
 //! `serde` so the allowlist is exercised without a registry; one fixture
 //! adds a second internal crate, `runvil-outer`, downstream of the
-//! first. Building their rustdoc JSON needs the pinned nightly, so every
+//! first, and one adds a second facade, `host`, over the first and over
+//! a public crate, `contract`. Building their rustdoc JSON needs the pinned nightly, so every
 //! test that calls [`findings`] or `execute` carries `#[ignore = "needs
 //! the pinned nightly"]`.
 
@@ -12,12 +13,24 @@ use std::path::Path;
 use super::load::Facade;
 use super::{Mode, Outcome, Report};
 
+/// The second facade of [`workspace_with_host`]: `crates/host` over the
+/// same container as the first, passing on the public crate `contract`.
+pub(super) const HOST: Facade = Facade {
+    package: "host",
+    dir: ["crates", "host"],
+    containers: &["runvil-internal"],
+    public: &["contract"],
+    allowed: &[],
+};
+
 /// The fixture workspaces' facade: `crates/runvil` over
 /// `crates/runvil-internal/`.
 pub(super) const FIXTURE: Facade = Facade {
     package: "runvil",
     dir: ["crates", "runvil"],
-    container: "runvil-internal",
+    containers: &["runvil-internal"],
+    public: &[],
+    allowed: &[],
 };
 
 const WORKSPACE: &str = "[workspace]\nresolver = \"3\"\nmembers = [\
@@ -39,6 +52,18 @@ const OUTER_MANIFEST: &str = "[package]\nname = \"runvil-outer\"\nversion = \"0.
     edition = \"2024\"\npublish = false\n\n\
     [dependencies]\nrunvil-inner = { path = \"../inner\" }\n";
 
+const HOST_WORKSPACE: &str = "[workspace]\nresolver = \"3\"\nmembers = [\
+    \"crates/runvil\", \"crates/runvil-internal/*\", \"crates/serde\", \
+    \"crates/host\", \"crates/contract\"]\n";
+
+const HOST_MANIFEST: &str = "[package]\nname = \"host\"\nversion = \"0.0.0\"\n\
+    edition = \"2024\"\npublish = false\n\n\
+    [dependencies]\nrunvil = { path = \"../runvil\" }\n\
+    contract = { path = \"../contract\" }\n";
+
+const CONTRACT_MANIFEST: &str = "[package]\nname = \"contract\"\nversion = \"0.0.0\"\n\
+    edition = \"2024\"\npublish = false\n";
+
 const SERDE_MANIFEST: &str =
     "[package]\nname = \"serde\"\nversion = \"1.0.0\"\nedition = \"2024\"\npublish = false\n";
 
@@ -55,6 +80,29 @@ pub(super) fn workspace(inner: &str, facade: &str) -> tempfile::TempDir {
 /// depending on the inner crate; the facade depends on both.
 pub(super) fn workspace_with_outer(inner: &str, outer: &str, facade: &str) -> tempfile::TempDir {
     generate(inner, Some(outer), facade)
+}
+
+/// [`workspace`] plus a second facade, `host`, whose `lib.rs` is `host`.
+/// It depends on the first facade and on the public crate `contract`,
+/// whose `lib.rs` is `contract`.
+pub(super) fn workspace_with_host(
+    inner: &str,
+    facade: &str,
+    contract: &str,
+    host: &str,
+) -> tempfile::TempDir {
+    let root = generate(inner, None, facade);
+    for (path, text) in [
+        ("Cargo.toml", HOST_WORKSPACE),
+        ("crates/host/Cargo.toml", HOST_MANIFEST),
+        ("crates/host/src/lib.rs", host),
+        ("crates/contract/Cargo.toml", CONTRACT_MANIFEST),
+        ("crates/contract/src/lib.rs", contract),
+    ] {
+        write(root.path(), path, text);
+    }
+    lock(root.path());
+    root
 }
 
 fn generate(inner: &str, outer: Option<&str>, facade: &str) -> tempfile::TempDir {
@@ -86,7 +134,13 @@ fn generate(inner: &str, outer: Option<&str>, facade: &str) -> tempfile::TempDir
             outer,
         );
     }
-    let output = super::load::cargo(root.path())
+    lock(root.path());
+    root
+}
+
+/// Writes the lockfile of the workspace at `root`, so `--locked` holds.
+fn lock(root: &Path) {
+    let output = super::load::cargo(root)
         .args(["generate-lockfile", "--offline"])
         .output()
         .expect("cargo runs");
@@ -95,7 +149,6 @@ fn generate(inner: &str, outer: Option<&str>, facade: &str) -> tempfile::TempDir
         "the fixture lockfile generates:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    root
 }
 
 /// Writes `text` at `path` under `root`, creating directories.
@@ -114,6 +167,16 @@ pub(super) fn report(root: &Path) -> Result<Report, String> {
 /// Runs the fixture facade of the workspace at `root` in `mode`.
 pub(super) fn execute(root: &Path, mode: Mode) -> Result<Outcome, String> {
     super::execute(root, &FIXTURE, mode)
+}
+
+/// The findings for `facade` in the workspace at `root`, as printed.
+pub(super) fn findings_of(root: &Path, facade: &Facade) -> BTreeSet<String> {
+    super::report(root, facade)
+        .expect("the fixture documents")
+        .findings
+        .iter()
+        .map(ToString::to_string)
+        .collect()
 }
 
 /// The findings for the workspace at `root`, as printed.
@@ -136,6 +199,6 @@ pub(super) fn set<const N: usize>(expected: [String; N]) -> BTreeSet<String> {
 pub(super) fn leak(krate: &str) -> String {
     format!(
         "required {}, found an item of internal crate `{krate}` the facade does not re-export",
-        super::items::required()
+        super::items::required_with(&[])
     )
 }

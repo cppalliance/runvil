@@ -1,5 +1,6 @@
-//! Builds rustdoc JSON for a facade and every crate under its container
-//! with default features, and parses it.
+//! Builds rustdoc JSON for a facade, every crate under its containers,
+//! and the public crates it passes on, with default features, and parses
+//! it.
 //!
 //! One `cargo doc` invocation selects the facade and every internal
 //! crate, so each internal crate is documented with the features the
@@ -8,7 +9,7 @@
 //! since no internal crate declares one. The JSON lands under
 //! `target/xtask-api/`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -24,9 +25,15 @@ pub(super) struct Facade {
     /// The crate directory, relative to the workspace root, which holds
     /// `public-api.txt`.
     pub(super) dir: [&'static str; 2],
-    /// The container under `crates/` whose crates may define a
-    /// re-exported item.
-    pub(super) container: &'static str,
+    /// The containers under `crates/` whose crates may define a
+    /// re-exported item. Surface docs may name none of those crates.
+    pub(super) containers: &'static [&'static str],
+    /// The packages outside every container that may define a
+    /// re-exported item too: the public crates the facade passes on.
+    pub(super) public: &'static [&'static str],
+    /// The crates the surface may mention beside the shared allowlist, by
+    /// crate name.
+    pub(super) allowed: &'static [&'static str],
 }
 
 impl Facade {
@@ -36,12 +43,31 @@ impl Facade {
     }
 }
 
-/// Every facade the command checks, in the order it reports them.
-pub(super) const FACADES: [Facade; 1] = [Facade {
-    package: "runvil-engine",
-    dir: crate::facade_shape::FACADE_DIR,
-    container: crate::engine_guards::ENGINE_CONTAINER,
-}];
+/// Every facade the command checks, in the order it reports them: the
+/// Engine's, then the one a Host depends on. The second passes on the
+/// Engine's items, which rustdoc names by the crate that defines them, so
+/// its containers are the Harness's and the Engine's, and it passes on
+/// the Plugin contract's items too. `insert_plugin` takes the C contract's
+/// entry point, a type of a crate in another repository.
+pub(super) const FACADES: [Facade; 2] = [
+    Facade {
+        package: "runvil-engine",
+        dir: crate::facade_shape::FACADE_DIR,
+        containers: &[crate::engine_guards::ENGINE_CONTAINER],
+        public: &[],
+        allowed: &[],
+    },
+    Facade {
+        package: "runvil",
+        dir: crate::facade_shape::FACADE_DIRS[1],
+        containers: &[
+            crate::doc_hidden::HARNESS_CONTAINER,
+            crate::engine_guards::ENGINE_CONTAINER,
+        ],
+        public: &["runvil-plugin"],
+        allowed: &["runvil_plugin_sys"],
+    },
+];
 
 /// The rustdoc flags every build passes. Hidden items are documented
 /// because dependents can still name them, and the transport codec is
@@ -65,8 +91,14 @@ pub(super) struct Loaded {
     pub(super) name: String,
     /// The facade crate.
     pub(super) facade: Crate,
-    /// Every internal crate, keyed by its crate name (`runvil_runtime`).
+    /// Every crate that may define a re-exported item, keyed by its crate
+    /// name (`runvil_runtime`): the container crates and the public
+    /// crates.
     pub(super) internal: BTreeMap<String, Crate>,
+    /// The container crates' names, which surface docs may not hold.
+    pub(super) private: BTreeSet<String>,
+    /// The crates the surface may mention beside the shared allowlist.
+    pub(super) allowed: &'static [&'static str],
 }
 
 /// The package names of every crate under `container`, sorted.
@@ -102,7 +134,14 @@ fn internal_packages(root: &Path, container: &str) -> Result<Vec<String>, String
 /// Builds and parses the rustdoc JSON of `facade` and its internal crates
 /// in the workspace at `root`.
 pub(super) fn load(root: &Path, facade: &Facade) -> Result<Loaded, String> {
-    let packages = internal_packages(root, facade.container)?;
+    let mut private = Vec::new();
+    for container in facade.containers {
+        private.extend(internal_packages(root, container)?);
+    }
+    let mut packages = private.clone();
+    packages.extend(facade.public.iter().map(|package| (*package).to_owned()));
+    packages.sort();
+    packages.dedup();
     let target = root.join("target").join("xtask-api");
     run_cargo_doc(root, &target, facade.package, &packages)?;
     let doc = target.join("doc");
@@ -118,6 +157,11 @@ pub(super) fn load(root: &Path, facade: &Facade) -> Result<Loaded, String> {
         name,
         facade: krate,
         internal,
+        private: private
+            .iter()
+            .map(|package| package.replace('-', "_"))
+            .collect(),
+        allowed: facade.allowed,
     })
 }
 

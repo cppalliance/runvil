@@ -5,7 +5,10 @@
 
 use std::collections::BTreeSet;
 
-use super::super::fixture::{findings, leak, set, workspace, workspace_with_outer};
+use super::super::fixture::{
+    HOST, findings, findings_of, leak, set, workspace, workspace_with_host, workspace_with_outer,
+};
+use super::super::load::Facade;
 
 #[test]
 #[ignore = "needs the pinned nightly"]
@@ -151,4 +154,79 @@ fn a_link_whose_target_the_facade_re_exports_passes() {
          pub use runvil_inner::Other;\npub use runvil_inner::Visible;\n",
     );
     assert_eq!(findings(root.path()), BTreeSet::new());
+}
+
+const VISIBLE: &str = "//! Inner.\n\n/// Exposed.\npub struct Visible;\n";
+
+const DEAL: &str = "//! Contract.\n\n/// A deal.\npub struct Deal;\n";
+
+#[test]
+#[ignore = "needs the pinned nightly"]
+fn a_second_facade_re_exports_the_first_facade_s_re_export_and_a_public_crate_s_item() {
+    let root = workspace_with_host(
+        VISIBLE,
+        "//! Facade.\npub use runvil_inner::Visible;\n",
+        DEAL,
+        "//! Host.\npub use contract::Deal;\npub use runvil::Visible;\n",
+    );
+    assert_eq!(findings_of(root.path(), &HOST), BTreeSet::new());
+    let listing = super::super::report(root.path(), &HOST)
+        .expect("the fixture documents")
+        .listing;
+    for line in ["pub struct host::Deal;", "pub struct host::Visible;"] {
+        assert!(
+            listing.iter().any(|listed| listed == line),
+            "{line} is not in {listing:?}"
+        );
+    }
+}
+
+#[test]
+#[ignore = "needs the pinned nightly"]
+fn a_second_facade_must_re_export_what_its_own_surface_names() {
+    let root = workspace_with_host(
+        "//! Inner.\n\n/// Exposed by the first facade.\npub struct Secret;\n\n\
+         /// Returns it.\npub fn make() -> Secret {\n    Secret\n}\n",
+        "//! Facade.\npub use runvil_inner::Secret;\npub use runvil_inner::make;\n",
+        "//! Contract.\n\n/// Passed on by no facade.\npub struct Terms;\n\n\
+         /// Returns them.\npub fn sign() -> Terms {\n    Terms\n}\n",
+        "//! Host.\npub use contract::sign;\npub use runvil::make;\n",
+    );
+    assert_eq!(
+        findings(root.path()),
+        BTreeSet::new(),
+        "the first facade re-exports what its surface names"
+    );
+    let internal = leak("runvil_inner");
+    let public = internal.replace("internal crate `runvil_inner`", "public crate `contract`");
+    assert_eq!(
+        findings_of(root.path(), &HOST),
+        set([
+            format!("host::make: mentions `runvil_inner::Secret` in its signature: {internal}"),
+            format!("host::sign: mentions `contract::Terms` in its signature: {public}"),
+        ])
+    );
+}
+
+#[test]
+#[ignore = "needs the pinned nightly"]
+fn a_public_crate_s_item_is_a_re_export_target_only_for_a_facade_that_names_the_crate() {
+    let root = workspace_with_host(
+        VISIBLE,
+        "//! Facade.\npub use runvil_inner::Visible;\n",
+        DEAL,
+        "//! Host.\npub use contract::Deal;\n",
+    );
+    let closed = Facade {
+        public: &[],
+        ..HOST
+    };
+    assert_eq!(
+        findings_of(root.path(), &closed),
+        set([
+            "host::Deal: mentions `contract::Deal` as its re-export target: required an item \
+             defined in an internal crate, found an item of crate `contract`"
+                .to_owned()
+        ])
+    );
 }

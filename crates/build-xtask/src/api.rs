@@ -1,13 +1,23 @@
-//! `cargo xtask api`: proves the `runvil-engine` facade's surface closed
-//! and snapshots it, from rustdoc JSON built on the pinned nightly.
+//! `cargo xtask api`: proves each facade's surface closed and snapshots
+//! it, from rustdoc JSON built on the pinned nightly. The facades are
+//! `runvil-engine`, the Engine's, and `runvil`, the one a Host depends
+//! on.
 //!
-//! The facade and every internal crate are documented once, with the
-//! facade's default features: each facade `use` must resolve to a single
-//! item defined in an internal crate, every path a surface item's
+//! A facade and every internal crate behind it are documented once, with
+//! the facade's default features: each facade `use` must resolve to a
+//! single item defined in an internal crate, every path a surface item's
 //! signature, fields, bounds, impls, or doc links name must be a facade
 //! re-export, std, core, alloc, or an allowlisted crate, and no surface
-//! doc text may name an internal crate. The listing is compared with
-//! `crates/runvil-engine/public-api.txt`.
+//! doc text may name an internal crate. The listing is compared with the
+//! `public-api.txt` in the facade's crate directory.
+//!
+//! `runvil` passes on items of `runvil-engine` and of `runvil-plugin`.
+//! Rustdoc names a re-exported item by the crate that defines it, so the
+//! internal crates behind `runvil` are the Harness's and the Engine's,
+//! and `runvil-plugin` is a public crate whose items `runvil` may
+//! re-export. A surface item that names an Engine or Plugin contract
+//! item `runvil` does not re-export is a violation, as one that names an
+//! internal item is.
 //!
 //! A listing line is the item's facade path with its signature, in this
 //! notation:

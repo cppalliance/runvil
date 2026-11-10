@@ -21,8 +21,47 @@ fn every_approved_crate_passes_closure_and_any_other_is_refused() {
 }
 
 #[test]
+fn a_facade_s_own_allowed_crate_passes_closure_and_its_requirement_names_the_crate() {
+    let surface = Surface {
+        allowed: &["extra_sys"],
+        ..Surface::default()
+    };
+    let path = ["extra_sys".to_owned(), "Entry".to_owned()];
+    assert_eq!(surface.refusal("extra_sys", &path), None);
+    assert!(
+        surface.required().ends_with("serde_yaml_ng, extra_sys)"),
+        "{}",
+        surface.required()
+    );
+    assert_eq!(
+        Surface::default().refusal("extra_sys", &path).as_deref(),
+        Some("an item of crate `extra_sys`, which is not on the allowlist"),
+        "another facade does not get the crate"
+    );
+}
+
+#[test]
+fn a_mention_of_an_item_the_facade_lacks_says_whether_its_crate_is_internal_or_public() {
+    let surface = Surface {
+        internal: ["contract".to_owned(), "runvil_inner".to_owned()].into(),
+        private: ["runvil_inner".to_owned()].into(),
+        ..Surface::default()
+    };
+    let secret = ["runvil_inner".to_owned(), "Secret".to_owned()];
+    assert_eq!(
+        surface.refusal("runvil_inner", &secret).as_deref(),
+        Some("an item of internal crate `runvil_inner` the facade does not re-export")
+    );
+    let terms = ["contract".to_owned(), "Terms".to_owned()];
+    assert_eq!(
+        surface.refusal("contract", &terms).as_deref(),
+        Some("an item of public crate `contract` the facade does not re-export")
+    );
+}
+
+#[test]
 fn the_closure_requirement_names_every_crate_it_permits() {
-    let required = required();
+    let required = required_with(&[]);
     let words: Vec<&str> = required
         .split(|c: char| !(c.is_alphanumeric() || c == '_'))
         .collect();

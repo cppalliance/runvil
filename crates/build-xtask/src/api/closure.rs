@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use rustdoc_types::{Crate, Id, Item, ItemKind};
 
 use super::Finding;
-use super::items::{Surface, required, target};
+use super::items::{Surface, target};
 use super::load::Loaded;
 use super::render::Renderer;
 use super::walk::Visit;
@@ -41,7 +41,7 @@ pub(super) fn findings(loaded: &Loaded, surface: &Surface, visits: &[Visit<'_>])
                 findings.push(Finding {
                     item: visit.label.clone(),
                     mention: format!("`{shown}` in its {}", mention.context),
-                    required: required(),
+                    required: surface.required(),
                     found,
                 });
             }
@@ -93,7 +93,7 @@ impl Links<'_> {
                 findings.push(Finding {
                     item: label.to_owned(),
                     mention: format!("`{shown}` through its doc link `[{text}]`"),
-                    required: required(),
+                    required: self.surface.required(),
                     found,
                 });
             }

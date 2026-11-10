@@ -65,7 +65,7 @@ impl std::fmt::Display for EffectId {
 }
 
 /// The identity of one model round: its id and the path that dispatched
-/// it. Every [`Effect::Chat`] carries one.
+/// it. Every `Effect::Chat` carries one.
 ///
 /// Ids number the run's model rounds from 0 in dispatch order. Chat rounds
 /// and nested `models.infer` rounds share one sequence. The thinking,

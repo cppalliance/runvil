@@ -21,12 +21,16 @@ const STD_CRATES: [&str; 3] = ["std", "core", "alloc"];
 /// names the defining crate.
 const ALLOWLIST: [&str; 4] = ["serde", "serde_core", "serde_json", "serde_yaml_ng"];
 
-/// What a closure mention must be, naming every crate it may come from.
-pub(super) fn required() -> String {
+/// What a closure mention must be, naming every crate it may come from:
+/// the shared ones, then the crates in `allowed`, which one facade may
+/// also mention.
+pub(super) fn required_with(allowed: &[&str]) -> String {
+    let mut crates = ALLOWLIST.to_vec();
+    crates.extend(allowed);
     format!(
         "a facade re-export, {}, or an allowlisted crate ({})",
         STD_CRATES.join(", "),
-        ALLOWLIST.join(", ")
+        crates.join(", ")
     )
 }
 
@@ -79,8 +83,13 @@ pub(super) struct Surface {
     pub(super) modules: Vec<(String, Id)>,
     /// The facade's crate name, which roots every facade path.
     pub(super) root: String,
-    /// The internal crates' names.
+    /// The names of the crates that may define a re-exported item: the
+    /// container crates and the public crates the facade passes on.
     pub(super) internal: BTreeSet<String>,
+    /// The container crates' names, which surface docs may not hold.
+    pub(super) private: BTreeSet<String>,
+    /// The crates the surface may mention beside the shared allowlist.
+    allowed: &'static [&'static str],
     /// Defining crate, then definition path, to facade path.
     facade_paths: HashMap<String, HashMap<Vec<String>, String>>,
 }
@@ -100,6 +109,8 @@ impl Surface {
             surface: Surface {
                 root: loaded.name.clone(),
                 internal: loaded.internal.keys().cloned().collect(),
+                private: loaded.private.clone(),
+                allowed: loaded.allowed,
                 ..Surface::default()
             },
             uses: Vec::new(),
@@ -119,18 +130,29 @@ impl Surface {
         self.facade_paths.get(krate)?.get(path).map(String::as_str)
     }
 
+    /// What a closure mention must be, naming every crate it may come
+    /// from.
+    pub(super) fn required(&self) -> String {
+        required_with(self.allowed)
+    }
+
     /// Why mentioning the item at `path` in `krate` breaks closure, or
     /// `None` when the facade re-exports it or its crate is allowed.
     pub(super) fn refusal(&self, krate: &str, path: &[String]) -> Option<String> {
         if krate == self.root
             || STD_CRATES.contains(&krate)
             || ALLOWLIST.contains(&krate)
+            || self.allowed.contains(&krate)
             || self.facade_path(krate, path).is_some()
         {
             None
-        } else if self.internal.contains(krate) {
+        } else if self.private.contains(krate) {
             Some(format!(
                 "an item of internal crate `{krate}` the facade does not re-export"
+            ))
+        } else if self.internal.contains(krate) {
+            Some(format!(
+                "an item of public crate `{krate}` the facade does not re-export"
             ))
         } else {
             Some(format!(
@@ -215,7 +237,14 @@ impl<'a> Resolver<'a> {
             } else {
                 format!("an item of crate `{}`", target.krate)
             };
-            return self.refuse(label, &path, "an item defined in an internal crate", &found);
+            // A facade that passes on public crates may re-export their
+            // items too.
+            let required = if loaded.internal.len() > loaded.private.len() {
+                "an item defined in an internal or public crate"
+            } else {
+                "an item defined in an internal crate"
+            };
+            return self.refuse(label, &path, required, &found);
         };
         let paths = self
             .surface

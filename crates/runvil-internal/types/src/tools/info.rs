@@ -15,7 +15,7 @@ use super::ids::ToolId;
 /// call it.
 ///
 /// The caller collects the `ToolInfo` values of every Pack it can serve
-/// into a [`ToolCatalog`](super::ToolCatalog). The implementations stay with
+/// into a `ToolCatalog`. The implementations stay with
 /// the caller, keyed by [`ToolId`]. Every catalog tool is available to the
 /// prompt's Lua, which calls one by id unless the tool is model-only, and a
 /// section offers one to its
