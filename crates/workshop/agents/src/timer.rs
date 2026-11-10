@@ -2,7 +2,8 @@
 
 use std::time::Duration;
 
-use runvil::harness::{BoxFuture, Timer};
+use runvil::BoxFuture;
+use runvil::harness::Timer;
 
 /// Sleeps on tokio's timer wheel.
 ///
@@ -13,7 +14,7 @@ use runvil::harness::{BoxFuture, Timer};
 pub struct TokioTimer;
 
 impl Timer for TokioTimer {
-    fn sleep(&self, duration: Duration) -> BoxFuture<()> {
+    fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()> {
         Box::pin(tokio::time::sleep(duration))
     }
 }

@@ -6,13 +6,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use runvil::effect::Round;
-use runvil::harness::{BoxFuture, InferenceBroker, Packs, Timer};
+use runvil::harness::{InferenceBroker, Packs, Timer};
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };
 use runvil::plugin::PackRegistry;
-use runvil::{Error, ErrorCode, Harness, Host, RunSetup};
+use runvil::{BoxFuture, Error, ErrorCode, Harness, Host, RunSetup};
 
 /// The name every suite Host finds its prompt by.
 const PROMPT: &str = "prompt.md";
@@ -21,7 +21,7 @@ const PROMPT: &str = "prompt.md";
 pub(crate) struct Offline;
 
 impl InferenceBroker for Offline {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
+    fn models(&self) -> BoxFuture<'static, Result<ModelCatalog, Error>> {
         Box::pin(async { Ok(ModelCatalog::empty()) })
     }
 
@@ -32,7 +32,7 @@ impl InferenceBroker for Offline {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         _round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>> {
         let code = ErrorCode::Unavailable;
         Box::pin(async move { Err(make_completion_error(code, phrase(code))) })
     }
@@ -42,7 +42,7 @@ impl InferenceBroker for Offline {
 pub(crate) struct Clock;
 
 impl Timer for Clock {
-    fn sleep(&self, duration: Duration) -> BoxFuture<()> {
+    fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()> {
         Box::pin(tokio::time::sleep(duration))
     }
 }

@@ -6,11 +6,10 @@ use std::sync::{Arc, Mutex};
 
 use runvil::event::Event;
 use runvil::harness::{
-    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
-    make_recorder_error,
+    MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder, make_recorder_error,
 };
 use runvil::ids::Provenance;
-use runvil::{Error, RunSeed};
+use runvil::{BoxFuture, Error, RunSeed};
 
 use crate::state::FailureKind;
 use crate::table::Conversations;
@@ -56,11 +55,11 @@ struct Watching {
 }
 
 impl RunRecorder for Watching {
-    fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
+    fn begin_run(&self, meta: RunMeta) -> BoxFuture<'_, Result<RunId, Error>> {
         self.inner.begin_run(meta)
     }
 
-    fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()> {
+    fn append(&self, run: RunId, record: Record) -> BoxFuture<'_, Result<(), Error>> {
         self.held_at_append
             .lock()
             .unwrap()
@@ -71,7 +70,11 @@ impl RunRecorder for Watching {
         self.inner.append(run, record)
     }
 
-    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+    fn end_run(
+        &self,
+        run: RunId,
+        result: Result<String, Error>,
+    ) -> BoxFuture<'_, Result<(), Error>> {
         self.inner.end_run(run, result)
     }
 }

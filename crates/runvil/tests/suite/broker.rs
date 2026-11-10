@@ -7,13 +7,13 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use runvil::effect::Round;
 use runvil::event::ReplyOrigin;
-use runvil::harness::{BoxFuture, InferenceBroker, MemoryRecorder};
+use runvil::harness::{InferenceBroker, MemoryRecorder};
 use runvil::ids::RoundId;
 use runvil::model::{
     Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
     ModelInfo, ThinkingMode, ToolSchema,
 };
-use runvil::{Error, RunSetup};
+use runvil::{BoxFuture, Error, RunSetup};
 
 use crate::support::{launch, no_packs};
 
@@ -40,7 +40,7 @@ struct ScriptedBroker {
 }
 
 impl InferenceBroker for ScriptedBroker {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
+    fn models(&self) -> BoxFuture<'static, Result<ModelCatalog, Error>> {
         let catalog = self.catalog.clone();
         Box::pin(async move { Ok(catalog) })
     }
@@ -52,7 +52,7 @@ impl InferenceBroker for ScriptedBroker {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>> {
         self.rounds
             .lock()
             .unwrap_or_else(PoisonError::into_inner)

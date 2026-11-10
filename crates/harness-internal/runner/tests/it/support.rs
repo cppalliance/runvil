@@ -8,9 +8,9 @@ use std::sync::{Arc, Mutex};
 use std::task::Poll;
 use std::time::Duration;
 
-use harness_runner::performers::{BoxFuture, InferenceBroker, Timer, ToolPerformer};
+use harness_runner::performers::{InferenceBroker, Timer, ToolPerformer};
 use harness_runner::recorder::{
-    MemoryRecorder, Record, RecorderFuture, RunId, RunMeta, RunRecorder, make_recorder_error,
+    MemoryRecorder, Record, RunId, RunMeta, RunRecorder, make_recorder_error,
 };
 use harness_runner::{Host, Packs, RunSetup};
 use runvil_engine::cancel::CancelHandle;
@@ -23,7 +23,7 @@ use runvil_engine::vfs::{
     Access, AcquireContext, Entry, ExecId, MemoryBackend, Stat, Vfs, VfsAccess, VfsError, VfsPath,
     VfsRef,
 };
-use runvil_engine::{Error, ErrorCode, ErrorFact};
+use runvil_engine::{BoxFuture, Error, ErrorCode, ErrorFact};
 use runvil_engine::{Prompt, Run, RunParams, RunSeed};
 use runvil_engine::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil_plugin::{Pack, PackId, PackInfo, PackRegistry};
@@ -183,7 +183,7 @@ pub(crate) const TIMED_MAIN: &str = "local t = tasks.spawn('## Child')\n\
 pub(crate) struct Unused;
 
 impl InferenceBroker for Unused {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
+    fn models(&self) -> BoxFuture<'static, Result<ModelCatalog, Error>> {
         unreachable!("the effect loop never lists models")
     }
 
@@ -194,7 +194,7 @@ impl InferenceBroker for Unused {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         _round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>> {
         unreachable!("no test issues a Chat effect")
     }
 }
@@ -207,13 +207,13 @@ impl ToolPerformer for Unused {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'static, Result<ToolOutput, Error>> {
         unreachable!("this test issues no ToolCall effect")
     }
 }
 
 impl Timer for Unused {
-    fn sleep(&self, _duration: Duration) -> BoxFuture<()> {
+    fn sleep(&self, _duration: Duration) -> BoxFuture<'static, ()> {
         unreachable!("no test issues a Timer effect")
     }
 }
@@ -236,7 +236,7 @@ impl ToolPerformer for TextTool {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'static, Result<ToolOutput, Error>> {
         let text = self.0;
         Box::pin(async move { Ok(ToolOutput::trusted(text)) })
     }
@@ -253,7 +253,7 @@ impl ToolPerformer for PendingTool {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'static, Result<ToolOutput, Error>> {
         Box::pin(std::future::pending())
     }
 }
@@ -270,7 +270,7 @@ impl ToolPerformer for PanickingTool {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'static, Result<ToolOutput, Error>> {
         Box::pin(std::future::poll_fn(
             |_cx| -> Poll<Result<ToolOutput, Error>> {
                 panic!("the tool performer panics instead of answering")
@@ -294,7 +294,7 @@ impl ToolPerformer for ClosingTool {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'static, Result<ToolOutput, Error>> {
         let recorder = Arc::clone(&self.recorder);
         let run_id = self.run_id;
         Box::pin(async move {
@@ -364,7 +364,7 @@ impl FailingRecorder {
 }
 
 impl RunRecorder for FailingRecorder {
-    fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
+    fn begin_run(&self, meta: RunMeta) -> BoxFuture<'_, Result<RunId, Error>> {
         Box::pin(async move {
             self.count()?;
             let run = self.inner.begin_run(meta).await?;
@@ -373,14 +373,18 @@ impl RunRecorder for FailingRecorder {
         })
     }
 
-    fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()> {
+    fn append(&self, run: RunId, record: Record) -> BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
             self.count()?;
             self.inner.append(run, record).await
         })
     }
 
-    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+    fn end_run(
+        &self,
+        run: RunId,
+        result: Result<String, Error>,
+    ) -> BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
             self.count()?;
             self.inner.end_run(run, result).await
@@ -405,7 +409,7 @@ pub(crate) struct PendingTimer {
 }
 
 impl Timer for PendingTimer {
-    fn sleep(&self, _duration: Duration) -> BoxFuture<()> {
+    fn sleep(&self, _duration: Duration) -> BoxFuture<'static, ()> {
         let raise = RaiseOnDrop(Arc::clone(&self.dropped));
         Box::pin(async move {
             let _raise = raise;
@@ -429,7 +433,7 @@ impl ToolPerformer for GatedTool {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'static, Result<ToolOutput, Error>> {
         let gate = Arc::clone(&self.gate);
         Box::pin(async move {
             gate.acquire()

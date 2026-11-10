@@ -46,14 +46,14 @@ use runvil_engine::effect::{PackToolSets, ToolCallOrigin};
 use runvil_engine::model::ModelInfo;
 use runvil_engine::packs::{PackRef, Prelude, RosterEntry};
 use runvil_engine::vfs::Access;
-use runvil_engine::{Error, ErrorCode};
+use runvil_engine::{BoxFuture, Error, ErrorCode};
 use runvil_engine::{ToolCatalog, ToolId, ToolInfo, ToolOutput, make_tool_error};
 use runvil_plugin::{
     Pack, PackFactory, PackId, PackInfo, PackRegistry, RenderContext, ToolContext,
 };
 use serde_json::Value;
 
-use crate::performers::{BoxFuture, ToolPerformer};
+use crate::performers::ToolPerformer;
 
 /// The vendor whose Packs every run holds unless a declared Pack takes
 /// their id, and the vendor a bare `uses:` entry means.
@@ -492,7 +492,7 @@ impl ToolPerformer for RunPacks {
         access: Arc<Access>,
         origin: ToolCallOrigin,
         args: Value,
-    ) -> BoxFuture<Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'static, Result<ToolOutput, Error>> {
         let pack = self.usable(&tool.pack()).cloned();
         Box::pin(async move {
             let Some(pack) = pack else {
@@ -519,7 +519,7 @@ impl ToolPerformer for RunPacks {
         entry: String,
         model: ModelInfo,
         offered: Vec<PackToolSets<ToolInfo>>,
-    ) -> BoxFuture<Vec<PackToolSets<ToolInfo>>> {
+    ) -> BoxFuture<'static, Vec<PackToolSets<ToolInfo>>> {
         let packs: Vec<Option<Arc<dyn Pack>>> = offered
             .iter()
             .map(|sets| self.usable(&sets.pack).cloned())

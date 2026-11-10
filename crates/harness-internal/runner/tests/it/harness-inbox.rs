@@ -18,12 +18,10 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
-use harness_runner::recorder::{
-    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
-};
+use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder};
 use harness_runner::{RunControl, RunSetup};
 use runvil_engine::vfs::VfsRef;
-use runvil_engine::{Error, ErrorCode};
+use runvil_engine::{BoxFuture, Error, ErrorCode};
 use serde_json::json;
 use tokio::sync::Notify;
 
@@ -170,18 +168,22 @@ struct HookedRecorder {
 }
 
 impl RunRecorder for HookedRecorder {
-    fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
+    fn begin_run(&self, meta: RunMeta) -> BoxFuture<'_, Result<RunId, Error>> {
         self.records.begin_run(meta)
     }
 
-    fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()> {
+    fn append(&self, run: RunId, record: Record) -> BoxFuture<'_, Result<(), Error>> {
         if let Some(control) = self.control.get() {
             (self.hook)(&record, control);
         }
         self.records.append(run, record)
     }
 
-    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+    fn end_run(
+        &self,
+        run: RunId,
+        result: Result<String, Error>,
+    ) -> BoxFuture<'_, Result<(), Error>> {
         self.records.end_run(run, result)
     }
 }

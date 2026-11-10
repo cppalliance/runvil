@@ -111,11 +111,12 @@ mod service;
 pub mod testing;
 
 pub use context::{RenderContext, ToolContext};
-pub use pack::{Pack, PackFactory, PackFuture, PackInfo};
+pub use pack::{Pack, PackFactory, PackInfo};
 pub use registry::{PackOrigin, PackRegistry};
 pub use service::{HostServices, ServiceId, ServiceKey, TOKIO_RUNTIME};
 
 pub use runvil_types::error::{Error, ErrorCode, ErrorFact, SourceLoc};
+pub use runvil_types::future::BoxFuture;
 pub use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
 pub use runvil_types::packs::PackId;
 pub use runvil_types::tools::{

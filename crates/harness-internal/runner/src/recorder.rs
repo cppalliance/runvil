@@ -24,18 +24,11 @@
 //! an `Internal` error.
 
 use std::fmt;
-use std::future::Future;
-use std::pin::Pin;
 
 use runvil_engine::RunSeed;
-use runvil_engine::{Error, ErrorCode, ErrorFact};
+use runvil_engine::{BoxFuture, Error, ErrorCode, ErrorFact};
 
 pub use crate::recorder_memory::MemoryRecorder;
-
-/// The future that each [`RunRecorder`] method returns.
-///
-/// It is boxed, can be sent between threads, and borrows the recorder.
-pub type RecorderFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
 
 /// Builds the `RecorderFailed` error a recorder returns when it fails to
 /// store a write, from the error or the message that made it fail.
@@ -88,20 +81,23 @@ pub(crate) fn of_run(run: RunId, mut error: Error) -> Error {
 /// [`RunId`]. If a write returns an error, the Harness stops the run it
 /// belongs to and hands the error on as a `RecorderFailed` refusal,
 /// whatever code the recorder gave it.
+///
+/// Each method returns a [`BoxFuture`] that can be sent between threads
+/// and borrows the recorder.
 pub trait RunRecorder: Send + Sync {
     /// Opens a run's history and returns its id.
     ///
     /// # Errors
     ///
     /// Returns the recorder's own failure, built with [`make_recorder_error`].
-    fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId>;
+    fn begin_run(&self, meta: RunMeta) -> BoxFuture<'_, Result<RunId, Error>>;
 
     /// Adds one record to an open run.
     ///
     /// # Errors
     ///
     /// Returns the recorder's own failure, built with [`make_recorder_error`].
-    fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()>;
+    fn append(&self, run: RunId, record: Record) -> BoxFuture<'_, Result<(), Error>>;
 
     /// Closes a run with its result: the run's final text, or the error
     /// that ended it, where a cancel is the error whose code is
@@ -110,7 +106,11 @@ pub trait RunRecorder: Send + Sync {
     /// # Errors
     ///
     /// Returns the recorder's own failure, built with [`make_recorder_error`].
-    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()>;
+    fn end_run(
+        &self,
+        run: RunId,
+        result: Result<String, Error>,
+    ) -> BoxFuture<'_, Result<(), Error>>;
 }
 
 /// The id a recorder assigns to a run.

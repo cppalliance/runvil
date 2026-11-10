@@ -10,13 +10,13 @@ use std::time::Duration;
 
 use runvil_engine::{Error, ErrorCode, Prompt, make_tool_error};
 use runvil_plugin::{
-    Pack, PackFuture, PackId, PackInfo, PackRegistry, ToolContext, ToolInfo, ToolOutput,
+    BoxFuture, Pack, PackId, PackInfo, PackRegistry, ToolContext, ToolInfo, ToolOutput,
 };
 use serde_json::Value;
 
 use super::Host;
 use crate::packs::Packs;
-use crate::performers::{BoxFuture, Timer};
+use crate::performers::Timer;
 
 /// A Pack with no tools that answers no call.
 struct Idle;
@@ -30,7 +30,7 @@ impl Pack for Idle {
         &'a self,
         _cx: ToolContext<'a>,
         _args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async {
             Err(make_tool_error(
                 ErrorCode::ToolOther,
@@ -59,7 +59,7 @@ fn fails(_id: &PackId) -> Result<Arc<dyn Pack>, Error> {
 struct Instant;
 
 impl Timer for Instant {
-    fn sleep(&self, _duration: Duration) -> BoxFuture<()> {
+    fn sleep(&self, _duration: Duration) -> BoxFuture<'static, ()> {
         Box::pin(async {})
     }
 }

@@ -14,14 +14,14 @@ use runvil_engine::model::{
 };
 use runvil_engine::timestamp::Timestamp;
 use runvil_engine::vfs::Access;
-use runvil_engine::{Error, ErrorCode, Prompt, Run, RunParams, RunSeed, Step};
+use runvil_engine::{BoxFuture, Error, ErrorCode, Prompt, Run, RunParams, RunSeed, Step};
 use runvil_engine::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use serde_json::{Value, json};
 
 use super::{STALLED, drive};
 use crate::harness::RunControl;
-use crate::performers::{BoxFuture, InferenceBroker, Timer, ToolPerformer};
-use crate::recorder::{MemoryRecorder, Record, RecorderFuture, RunId, RunMeta, RunRecorder};
+use crate::performers::{InferenceBroker, Timer, ToolPerformer};
+use crate::recorder::{MemoryRecorder, Record, RunId, RunMeta, RunRecorder};
 use crate::setup::RunSetup;
 
 /// The fixed seed the run and its recorded meta take.
@@ -59,11 +59,11 @@ struct SendsOnFirstAppend {
 }
 
 impl RunRecorder for SendsOnFirstAppend {
-    fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
+    fn begin_run(&self, meta: RunMeta) -> BoxFuture<'_, Result<RunId, Error>> {
         self.inner.begin_run(meta)
     }
 
-    fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()> {
+    fn append(&self, run: RunId, record: Record) -> BoxFuture<'_, Result<(), Error>> {
         if !self.sent.swap(true, Ordering::SeqCst) {
             assert!(
                 self.control.send(self.text.to_owned()),
@@ -74,7 +74,11 @@ impl RunRecorder for SendsOnFirstAppend {
         self.inner.append(run, record)
     }
 
-    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+    fn end_run(
+        &self,
+        run: RunId,
+        result: Result<String, Error>,
+    ) -> BoxFuture<'_, Result<(), Error>> {
         self.inner.end_run(run, result)
     }
 }
@@ -84,7 +88,7 @@ impl RunRecorder for SendsOnFirstAppend {
 struct Unused;
 
 impl InferenceBroker for Unused {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
+    fn models(&self) -> BoxFuture<'static, Result<ModelCatalog, Error>> {
         unreachable!("the effect loop never lists models")
     }
 
@@ -95,7 +99,7 @@ impl InferenceBroker for Unused {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         _round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>> {
         unreachable!("the lost run issues no Chat effect")
     }
 }
@@ -108,13 +112,13 @@ impl ToolPerformer for Unused {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'static, Result<ToolOutput, Error>> {
         unreachable!("the loop never sees the lost run's tool call")
     }
 }
 
 impl Timer for Unused {
-    fn sleep(&self, _duration: Duration) -> BoxFuture<()> {
+    fn sleep(&self, _duration: Duration) -> BoxFuture<'static, ()> {
         unreachable!("the lost run issues no Timer effect")
     }
 }

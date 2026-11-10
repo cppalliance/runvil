@@ -2,10 +2,10 @@
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use runvil_engine::{Error, ErrorFact};
+use runvil_engine::{BoxFuture, Error, ErrorFact};
 use serde_json::Value;
 
-use crate::recorder::{Record, RecorderFuture, RunId, RunMeta, RunRecorder, make_recorder_error};
+use crate::recorder::{Record, RunId, RunMeta, RunRecorder, make_recorder_error};
 
 /// A recorder that keeps every run in memory, for tests and doc examples.
 ///
@@ -110,7 +110,7 @@ fn make_refused_error(run: RunId, reason: &str, text: String) -> Error {
 }
 
 impl RunRecorder for MemoryRecorder {
-    fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
+    fn begin_run(&self, meta: RunMeta) -> BoxFuture<'_, Result<RunId, Error>> {
         Box::pin(async move {
             let mut runs = self.lock();
             let id = i64::try_from(runs.len() + 1).map_err(make_recorder_error)?;
@@ -123,14 +123,18 @@ impl RunRecorder for MemoryRecorder {
         })
     }
 
-    fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()> {
+    fn append(&self, run: RunId, record: Record) -> BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
             let mut runs = self.lock();
             open_run(&mut runs, run).map(|open| open.records.push(record))
         })
     }
 
-    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+    fn end_run(
+        &self,
+        run: RunId,
+        result: Result<String, Error>,
+    ) -> BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
             let mut runs = self.lock();
             open_run(&mut runs, run).map(|open| open.result = Some(result))

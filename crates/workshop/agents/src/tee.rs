@@ -9,9 +9,9 @@
 
 use std::sync::Arc;
 
-use runvil::Error;
 use runvil::event::Event;
-use runvil::harness::{Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder};
+use runvil::harness::{Record, RecordKind, RunId, RunMeta, RunRecorder};
+use runvil::{BoxFuture, Error};
 
 use crate::conversation::Conversation;
 
@@ -32,7 +32,7 @@ impl ConversationRecorder {
 }
 
 impl RunRecorder for ConversationRecorder {
-    fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
+    fn begin_run(&self, meta: RunMeta) -> BoxFuture<'_, Result<RunId, Error>> {
         Box::pin(async move {
             let run = self.inner.begin_run(meta).await?;
             self.conversation.note_run(run);
@@ -40,7 +40,7 @@ impl RunRecorder for ConversationRecorder {
         })
     }
 
-    fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()> {
+    fn append(&self, run: RunId, record: Record) -> BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
             let event = (record.kind == RecordKind::Event).then(|| record.payload.clone());
             self.inner.append(run, record).await?;
@@ -61,7 +61,11 @@ impl RunRecorder for ConversationRecorder {
         })
     }
 
-    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+    fn end_run(
+        &self,
+        run: RunId,
+        result: Result<String, Error>,
+    ) -> BoxFuture<'_, Result<(), Error>> {
         self.inner.end_run(run, result)
     }
 }

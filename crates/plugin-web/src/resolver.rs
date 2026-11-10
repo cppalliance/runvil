@@ -10,12 +10,11 @@
 //! caches no verdict, a DNS-rebinding answer is caught on the hop that returns
 //! it.
 
-use std::future::Future;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
+use runvil_plugin::BoxFuture;
 
 use crate::address::{addr_allowed_for_host, blocked_range};
 use crate::config::FetchConfig;
@@ -23,10 +22,6 @@ use crate::error::FetchError;
 
 /// The boxed error type reqwest's resolver contract returns.
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
-
-/// The future a [`Lookup`] returns: resolved addresses or an I/O error.
-pub(crate) type LookupFuture =
-    Pin<Box<dyn Future<Output = std::io::Result<Vec<SocketAddr>>> + Send>>;
 
 /// Resolves a host name to a set of socket addresses.
 ///
@@ -36,10 +31,12 @@ pub(crate) type LookupFuture =
 pub(crate) trait Lookup: Send + Sync + 'static {
     /// Resolves `host` to zero or more socket addresses.
     ///
+    /// The returned future resolves to the addresses or an I/O error.
+    ///
     /// The port on each address is irrelevant: reqwest overrides it with
     /// the URL's port. Implementations resolve `host` with any
     /// placeholder port.
-    fn lookup(&self, host: String) -> LookupFuture;
+    fn lookup(&self, host: String) -> BoxFuture<'static, std::io::Result<Vec<SocketAddr>>>;
 }
 
 /// The production [`Lookup`], backed by [`tokio::net::lookup_host`].
@@ -47,7 +44,7 @@ pub(crate) trait Lookup: Send + Sync + 'static {
 pub(crate) struct SystemLookup;
 
 impl Lookup for SystemLookup {
-    fn lookup(&self, host: String) -> LookupFuture {
+    fn lookup(&self, host: String) -> BoxFuture<'static, std::io::Result<Vec<SocketAddr>>> {
         Box::pin(async move {
             let addrs = tokio::net::lookup_host(format!("{host}:0")).await?;
             Ok(addrs.collect())
@@ -152,8 +149,9 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use reqwest::dns::{Name, Resolve};
+    use runvil_plugin::BoxFuture;
 
-    use super::{GuardedResolver, Lookup, LookupFuture, SystemLookup};
+    use super::{GuardedResolver, Lookup, SystemLookup};
     use crate::config::FetchConfig;
     use crate::error::FetchError;
 
@@ -178,7 +176,7 @@ mod tests {
     }
 
     impl Lookup for StubLookup {
-        fn lookup(&self, _host: String) -> LookupFuture {
+        fn lookup(&self, _host: String) -> BoxFuture<'static, std::io::Result<Vec<SocketAddr>>> {
             let next = self
                 .answers
                 .lock()

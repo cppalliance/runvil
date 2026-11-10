@@ -18,14 +18,14 @@ use std::time::Duration;
 
 use plugin_web::SEARCH_PROVIDER;
 use runvil::effect::Round;
-use runvil::harness::{BoxFuture, InferenceBroker, MemoryRecorder, Packs};
+use runvil::harness::{InferenceBroker, MemoryRecorder, Packs};
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };
 use runvil::plugin::{HostServices, ServiceKey, TOKIO_RUNTIME};
 use runvil::vfs::VfsRef;
-use runvil::{Error, ErrorCode, Host, RunSetup};
+use runvil::{BoxFuture, Error, ErrorCode, Host, RunSetup};
 use serde_json::json;
 use workshop_agents::{Conversations, SessionState, TokioTimer, load_agent};
 use workshop_registry::Registry;
@@ -50,7 +50,7 @@ fn requiring(pack: &str) -> String {
 pub(super) struct OfflineBroker;
 
 impl InferenceBroker for OfflineBroker {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
+    fn models(&self) -> BoxFuture<'static, Result<ModelCatalog, Error>> {
         Box::pin(async { Ok(ModelCatalog::empty()) })
     }
 
@@ -61,7 +61,7 @@ impl InferenceBroker for OfflineBroker {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         _round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>> {
         let code = ErrorCode::Unavailable;
         Box::pin(async move { Err(make_completion_error(code, phrase(code))) })
     }

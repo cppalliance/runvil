@@ -13,7 +13,7 @@ use std::task::{Context, Poll, Waker};
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    Error, ErrorCode, HostServices, ModelId, ModelInfo, OutputTrust, Pack, PackFactory, PackFuture,
+    BoxFuture, Error, ErrorCode, HostServices, ModelId, ModelInfo, OutputTrust, Pack, PackFactory,
     PackId, PackInfo, PackRegistry, RenderContext, ServiceKey, ThinkingMode, ToolContext, ToolId,
     ToolInfo, ToolOutput, make_tool_error,
 };
@@ -95,7 +95,7 @@ impl Pack for Greeter {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             match cx.tool().name() {
                 "greet" => {

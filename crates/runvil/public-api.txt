@@ -380,8 +380,8 @@ pub fn runvil::effect::ToolCallOrigin::with_entry(self, entry: impl core::conver
 pub fn runvil::effect::ToolCallOrigin::with_model(self, model: impl core::convert::Into<alloc::string::String>) -> runvil::effect::ToolCallOrigin
 pub fn runvil::event::Event::provenance(&self) -> &runvil::ids::Provenance
 pub fn runvil::event::Event::section(&self) -> &str
-pub fn runvil::harness::InferenceBroker::chat(&self, binding: runvil::model::ModelBinding, messages: alloc::vec::Vec<runvil::model::Message>, tools: alloc::vec::Vec<runvil::model::ToolSchema>, options: runvil::model::CompletionOptions, round: runvil::effect::Round) -> runvil::harness::BoxFuture<core::result::Result<alloc::boxed::Box<runvil::model::Completion>, runvil::Error>>
-pub fn runvil::harness::InferenceBroker::models(&self) -> runvil::harness::BoxFuture<core::result::Result<runvil::model::ModelCatalog, runvil::Error>>
+pub fn runvil::harness::InferenceBroker::chat(&self, binding: runvil::model::ModelBinding, messages: alloc::vec::Vec<runvil::model::Message>, tools: alloc::vec::Vec<runvil::model::ToolSchema>, options: runvil::model::CompletionOptions, round: runvil::effect::Round) -> runvil::BoxFuture<'static, core::result::Result<alloc::boxed::Box<runvil::model::Completion>, runvil::Error>>
+pub fn runvil::harness::InferenceBroker::models(&self) -> runvil::BoxFuture<'static, core::result::Result<runvil::model::ModelCatalog, runvil::Error>>
 pub fn runvil::harness::MemoryRecorder::meta(&self, run: runvil::harness::RunId) -> core::option::Option<runvil::harness::RunMeta>
 pub fn runvil::harness::MemoryRecorder::new() -> Self
 pub fn runvil::harness::MemoryRecorder::records(&self, run: runvil::harness::RunId) -> alloc::vec::Vec<runvil::harness::Record>
@@ -393,11 +393,11 @@ pub fn runvil::harness::Plugin::version(&self) -> &str
 pub fn runvil::harness::PluginReport::failures(&self) -> &[runvil::Error]
 pub fn runvil::harness::PluginReport::plugins(&self) -> &[alloc::sync::Arc<runvil::harness::Plugin>]
 pub fn runvil::harness::RecordKind::parse(text: &str) -> core::option::Option<Self>
-pub fn runvil::harness::RunRecorder::append(&self, run: runvil::harness::RunId, record: runvil::harness::Record) -> runvil::harness::RecorderFuture<'_, ()>
-pub fn runvil::harness::RunRecorder::begin_run(&self, meta: runvil::harness::RunMeta) -> runvil::harness::RecorderFuture<'_, runvil::harness::RunId>
-pub fn runvil::harness::RunRecorder::end_run(&self, run: runvil::harness::RunId, result: core::result::Result<alloc::string::String, runvil::Error>) -> runvil::harness::RecorderFuture<'_, ()>
+pub fn runvil::harness::RunRecorder::append(&self, run: runvil::harness::RunId, record: runvil::harness::Record) -> runvil::BoxFuture<'_, core::result::Result<(), runvil::Error>>
+pub fn runvil::harness::RunRecorder::begin_run(&self, meta: runvil::harness::RunMeta) -> runvil::BoxFuture<'_, core::result::Result<runvil::harness::RunId, runvil::Error>>
+pub fn runvil::harness::RunRecorder::end_run(&self, run: runvil::harness::RunId, result: core::result::Result<alloc::string::String, runvil::Error>) -> runvil::BoxFuture<'_, core::result::Result<(), runvil::Error>>
 pub fn runvil::harness::Timer::now(&self) -> runvil::timestamp::Timestamp { .. }
-pub fn runvil::harness::Timer::sleep(&self, duration: core::time::Duration) -> runvil::harness::BoxFuture<()>
+pub fn runvil::harness::Timer::sleep(&self, duration: core::time::Duration) -> runvil::BoxFuture<'static, ()>
 pub fn runvil::harness::display_chain(error: &dyn core::error::Error) -> alloc::string::String
 pub fn runvil::harness::insert_plugin(packs: &mut runvil::plugin::PackRegistry, entry: runvil_plugin_sys::PluginEntry) -> core::result::Result<alloc::sync::Arc<runvil::harness::Plugin>, runvil::Error>
 pub fn runvil::harness::insert_plugin_dir(packs: &mut runvil::plugin::PackRegistry, directory: &std::path::Path) -> core::io::error::Result<runvil::harness::PluginReport>
@@ -523,9 +523,9 @@ pub fn runvil::plugin::HostServices::get<T: ?core::marker::Sized + core::marker:
 pub fn runvil::plugin::HostServices::new() -> runvil::plugin::HostServices
 pub fn runvil::plugin::HostServices::provide<T: ?core::marker::Sized + core::marker::Send + core::marker::Sync + 'static>(&mut self, key: &runvil::plugin::ServiceKey<T>, provider: alloc::sync::Arc<T>) -> core::result::Result<(), runvil::Error>
 pub fn runvil::plugin::HostServices::provides(&self, id: &runvil::plugin::ServiceId) -> bool
-pub fn runvil::plugin::Pack::call<'a>(&'a self, cx: runvil::plugin::ToolContext<'a>, args: serde_json::value::Value) -> runvil::plugin::PackFuture<'a, core::result::Result<runvil::ToolOutput, runvil::Error>>
-pub fn runvil::plugin::Pack::ready(&self) -> runvil::plugin::PackFuture<'_, core::result::Result<(), runvil::Error>> { .. }
-pub fn runvil::plugin::Pack::render<'a>(&'a self, _cx: runvil::plugin::RenderContext<'a>, offered: alloc::vec::Vec<runvil::ToolInfo>) -> runvil::plugin::PackFuture<'a, alloc::vec::Vec<runvil::ToolInfo>> { .. }
+pub fn runvil::plugin::Pack::call<'a>(&'a self, cx: runvil::plugin::ToolContext<'a>, args: serde_json::value::Value) -> runvil::BoxFuture<'a, core::result::Result<runvil::ToolOutput, runvil::Error>>
+pub fn runvil::plugin::Pack::ready(&self) -> runvil::BoxFuture<'_, core::result::Result<(), runvil::Error>> { .. }
+pub fn runvil::plugin::Pack::render<'a>(&'a self, _cx: runvil::plugin::RenderContext<'a>, offered: alloc::vec::Vec<runvil::ToolInfo>) -> runvil::BoxFuture<'a, alloc::vec::Vec<runvil::ToolInfo>> { .. }
 pub fn runvil::plugin::Pack::tools(&self) -> alloc::vec::Vec<runvil::ToolInfo>
 pub fn runvil::plugin::PackFactory::new_pack(&self, id: &runvil::packs::PackId) -> core::result::Result<alloc::sync::Arc<dyn runvil::plugin::Pack>, runvil::Error>
 pub fn runvil::plugin::PackRegistry::insert(&mut self, info: runvil::plugin::PackInfo, factory: impl runvil::plugin::PackFactory + 'static) -> core::result::Result<(), runvil::Error>
@@ -1252,6 +1252,4 @@ pub trait runvil::plugin::PackFactory: core::marker::Send + core::marker::Sync
 pub trait runvil::vfs::Policy: core::marker::Send
 pub trait runvil::vfs::Vfs: core::marker::Send
 pub trait runvil::vfs::VfsAccess: core::marker::Send
-pub type runvil::harness::BoxFuture<T> = core::pin::Pin<alloc::boxed::Box<dyn core::future::future::Future<Output = T> + core::marker::Send + 'static>>
-pub type runvil::harness::RecorderFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<dyn core::future::future::Future<Output = core::result::Result<T, runvil::Error>> + core::marker::Send + 'a>>
-pub type runvil::plugin::PackFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<dyn core::future::future::Future<Output = T> + core::marker::Send + 'a>>
+pub type runvil::BoxFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<dyn core::future::future::Future<Output = T> + core::marker::Send + 'a>>

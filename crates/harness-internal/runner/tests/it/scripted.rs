@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use harness_runner::Packs;
-use harness_runner::performers::{BoxFuture, InferenceBroker, Timer};
+use harness_runner::performers::{InferenceBroker, Timer};
 use runvil_engine::effect::Round;
 use runvil_engine::model::{
     Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
@@ -17,7 +17,7 @@ use runvil_engine::model::{
 };
 use runvil_engine::{Error, ErrorCode};
 use runvil_plugin::{
-    Pack, PackFactory, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
+    BoxFuture, Pack, PackFactory, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -31,7 +31,7 @@ pub(crate) type Kept<T> = Arc<Mutex<Vec<T>>>;
 
 /// Plays one model round: the round and its messages in, its answer out.
 type ChatScript =
-    dyn Fn(Round, Vec<Message>) -> BoxFuture<Result<Box<Completion>, Error>> + Send + Sync;
+    dyn Fn(Round, Vec<Message>) -> BoxFuture<'static, Result<Box<Completion>, Error>> + Send + Sync;
 
 /// What a scripted broker's `models()` does.
 #[derive(Clone, Copy)]
@@ -57,7 +57,7 @@ pub(crate) struct ScriptedBroker {
 impl ScriptedBroker {
     /// A broker that plays every round through `script`.
     pub(crate) fn new(
-        script: impl Fn(Round, Vec<Message>) -> BoxFuture<Result<Box<Completion>, Error>>
+        script: impl Fn(Round, Vec<Message>) -> BoxFuture<'static, Result<Box<Completion>, Error>>
         + Send
         + Sync
         + 'static,
@@ -99,7 +99,7 @@ impl ScriptedBroker {
 }
 
 impl InferenceBroker for ScriptedBroker {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
+    fn models(&self) -> BoxFuture<'static, Result<ModelCatalog, Error>> {
         self.listings.fetch_add(1, Ordering::SeqCst);
         match self.listing {
             Listing::Lists => Box::pin(async { Ok(catalog()) }),
@@ -117,7 +117,7 @@ impl InferenceBroker for ScriptedBroker {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>> {
         self.rounds.lock().unwrap().push(round);
         (self.script)(round, messages)
     }
@@ -176,7 +176,7 @@ impl Held {
 
     /// A future that counts itself started on its first poll and dropped
     /// when torn down, and never resolves.
-    fn hold<T: Send + 'static>(self: &Arc<Self>) -> BoxFuture<T> {
+    fn hold<T: Send + 'static>(self: &Arc<Self>) -> BoxFuture<'static, T> {
         let held = Arc::clone(self);
         Box::pin(async move {
             held.started.fetch_add(1, Ordering::SeqCst);
@@ -199,7 +199,7 @@ impl Drop for CountOnDrop {
 pub(crate) struct HeldTimer(pub(crate) Arc<Held>);
 
 impl Timer for HeldTimer {
-    fn sleep(&self, _duration: Duration) -> BoxFuture<()> {
+    fn sleep(&self, _duration: Duration) -> BoxFuture<'static, ()> {
         self.0.hold()
     }
 }
@@ -251,7 +251,7 @@ impl Pack for HoldPack {
         &'a self,
         _cx: ToolContext<'a>,
         _args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
         self.held.hold()
     }
 }

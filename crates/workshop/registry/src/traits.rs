@@ -44,11 +44,9 @@ pub trait BackgroundTask: Sealed + Send + Sync {
     fn spawn(&self) -> ShutdownHandle;
 }
 
-/// The boxed stop-and-await future one task's shutdown resolves to.
-type StopFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
-
-/// The boxed closure producing a task's [`StopFuture`].
-type Stop = Box<dyn FnOnce() -> StopFuture + Send>;
+/// The boxed closure producing the boxed stop-and-await future one
+/// task's shutdown resolves to.
+type Stop = Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()> + Send>> + Send>;
 
 /// The shutdown lever of one spawned background task: a concrete type,
 /// never a trait with an `async fn` method, which would not be

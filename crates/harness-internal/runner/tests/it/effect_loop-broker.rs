@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use harness_runner::RunSetup;
 use harness_runner::effect_loop::drive_run;
-use harness_runner::performers::{BoxFuture, InferenceBroker};
+use harness_runner::performers::InferenceBroker;
 use harness_runner::recorder::{RecordKind, RunRecorder};
 use runvil_engine::Error;
 use runvil_engine::cancel::CancelHandle;
@@ -21,7 +21,7 @@ use runvil_engine::model::{
     ModelInfo, ModelRole, ThinkingMode, ToolSchema,
 };
 use runvil_engine::timestamp::Timestamp;
-use runvil_engine::{Prompt, Run, RunParams};
+use runvil_engine::{BoxFuture, Prompt, Run, RunParams};
 use serde_json::{Value, json};
 
 use super::begun_log;
@@ -67,7 +67,7 @@ struct RecordingBroker {
 }
 
 impl InferenceBroker for RecordingBroker {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
+    fn models(&self) -> BoxFuture<'static, Result<ModelCatalog, Error>> {
         unreachable!("the effect loop never lists models")
     }
 
@@ -78,7 +78,7 @@ impl InferenceBroker for RecordingBroker {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>> {
         let asked = messages
             .last()
             .map(|message| message.content().to_owned())

@@ -11,7 +11,7 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolInfo, ToolOutput, make_tool_error};
 use serde_json::Value;
 
-use crate::{Pack, PackFactory, PackFuture, PackInfo, ToolContext};
+use crate::{BoxFuture, Pack, PackFactory, PackInfo, ToolContext};
 
 #[cfg(test)]
 #[path = "registry-tests.rs"]
@@ -275,7 +275,7 @@ impl Pack for Builtin {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
         let message = format!(
             "{} belongs to a built-in Pack, whose calls the Engine answers",
             cx.tool()

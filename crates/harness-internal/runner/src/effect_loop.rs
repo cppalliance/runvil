@@ -92,12 +92,12 @@ use runvil_engine::effect::{Effect, EffectAnswer, EffectId, IssuedEffect};
 use runvil_engine::event::Event;
 use runvil_engine::ids::{Provenance, TaskId};
 use runvil_engine::vfs::{Access, VfsOp, perform_vfs_op};
-use runvil_engine::{Error, ErrorCode};
+use runvil_engine::{BoxFuture, Error, ErrorCode};
 use runvil_engine::{Run, Step};
 use tracing::Instrument as _;
 
 use crate::harness::{RunControl, SendQueue, StopSignal};
-use crate::performers::{BoxFuture, InferenceBroker, Timer, ToolPerformer};
+use crate::performers::{InferenceBroker, Timer, ToolPerformer};
 use crate::recorder::{Record, RecordKind, RunId, RunRecorder, make_recorder_error, refused};
 use crate::setup::RunSetup;
 
@@ -449,7 +449,7 @@ impl Driver {
         provenance: &Provenance,
         effect: Effect,
     ) -> Option<(Arc<Access>, VfsOp)> {
-        let (kind, answer): (Kind, BoxFuture<EffectAnswer>) = match effect {
+        let (kind, answer): (Kind, BoxFuture<'static, EffectAnswer>) = match effect {
             Effect::Chat {
                 binding,
                 messages,
@@ -627,7 +627,7 @@ struct InFlight {
 struct Waiting {
     provenance: Provenance,
     survives_stop: bool,
-    answer: BoxFuture<EffectAnswer>,
+    answer: BoxFuture<'static, EffectAnswer>,
 }
 
 /// The effects in flight and their futures, and the tool calls waiting
@@ -639,7 +639,7 @@ struct Waiting {
 /// down the next time the set is polled; whatever it yields then is
 /// discarded, so the run never sees two answers for one effect.
 struct Flights {
-    futures: FuturesUnordered<BoxFuture<Landing>>,
+    futures: FuturesUnordered<BoxFuture<'static, Landing>>,
     /// The effects in flight still owed an answer. A landing for an id not
     /// here is an aborted future's late end and is discarded.
     effects: HashMap<EffectId, InFlight>,
@@ -685,7 +685,7 @@ impl Flights {
         id: EffectId,
         provenance: Provenance,
         kind: Kind,
-        answer: BoxFuture<EffectAnswer>,
+        answer: BoxFuture<'static, EffectAnswer>,
     ) {
         self.launch(id, provenance, kind, false, answer);
     }
@@ -699,7 +699,7 @@ impl Flights {
         id: EffectId,
         provenance: Provenance,
         survives_stop: bool,
-        answer: BoxFuture<EffectAnswer>,
+        answer: BoxFuture<'static, EffectAnswer>,
     ) {
         self.waiting.insert(
             id,
@@ -746,7 +746,7 @@ impl Flights {
         provenance: Provenance,
         kind: Kind,
         survives_stop: bool,
-        answer: BoxFuture<EffectAnswer>,
+        answer: BoxFuture<'static, EffectAnswer>,
     ) {
         let span = tracing::info_span!(
             "effect",

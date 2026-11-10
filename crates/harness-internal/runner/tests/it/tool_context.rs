@@ -7,9 +7,7 @@ use std::sync::Arc;
 
 use runvil_engine::make_tool_error;
 use runvil_engine::{Error, ErrorCode};
-use runvil_plugin::{
-    Pack, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
-};
+use runvil_plugin::{BoxFuture, Pack, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput};
 use serde_json::{Value, json};
 
 use crate::prepare::{building, drive_over};
@@ -58,7 +56,7 @@ impl Pack for Record {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             cx.access()
                 .write("/from-tool.md", WRITTEN.as_bytes())

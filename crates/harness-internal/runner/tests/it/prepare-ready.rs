@@ -93,7 +93,7 @@ impl Pack for Starting {
         }
     }
 
-    fn ready(&self) -> PackFuture<'_, Result<(), Error>> {
+    fn ready(&self) -> BoxFuture<'_, Result<(), Error>> {
         let mut phase = self.startup.phase.clone();
         Box::pin(async move {
             self.startup.asked.notify_one();
@@ -117,7 +117,7 @@ impl Pack for Starting {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
         self.echo.call(cx, args)
     }
 }
@@ -159,15 +159,19 @@ struct CancelsAtEnd {
 }
 
 impl RunRecorder for CancelsAtEnd {
-    fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
+    fn begin_run(&self, meta: RunMeta) -> BoxFuture<'_, Result<RunId, Error>> {
         self.inner.begin_run(meta)
     }
 
-    fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()> {
+    fn append(&self, run: RunId, record: Record) -> BoxFuture<'_, Result<(), Error>> {
         self.inner.append(run, record)
     }
 
-    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+    fn end_run(
+        &self,
+        run: RunId,
+        result: Result<String, Error>,
+    ) -> BoxFuture<'_, Result<(), Error>> {
         if let Some(control) = self.control.get() {
             control.cancel();
         }

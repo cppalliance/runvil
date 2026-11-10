@@ -8,15 +8,13 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use harness_runner::effect_loop::drive_run;
-use harness_runner::performers::{BoxFuture, Timer, ToolPerformer};
-use harness_runner::recorder::{
-    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
-};
+use harness_runner::performers::{Timer, ToolPerformer};
+use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder};
 use runvil_engine::Error;
 use runvil_engine::cancel::CancelHandle;
 use runvil_engine::effect::ToolCallOrigin;
 use runvil_engine::vfs::Access;
-use runvil_engine::{ToolId, ToolOutput};
+use runvil_engine::{BoxFuture, ToolId, ToolOutput};
 use serde_json::{Value, json};
 
 use crate::support::{
@@ -32,7 +30,7 @@ struct SleepTimer {
 }
 
 impl Timer for SleepTimer {
-    fn sleep(&self, duration: Duration) -> BoxFuture<()> {
+    fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()> {
         let raise = RaiseOnDrop(Arc::clone(&self.dropped));
         Box::pin(async move {
             tokio::time::sleep(duration).await;
@@ -79,11 +77,11 @@ impl StampedRecorder {
 }
 
 impl RunRecorder for StampedRecorder {
-    fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
+    fn begin_run(&self, meta: RunMeta) -> BoxFuture<'_, Result<RunId, Error>> {
         self.inner.begin_run(meta)
     }
 
-    fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()> {
+    fn append(&self, run: RunId, record: Record) -> BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
             self.inner.append(run, record).await?;
             self.arrivals.lock().unwrap().push(Instant::now());
@@ -91,7 +89,11 @@ impl RunRecorder for StampedRecorder {
         })
     }
 
-    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+    fn end_run(
+        &self,
+        run: RunId,
+        result: Result<String, Error>,
+    ) -> BoxFuture<'_, Result<(), Error>> {
         self.inner.end_run(run, result)
     }
 }
@@ -111,7 +113,7 @@ impl ToolPerformer for DelayedTool {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'static, Result<ToolOutput, Error>> {
         let delay = self.delay;
         let text = self.text;
         Box::pin(async move {

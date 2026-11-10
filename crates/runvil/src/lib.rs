@@ -62,6 +62,11 @@ pub use runvil_engine::ToolInfo;
 pub use runvil_engine::ToolOutput;
 pub use runvil_engine::make_tool_error;
 
+/* The boxed future that the inference broker, the timer, the recorder,
+   and a Pack return.
+*/
+pub use runvil_engine::BoxFuture;
+
 pub mod harness {
     //! What a Host gives the Harness beside a run's setup, and what the
     //! Harness hands back: the inference broker and the timer a Host
@@ -79,13 +84,11 @@ pub mod harness {
     pub use harness_plugin_loader::insert_plugin_dir;
     pub use harness_runner::Packs;
     pub use harness_runner::display_chain;
-    pub use harness_runner::performers::BoxFuture;
     pub use harness_runner::performers::InferenceBroker;
     pub use harness_runner::performers::Timer;
     pub use harness_runner::recorder::MemoryRecorder;
     pub use harness_runner::recorder::Record;
     pub use harness_runner::recorder::RecordKind;
-    pub use harness_runner::recorder::RecorderFuture;
     pub use harness_runner::recorder::RunId;
     pub use harness_runner::recorder::RunMeta;
     pub use harness_runner::recorder::RunRecorder;
@@ -103,7 +106,6 @@ pub mod plugin {
     pub use runvil_plugin::HostServices;
     pub use runvil_plugin::Pack;
     pub use runvil_plugin::PackFactory;
-    pub use runvil_plugin::PackFuture;
     pub use runvil_plugin::PackInfo;
     pub use runvil_plugin::PackOrigin;
     pub use runvil_plugin::PackRegistry;

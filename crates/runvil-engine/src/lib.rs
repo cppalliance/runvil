@@ -41,6 +41,11 @@ pub use runvil_types::tools::ToolInfo;
 pub use runvil_types::tools::ToolOutput;
 pub use runvil_types::tools::make_tool_error;
 
+/* The boxed future a trait method returns where the trait is used as a
+   trait object.
+*/
+pub use runvil_types::future::BoxFuture;
+
 pub mod effect {
     //! The outside work a run asks for, the answers it takes back, and the
     //! records a run log stores for both.

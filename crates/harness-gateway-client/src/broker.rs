@@ -12,12 +12,12 @@
 use std::fmt;
 use std::sync::Arc;
 
-use runvil::Error;
 use runvil::effect::Round;
-use runvil::harness::{BoxFuture, InferenceBroker};
+use runvil::harness::InferenceBroker;
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
 };
+use runvil::{BoxFuture, Error};
 
 use crate::catalog::fetch_model_catalog;
 use crate::config::{GatewayEndpoint, SecretString};
@@ -91,7 +91,7 @@ impl GatewayBroker {
         tools: Vec<ToolSchema>,
         options: CompletionOptions,
         on_piece: Arc<dyn Fn(StreamDelta) + Send + Sync>,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>> {
         self.round(messages, tools, options, move |piece| on_piece(piece))
     }
 
@@ -102,7 +102,7 @@ impl GatewayBroker {
         tools: Vec<ToolSchema>,
         options: CompletionOptions,
         on_piece: impl Fn(StreamDelta) + Send + Sync + 'static,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>> {
         let client = self.client.clone();
         Box::pin(async move {
             // An empty advertisement sends no `tools` field at all, the
@@ -117,7 +117,7 @@ impl GatewayBroker {
 }
 
 impl InferenceBroker for GatewayBroker {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
+    fn models(&self) -> BoxFuture<'static, Result<ModelCatalog, Error>> {
         let api_root = self.endpoint.url().to_owned();
         let key = self.key.clone();
         Box::pin(async move { fetch_model_catalog(&api_root, key.expose()).await })
@@ -130,7 +130,7 @@ impl InferenceBroker for GatewayBroker {
         tools: Vec<ToolSchema>,
         options: CompletionOptions,
         _round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>> {
         self.round(messages, tools, options, |_| {})
     }
 }

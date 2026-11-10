@@ -2,23 +2,14 @@
 //! and the [`PackInfo`] a Plugin crate exports.
 
 use std::fmt;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use runvil_types::error::Error;
+use runvil_types::future::BoxFuture;
 use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolInfo, ToolOutput};
 
 use crate::{RenderContext, ToolContext};
-
-/// A boxed future that may borrow for `'a`, the same type as
-/// `futures::future::BoxFuture`.
-///
-/// [`Pack::call`], [`Pack::ready`], and [`Pack::render`] return one, so
-/// the Harness can hold Packs as `dyn Pack`. An implementation wraps its
-/// body in `Box::pin(async move { ... })`.
-pub type PackFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// One run's instance of a Pack: the tools it offers and the calls it
 /// performs.
@@ -28,6 +19,11 @@ pub type PackFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// an implementation is `Send + Sync`. Cleanup, such as closing what the
 /// instance opened for its run, goes in the implementation's `Drop`, which
 /// runs when the run ends. There is no shutdown hook.
+///
+/// [`ready`](Pack::ready), [`call`](Pack::call), and
+/// [`render`](Pack::render) each return a [`BoxFuture`], so the Harness
+/// can hold Packs as `dyn Pack`. An implementation wraps its body in
+/// `Box::pin(async move { ... })`.
 pub trait Pack: Send + Sync {
     /// Returns the tools the Pack offers now.
     ///
@@ -64,7 +60,7 @@ pub trait Pack: Send + Sync {
     /// Returns an [`Error`], whose prose is safe to show the model, when the
     /// Pack can't offer its tools now, such as when the backend it connects
     /// to refuses it or is down.
-    fn ready(&self) -> PackFuture<'_, Result<(), Error>> {
+    fn ready(&self) -> BoxFuture<'_, Result<(), Error>> {
         Box::pin(async { Ok(()) })
     }
 
@@ -107,7 +103,7 @@ pub trait Pack: Send + Sync {
         &'a self,
         cx: ToolContext<'a>,
         args: serde_json::Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>>;
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>>;
 
     /// Returns the tools the model sees, given the tools a section offered
     /// from this Pack in one set.
@@ -133,7 +129,7 @@ pub trait Pack: Send + Sync {
         &'a self,
         _cx: RenderContext<'a>,
         offered: Vec<ToolInfo>,
-    ) -> PackFuture<'a, Vec<ToolInfo>> {
+    ) -> BoxFuture<'a, Vec<ToolInfo>> {
         Box::pin(async move { offered })
     }
 }

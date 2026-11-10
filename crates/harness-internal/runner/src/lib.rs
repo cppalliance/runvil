@@ -79,7 +79,6 @@ pub use harness::{Harness, RunControl, RunReport};
 pub use host::Host;
 pub use packs::Packs;
 pub use recorder::{
-    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
-    make_recorder_error,
+    MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder, make_recorder_error,
 };
 pub use setup::RunSetup;

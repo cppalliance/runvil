@@ -23,7 +23,9 @@
 //! instant a run starts from, rendered over std alone; and [`seed`] is the
 //! caller's [`RunSeed`](seed::RunSeed) and the one-way derivations from
 //! it. [`error`] is the universal [`Error`](error::Error) record that can
-//! describe any Engine failure. This crate depends on no other runvil crate,
+//! describe any Engine failure. [`future`] holds
+//! [`BoxFuture`](future::BoxFuture), the one alias for a boxed future,
+//! written over std alone. This crate depends on no other runvil crate,
 //! so every runvil crate may depend on it, and it declares no async runtime.
 //!
 //! ## Invariants
@@ -50,6 +52,7 @@ pub mod emitter;
 pub mod error;
 pub mod event;
 pub mod event_lifecycle;
+pub mod future;
 pub mod ids;
 pub mod metrics;
 pub mod models;

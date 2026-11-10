@@ -19,17 +19,15 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use harness_runner::performers::{BoxFuture, Timer};
-use harness_runner::recorder::{
-    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
-};
+use harness_runner::performers::Timer;
+use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder};
 use harness_runner::{Harness, Packs, RunReport, RunSetup};
 use runvil_engine::make_tool_error;
 use runvil_engine::model::{Completion, CompletionResult, ToolCall};
 use runvil_engine::timestamp::Timestamp;
 use runvil_engine::{Error, ErrorCode, ErrorFact, RunLimits};
 use runvil_plugin::{
-    Pack, PackFactory, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
+    BoxFuture, Pack, PackFactory, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -160,7 +158,7 @@ impl Pack for Echo {
         &'a self,
         _cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             let value = args
                 .get("value")
@@ -207,16 +205,20 @@ async fn an_unmet_requirement_ends_the_prepared_run_as_failed_with_the_engines_n
 pub(crate) struct RefusingAppends(pub(crate) MemoryRecorder);
 
 impl RunRecorder for RefusingAppends {
-    fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
+    fn begin_run(&self, meta: RunMeta) -> BoxFuture<'_, Result<RunId, Error>> {
         self.0.begin_run(meta)
     }
 
-    fn append(&self, _run: RunId, _record: Record) -> RecorderFuture<'_, ()> {
+    fn append(&self, _run: RunId, _record: Record) -> BoxFuture<'_, Result<(), Error>> {
         let code = ErrorCode::Io;
         Box::pin(async move { Err(Error::new(code, "the disk is full", code.prose())) })
     }
 
-    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+    fn end_run(
+        &self,
+        run: RunId,
+        result: Result<String, Error>,
+    ) -> BoxFuture<'_, Result<(), Error>> {
         self.0.end_run(run, result)
     }
 }
@@ -282,7 +284,7 @@ async fn two_runs_draw_different_seeds_and_both_begin_at_the_recorder_at_the_wal
 struct PinnedClock(Timestamp);
 
 impl Timer for PinnedClock {
-    fn sleep(&self, _duration: Duration) -> BoxFuture<()> {
+    fn sleep(&self, _duration: Duration) -> BoxFuture<'static, ()> {
         unreachable!("no test here issues a Timer effect")
     }
 
@@ -419,7 +421,7 @@ impl Pack for Counted {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
         self.echo.call(cx, args)
     }
 }

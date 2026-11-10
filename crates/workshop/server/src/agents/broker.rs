@@ -21,12 +21,12 @@ use std::sync::{Arc, Mutex, PoisonError};
 use harness_gateway_client::{GatewayBroker, StreamDelta};
 use runvil::effect::Round;
 use runvil::event::ReplyOrigin;
-use runvil::harness::{BoxFuture, InferenceBroker};
+use runvil::harness::InferenceBroker;
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };
-use runvil::{Error, ErrorCode};
+use runvil::{BoxFuture, Error, ErrorCode};
 use workshop_agents::{Conversation, DeltaKind};
 use workshop_menu::{CatalogBus, MenuHandles};
 use workshop_registry::Registry;
@@ -126,7 +126,7 @@ impl WorkshopBroker {
         tools: Vec<ToolSchema>,
         options: CompletionOptions,
         on_piece: Arc<dyn Fn(StreamDelta) + Send + Sync>,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>> {
         match self.current() {
             Ok(broker) => {
                 let options = self.routed(&binding, options);
@@ -138,7 +138,7 @@ impl WorkshopBroker {
 }
 
 impl InferenceBroker for WorkshopBroker {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
+    fn models(&self) -> BoxFuture<'static, Result<ModelCatalog, Error>> {
         let broker = self.clone();
         Box::pin(async move {
             broker.chat_model_ready().await;
@@ -153,7 +153,7 @@ impl InferenceBroker for WorkshopBroker {
         tools: Vec<ToolSchema>,
         options: CompletionOptions,
         round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>> {
         match self.current() {
             Ok(broker) => {
                 let options = self.routed(&binding, options);
@@ -200,7 +200,7 @@ impl RunBroker {
 }
 
 impl InferenceBroker for RunBroker {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
+    fn models(&self) -> BoxFuture<'static, Result<ModelCatalog, Error>> {
         self.inner.models()
     }
 
@@ -211,7 +211,7 @@ impl InferenceBroker for RunBroker {
         tools: Vec<ToolSchema>,
         options: CompletionOptions,
         round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>> {
         // Only a section's own round has a live reader; a nested
         // `models.infer` round is read whole from its answer.
         if round.origin != ReplyOrigin::Chat {

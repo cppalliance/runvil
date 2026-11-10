@@ -3,8 +3,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use runvil::Error;
-use runvil::harness::{Record, RecorderFuture, RunId, RunMeta, RunRecorder, make_recorder_error};
+use runvil::harness::{Record, RunId, RunMeta, RunRecorder, make_recorder_error};
+use runvil::{BoxFuture, Error};
 use tokio::sync::Mutex;
 
 use crate::{LogError, RunLog};
@@ -91,7 +91,7 @@ pub struct AgentRecorder {
 }
 
 impl RunRecorder for AgentRecorder {
-    fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
+    fn begin_run(&self, meta: RunMeta) -> BoxFuture<'_, Result<RunId, Error>> {
         Box::pin(async move {
             let mut slot = self.recorder.log.lock().await;
             let log = self
@@ -105,7 +105,7 @@ impl RunRecorder for AgentRecorder {
         })
     }
 
-    fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()> {
+    fn append(&self, run: RunId, record: Record) -> BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
             let mut slot = self.recorder.log.lock().await;
             let log = self
@@ -120,7 +120,11 @@ impl RunRecorder for AgentRecorder {
         })
     }
 
-    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+    fn end_run(
+        &self,
+        run: RunId,
+        result: Result<String, Error>,
+    ) -> BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
             let mut slot = self.recorder.log.lock().await;
             let log = self

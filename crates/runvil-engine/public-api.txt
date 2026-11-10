@@ -1243,3 +1243,4 @@ pub trait runvil_engine::PromptFinder: core::marker::Send + core::marker::Sync
 pub trait runvil_engine::vfs::Policy: core::marker::Send
 pub trait runvil_engine::vfs::Vfs: core::marker::Send
 pub trait runvil_engine::vfs::VfsAccess: core::marker::Send
+pub type runvil_engine::BoxFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<dyn core::future::future::Future<Output = T> + core::marker::Send + 'a>>

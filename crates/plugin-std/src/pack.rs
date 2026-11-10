@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use runvil_plugin::{
-    Error, ErrorCode, HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ToolContext,
+    BoxFuture, Error, ErrorCode, HostServices, Pack, PackId, PackInfo, PackRegistry, ToolContext,
     ToolId, ToolInfo, ToolOutput, make_tool_error,
 };
 use serde_json::{Value, json};
@@ -115,7 +115,7 @@ impl Pack for Std {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             let name = cx.tool().name();
             let Some(definition) = definition(name) else {

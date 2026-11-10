@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use runvil_plugin::{
-    Error, ErrorCode, HostServices, Pack, PackFactory, PackFuture, PackId, PackInfo, PackRegistry,
+    BoxFuture, Error, ErrorCode, HostServices, Pack, PackFactory, PackId, PackInfo, PackRegistry,
     ServiceKey, ToolContext, ToolId, ToolInfo, ToolOutput, make_tool_error,
 };
 use serde_json::{Value, json};
@@ -166,7 +166,7 @@ impl Pack for Web {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             match cx.tool().name() {
                 "fetch" => self.fetch.call(args).await,

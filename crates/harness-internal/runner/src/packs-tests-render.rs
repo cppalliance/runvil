@@ -53,7 +53,7 @@ impl Pack for Rendering {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
         self.listed.call(cx, args)
     }
 
@@ -61,7 +61,7 @@ impl Pack for Rendering {
         &'a self,
         cx: RenderContext<'a>,
         mut offered: Vec<ToolInfo>,
-    ) -> PackFuture<'a, Vec<ToolInfo>> {
+    ) -> BoxFuture<'a, Vec<ToolInfo>> {
         self.renders.lock().unwrap().push(Rendered {
             pack: self.name.to_string(),
             entry: cx.entry.to_owned(),

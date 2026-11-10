@@ -8,7 +8,7 @@ use std::sync::Arc;
 use rmcp::model::JsonObject;
 use rmcp::service::{Peer, RoleClient};
 use runvil_plugin::{
-    Error, ErrorCode, Pack, PackFuture, PackId, ToolCaller, ToolContext, ToolId, ToolInfo,
+    BoxFuture, Error, ErrorCode, Pack, PackId, ToolCaller, ToolContext, ToolId, ToolInfo,
     ToolOutput, make_tool_error,
 };
 use serde_json::{Map, Value, json};
@@ -324,7 +324,7 @@ impl Pack for Mcp {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             let tool = cx.tool();
             let caller = cx.origin().caller;

@@ -22,7 +22,7 @@ use runvil_engine::vfs::{Origin, VfsRef};
 use runvil_engine::{Error, ErrorCode};
 use runvil_engine::{Prompt, Run, RunParams, RunSeed, Step};
 use runvil_plugin::{
-    HostServices, Pack, PackFactory, PackFuture, PackId, PackInfo, PackRegistry, ServiceKey,
+    BoxFuture, HostServices, Pack, PackFactory, PackId, PackInfo, PackRegistry, ServiceKey,
     ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -57,7 +57,7 @@ impl Pack for Listed {
         self.tools.clone()
     }
 
-    fn ready(&self) -> PackFuture<'_, Result<(), Error>> {
+    fn ready(&self) -> BoxFuture<'_, Result<(), Error>> {
         match self.ready.as_deref() {
             Some("fails") => {
                 let reason = format!("{} will not be ready", self.name);
@@ -72,7 +72,7 @@ impl Pack for Listed {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move { Ok(ToolOutput::trusted(format!("{}:{}", self.name, cx.tool()))) })
     }
 }

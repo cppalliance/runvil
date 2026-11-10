@@ -25,26 +25,18 @@
 //! the Host's Packs, taken at preparation. The Host supplies the
 //! [`InferenceBroker`] and the [`Timer`].
 
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use runvil_engine::Error;
 use runvil_engine::effect::{PackToolSets, Round, ToolCallOrigin};
 use runvil_engine::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ModelInfo, ToolSchema,
 };
 use runvil_engine::timestamp::Timestamp;
 use runvil_engine::vfs::Access;
+use runvil_engine::{BoxFuture, Error};
 use runvil_engine::{ToolId, ToolInfo, ToolOutput};
 use serde_json::Value;
-
-/// The boxed future a performer returns for the Harness to poll.
-///
-/// The future is `Send` and `'static`. It can move between threads, and it
-/// owns the data it uses.
-pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
 /// The model inference the Host supplies to the Harness.
 ///
@@ -54,9 +46,13 @@ pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 /// The Harness polls each round inside the run's own future, so a broker
 /// must not block while polled. A broker sends blocking or CPU-heavy work
 /// to the Host's own runtime.
+///
+/// Each method returns a [`BoxFuture`] for the Harness to poll. The future
+/// is `Send` and `'static`. It can move between threads, and it owns the
+/// data it uses.
 pub trait InferenceBroker: Send + Sync {
     /// Lists the models the broker serves.
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>>;
+    fn models(&self) -> BoxFuture<'static, Result<ModelCatalog, Error>>;
 
     /// Runs one model round and returns the finished reply.
     ///
@@ -74,12 +70,16 @@ pub trait InferenceBroker: Send + Sync {
         tools: Vec<ToolSchema>,
         options: CompletionOptions,
         round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, Error>>;
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>>;
 }
 
 /// Performs a `ToolCall` effect: resolves `tool` to an implementation and
 /// calls it with `args`, lending it the call's `access` and `origin`. Also
 /// performs a `Render` effect: the tools each offered Pack shows the model.
+///
+/// Each method returns a [`BoxFuture`] for the Harness to poll. The future
+/// is `Send` and `'static`. It can move between threads, and it owns the
+/// data it uses.
 pub trait ToolPerformer: Send + Sync {
     /// Calls the tool. `alias` is the tool's wire name for a model call and
     /// its canonical id for a script call, for the performer's own
@@ -94,7 +94,7 @@ pub trait ToolPerformer: Send + Sync {
         access: Arc<Access>,
         origin: ToolCallOrigin,
         args: Value,
-    ) -> BoxFuture<Result<ToolOutput, Error>>;
+    ) -> BoxFuture<'static, Result<ToolOutput, Error>>;
 
     /// Renders the tools the section entry `entry` offered from each Pack
     /// in `offered`, for `model`, the model of the entry's first round, and
@@ -106,7 +106,7 @@ pub trait ToolPerformer: Send + Sync {
         _entry: String,
         _model: ModelInfo,
         offered: Vec<PackToolSets<ToolInfo>>,
-    ) -> BoxFuture<Vec<PackToolSets<ToolInfo>>> {
+    ) -> BoxFuture<'static, Vec<PackToolSets<ToolInfo>>> {
         Box::pin(async move { offered })
     }
 }
@@ -118,7 +118,10 @@ pub trait ToolPerformer: Send + Sync {
 /// must not block while polled. It waits on the Host's own runtime.
 pub trait Timer: Send + Sync {
     /// Resolves once `duration` has passed.
-    fn sleep(&self, duration: Duration) -> BoxFuture<()>;
+    ///
+    /// The returned [`BoxFuture`] is `Send` and `'static`. It can move
+    /// between threads, and it owns the data it uses.
+    fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()>;
 
     /// The time now. The Harness stamps each run's
     /// `started_at` with it. The default reads the

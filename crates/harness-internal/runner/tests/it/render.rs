@@ -14,7 +14,7 @@ use harness_runner::{Harness, Packs};
 use runvil_engine::Error;
 use runvil_engine::model::{Completion, CompletionResult, ToolCall};
 use runvil_plugin::{
-    ModelInfo, Pack, PackFactory, PackFuture, PackId, PackInfo, PackRegistry, RenderContext,
+    BoxFuture, ModelInfo, Pack, PackFactory, PackId, PackInfo, PackRegistry, RenderContext,
     ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -186,7 +186,7 @@ impl Pack for RenderPack {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
         let origin = cx.origin();
         self.seen.calls.lock().unwrap().push(Called {
             tool: cx.tool().to_string(),
@@ -219,7 +219,7 @@ impl Pack for RenderPack {
         &'a self,
         cx: RenderContext<'a>,
         offered: Vec<ToolInfo>,
-    ) -> PackFuture<'a, Vec<ToolInfo>> {
+    ) -> BoxFuture<'a, Vec<ToolInfo>> {
         assert!(!self.panics, "the render Pack's render panics");
         let model = cx.model.id().name();
         self.seen.renders.lock().unwrap().push(Rendered {

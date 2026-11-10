@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use harness_runner::RunSetup;
 use harness_runner::effect_loop::drive_run;
-use harness_runner::performers::{BoxFuture, ToolPerformer};
+use harness_runner::performers::ToolPerformer;
 use harness_runner::recorder::{MemoryRecorder, RecordKind, RunId};
 use runvil_engine::Error;
 use runvil_engine::cancel::CancelHandle;
@@ -22,7 +22,7 @@ use runvil_engine::model::{
 };
 use runvil_engine::timestamp::Timestamp;
 use runvil_engine::vfs::Access;
-use runvil_engine::{Prompt, Run, RunParams};
+use runvil_engine::{BoxFuture, Prompt, Run, RunParams};
 use runvil_engine::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use serde_json::{Value, json};
 use tokio::sync::{Notify, Semaphore};
@@ -136,7 +136,7 @@ impl ToolPerformer for ParkingTool {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         args: Value,
-    ) -> BoxFuture<Result<ToolOutput, Error>> {
+    ) -> BoxFuture<'static, Result<ToolOutput, Error>> {
         let name = args["name"].as_str().unwrap_or_default().to_owned();
         let gate = Arc::clone(&self.gate);
         let started = Arc::clone(&self.started);
@@ -167,7 +167,7 @@ impl Drop for TornDown {
 
 /// Plays each round through `script`, handed the round's last message.
 fn answering(
-    script: impl Fn(&str) -> BoxFuture<Result<Box<Completion>, Error>> + Send + Sync + 'static,
+    script: impl Fn(&str) -> BoxFuture<'static, Result<Box<Completion>, Error>> + Send + Sync + 'static,
 ) -> ScriptedBroker {
     ScriptedBroker::new(move |_round, messages| {
         let last = messages

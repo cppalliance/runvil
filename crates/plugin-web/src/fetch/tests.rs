@@ -21,12 +21,13 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::routing::get;
 use flate2::Compression;
 use flate2::write::GzEncoder;
+use runvil_plugin::BoxFuture;
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::runtime::Handle;
 
 use super::{FetchClient, WebFetch};
 use crate::config::{FetchConfig, FetchConfigBuilder};
-use crate::resolver::{Lookup, LookupFuture};
+use crate::resolver::Lookup;
 
 /// An article page long enough for readability extraction to fire.
 const ARTICLE_HTML: &str = r"
@@ -75,7 +76,7 @@ struct MapLookup {
 }
 
 impl Lookup for MapLookup {
-    fn lookup(&self, host: String) -> LookupFuture {
+    fn lookup(&self, host: String) -> BoxFuture<'static, std::io::Result<Vec<SocketAddr>>> {
         let addrs: Vec<SocketAddr> = self
             .entries
             .iter()
