@@ -22,9 +22,8 @@ use runvil_engine::effect::{Effect, EffectAnswer, EffectId, IssuedEffect};
 use runvil_engine::event::Event;
 use runvil_engine::ids::Provenance;
 use runvil_engine::model::{Completion, ModelInfo, ModelRole};
-use runvil_engine::timestamp::Timestamp;
 use runvil_engine::vfs::perform_vfs_op;
-use runvil_engine::{Prompt, Run, RunParams, RunSeed, Step};
+use runvil_engine::{Prompt, Run, RunParams, RunSeed, Step, Timestamp};
 use serde_json::{Value, json};
 
 use super::{Reply, TestResult, Tool, canned, tool_info};

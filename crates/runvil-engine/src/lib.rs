@@ -7,6 +7,8 @@
 //! The run ends at [`Step::Done`] with its result: the final text, or the
 //! [`Error`] that ended it. A cancel is the error whose code
 //! is [`ErrorCode::Canceled`].
+//! The caller makes a run's [`RunParams`] from its [`RunSeed`] and its
+//! start time, a [`Timestamp`], which a prompt reads as `sys.when`.
 //! Before the run starts, the caller puts on its [`RunParams`] the tools
 //! a run may offer, the Packs it holds, and the role map that fills the
 //! five model roles. The run's first step checks the params against what
@@ -23,6 +25,7 @@ pub use runvil_runtime::RunLimits;
 pub use runvil_runtime::RunParams;
 pub use runvil_runtime::Step;
 pub use runvil_types::seed::RunSeed;
+pub use runvil_types::timestamp::Timestamp;
 
 /* Universal Error types
 */
@@ -173,13 +176,6 @@ pub mod cancel {
 
     pub use runvil_types::cancel::CancelHandle;
     pub use runvil_types::cancel::Canceled;
-}
-
-pub mod timestamp {
-    //! The start time a run's params carry, which a prompt reads as
-    //! `sys.when`.
-
-    pub use runvil_types::timestamp::Timestamp;
 }
 
 pub mod metrics {

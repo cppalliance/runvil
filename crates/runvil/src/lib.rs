@@ -11,8 +11,7 @@
 //! [`harness::Packs`] over it, which keeps each Pack's factory.
 //! It builds one [`Host`] at startup over those Packs, a
 //! [`PromptFinder`], and its [`harness::Timer`], which also stamps each
-//! run's start as a [`timestamp::Timestamp`], and shares it behind an
-//! `Arc`.
+//! run's start as a [`Timestamp`], and shares it behind an `Arc`.
 //! [`Host::parse`] finds a prompt by its name and parses it. For each run
 //! the launcher builds a [`RunSetup`] with the run's recorder, inference
 //! broker, filesystem, model selection, workspace roots, [`RunLimits`],
@@ -40,12 +39,14 @@ pub use harness_runner::RunControl;
 pub use harness_runner::RunReport;
 pub use harness_runner::RunSetup;
 
-/* The Engine's prompts, run limits, and run seed
+/* The Engine's prompts, run limits, and run seed, and the start time a
+   Host's timer stamps each run with, which a prompt reads as `sys.when`.
 */
 pub use runvil_engine::Prompt;
 pub use runvil_engine::PromptFinder;
 pub use runvil_engine::RunLimits;
 pub use runvil_engine::RunSeed;
+pub use runvil_engine::Timestamp;
 
 /* Universal Error types
 */
@@ -227,13 +228,6 @@ pub mod vfs {
     pub use runvil_engine::vfs::VfsRef;
     pub use runvil_engine::vfs::VfsRefBuilder;
     pub use runvil_engine::vfs::Writability;
-}
-
-pub mod timestamp {
-    //! The start time a Host's timer stamps each run with, which a prompt
-    //! reads as `sys.when`.
-
-    pub use runvil_engine::timestamp::Timestamp;
 }
 
 pub mod metrics {

@@ -14,8 +14,7 @@ use runvil_engine::effect::{Effect, EffectAnswer, IssuedEffect};
 use runvil_engine::model::{
     Completion, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode, ToolCall,
 };
-use runvil_engine::timestamp::Timestamp;
-use runvil_engine::{Prompt, Run, RunParams, RunSeed, Step};
+use runvil_engine::{Prompt, Run, RunParams, RunSeed, Step, Timestamp};
 use runvil_engine::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use serde_json::json;
 

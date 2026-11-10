@@ -20,8 +20,7 @@ use runvil_engine::model::{
     Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
     ModelInfo, ModelRole, ThinkingMode, ToolSchema,
 };
-use runvil_engine::timestamp::Timestamp;
-use runvil_engine::{BoxFuture, Prompt, Run, RunParams};
+use runvil_engine::{BoxFuture, Prompt, Run, RunParams, Timestamp};
 use serde_json::{Value, json};
 
 use super::begun_log;

@@ -16,9 +16,8 @@ use runvil_engine::event::Event;
 use runvil_engine::model::{
     Completion, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode,
 };
-use runvil_engine::timestamp::Timestamp;
 use runvil_engine::vfs::perform_vfs_op;
-use runvil_engine::{Prompt, Run, RunParams, RunSeed, Step};
+use runvil_engine::{Prompt, Run, RunParams, RunSeed, Step, Timestamp};
 use runvil_engine::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 
 /// Writes a note, asks the default model to reply, and shouts the reply.

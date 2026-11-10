@@ -1,6 +1,6 @@
 //! Stamping a run's start, and reading it back as `sys.when`.
 
-use runvil_engine::timestamp::Timestamp;
+use runvil_engine::Timestamp;
 
 use super::support::{Scenario, TestResult, note};
 

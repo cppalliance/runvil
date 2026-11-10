@@ -61,6 +61,7 @@ auto runvil_engine::RunParams: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !Unwin
 auto runvil_engine::RunSeed: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil_engine::SourceLoc: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil_engine::Step: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
+auto runvil_engine::Timestamp: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil_engine::ToolCatalog: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil_engine::ToolId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil_engine::ToolInfo: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -117,7 +118,6 @@ auto runvil_engine::prompt::ArgsDeclIter: Freeze, RefUnwindSafe, Send, Sync, Unp
 auto runvil_engine::prompt::FileDecl: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil_engine::prompt::Frontmatter: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil_engine::prompt::RoleRequirements: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil_engine::timestamp::Timestamp: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil_engine::vfs::Access: !Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil_engine::vfs::AcquireContext: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil_engine::vfs::AllowAll: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -155,6 +155,7 @@ derives runvil_engine::RunParams: Debug
 derives runvil_engine::RunSeed: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil_engine::SourceLoc: Clone, Debug, Eq, PartialEq
 derives runvil_engine::Step: Debug
+derives runvil_engine::Timestamp: Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
 derives runvil_engine::ToolCatalog: Clone, Debug, Default
 derives runvil_engine::ToolId: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
 derives runvil_engine::ToolInfo: Clone, Debug, Deserialize, Eq, PartialEq, Serialize
@@ -211,7 +212,6 @@ derives runvil_engine::prompt::ArgsDeclIter: Clone, Debug
 derives runvil_engine::prompt::FileDecl: Clone, Debug, Deserialize, Eq, PartialEq
 derives runvil_engine::prompt::Frontmatter: Clone, Debug, Deserialize, Eq, PartialEq
 derives runvil_engine::prompt::RoleRequirements: Clone, Copy, Debug, Deserialize, Eq, PartialEq
-derives runvil_engine::timestamp::Timestamp: Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
 derives runvil_engine::vfs::Access: Debug
 derives runvil_engine::vfs::AcquireContext: Clone, Debug
 derives runvil_engine::vfs::AllowAll: Clone, Copy, Debug, Default, Eq, Hash, PartialEq
@@ -244,6 +244,7 @@ impl core::error::Error for runvil_engine::Error
 impl core::error::Error for runvil_engine::vfs::VfsError
 impl core::fmt::Display for runvil_engine::Error
 impl core::fmt::Display for runvil_engine::RunSeed
+impl core::fmt::Display for runvil_engine::Timestamp
 impl core::fmt::Display for runvil_engine::ToolId
 impl core::fmt::Display for runvil_engine::effect::EffectId
 impl core::fmt::Display for runvil_engine::ids::ChainId
@@ -252,7 +253,6 @@ impl core::fmt::Display for runvil_engine::model::Role
 impl core::fmt::Display for runvil_engine::packs::GlobalName
 impl core::fmt::Display for runvil_engine::packs::PackId
 impl core::fmt::Display for runvil_engine::prompt::ArgType
-impl core::fmt::Display for runvil_engine::timestamp::Timestamp
 impl core::fmt::Display for runvil_engine::vfs::PathReason
 impl core::fmt::Display for runvil_engine::vfs::VfsError
 impl core::fmt::Display for runvil_engine::vfs::VfsPath
@@ -305,17 +305,17 @@ pub const fn runvil_engine::ErrorCode::prose(self) -> &'static str
 pub const fn runvil_engine::ErrorCode::tag(self) -> &'static str
 pub const fn runvil_engine::RunSeed::as_bytes(&self) -> &[u8; 32]
 pub const fn runvil_engine::RunSeed::from_bytes(bytes: [u8; 32]) -> runvil_engine::RunSeed
+pub const fn runvil_engine::Timestamp::from_unix_millis(millis: i64) -> Self
+pub const fn runvil_engine::Timestamp::unix_millis(self) -> i64
 pub const fn runvil_engine::effect::EffectId::get(self) -> u64
 pub const fn runvil_engine::ids::RoundId::get(self) -> u64
 pub const fn runvil_engine::ids::RoundId::new(id: u64) -> Self
 pub const fn runvil_engine::model::ModelRole::as_str(self) -> &'static str
-pub const fn runvil_engine::timestamp::Timestamp::from_unix_millis(millis: i64) -> Self
-pub const fn runvil_engine::timestamp::Timestamp::unix_millis(self) -> i64
 pub const fn runvil_engine::vfs::Access::id(&self) -> runvil_engine::vfs::ExecId
+pub const runvil_engine::Timestamp::UNIX_EPOCH: runvil_engine::Timestamp
 pub const runvil_engine::model::ModelId::GATEWAY: &'static str
 pub const runvil_engine::model::ModelRole::ALL: [runvil_engine::model::ModelRole; 5]
 pub const runvil_engine::model::Role::ALL: &'static [runvil_engine::model::Role]
-pub const runvil_engine::timestamp::Timestamp::UNIX_EPOCH: runvil_engine::timestamp::Timestamp
 pub enum runvil_engine::ErrorCode
 pub enum runvil_engine::ErrorFact
 pub enum runvil_engine::Step
@@ -337,7 +337,7 @@ pub fn runvil_engine::Run::deliver(&mut self, text: alloc::string::String) -> al
 pub fn runvil_engine::Run::new(prompt: alloc::sync::Arc<runvil_engine::Prompt>, args: &str, params: runvil_engine::RunParams) -> runvil_engine::Run
 pub fn runvil_engine::Run::resume(&mut self, id: runvil_engine::effect::EffectId, answer: runvil_engine::effect::EffectAnswer)
 pub fn runvil_engine::Run::step(&mut self) -> runvil_engine::Step
-pub fn runvil_engine::RunParams::new(seed: runvil_engine::RunSeed, started_at: runvil_engine::timestamp::Timestamp) -> runvil_engine::RunParams
+pub fn runvil_engine::RunParams::new(seed: runvil_engine::RunSeed, started_at: runvil_engine::Timestamp) -> runvil_engine::RunParams
 pub fn runvil_engine::RunParams::with_cancel(self, handle: runvil_engine::cancel::CancelHandle) -> runvil_engine::RunParams
 pub fn runvil_engine::RunParams::with_limits(self, limits: runvil_engine::RunLimits) -> runvil_engine::RunParams
 pub fn runvil_engine::RunParams::with_models(self, models: alloc::collections::btree::map::BTreeMap<runvil_engine::model::ModelRole, runvil_engine::model::ModelInfo>) -> runvil_engine::RunParams
@@ -349,6 +349,7 @@ pub fn runvil_engine::RunParams::with_ui(self, snapshot: serde_json::value::Valu
 pub fn runvil_engine::RunParams::with_vfs(self, vfs: runvil_engine::vfs::VfsRef) -> runvil_engine::RunParams
 pub fn runvil_engine::SourceLoc::line(file: impl core::convert::Into<alloc::string::String>, line: core::num::nonzero::NonZeroU32) -> runvil_engine::SourceLoc
 pub fn runvil_engine::SourceLoc::new(file: impl core::convert::Into<alloc::string::String>, start_line: core::num::nonzero::NonZeroU32, start_column: core::num::nonzero::NonZeroU32, end_line: core::num::nonzero::NonZeroU32, end_column: core::num::nonzero::NonZeroU32) -> core::option::Option<runvil_engine::SourceLoc>
+pub fn runvil_engine::Timestamp::to_rfc3339(self) -> alloc::string::String
 pub fn runvil_engine::ToolCatalog::get(&self, id: &runvil_engine::ToolId) -> core::option::Option<&runvil_engine::ToolInfo>
 pub fn runvil_engine::ToolCatalog::new(tools: impl core::iter::traits::collect::IntoIterator<Item = runvil_engine::ToolInfo>) -> core::result::Result<Self, runvil_engine::Error>
 pub fn runvil_engine::ToolCatalog::tools(&self) -> &[runvil_engine::ToolInfo]
@@ -521,7 +522,6 @@ pub fn runvil_engine::prompt::Frontmatter::runvil(&self) -> core::option::Option
 pub fn runvil_engine::prompt::Frontmatter::uses(&self) -> &[runvil_engine::packs::PackRef]
 pub fn runvil_engine::prompt::RoleRequirements::min_context(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
 pub fn runvil_engine::prompt::RoleRequirements::thinking(&self) -> core::option::Option<bool>
-pub fn runvil_engine::timestamp::Timestamp::to_rfc3339(self) -> alloc::string::String
 pub fn runvil_engine::vfs::Access::append(&self, path: &str, contents: &[u8]) -> core::result::Result<(), runvil_engine::vfs::VfsError>
 pub fn runvil_engine::vfs::Access::close(self) -> core::result::Result<(), runvil_engine::vfs::VfsError>
 pub fn runvil_engine::vfs::Access::copy(&self, from: &str, to: &str) -> core::result::Result<(), runvil_engine::vfs::VfsError>
@@ -610,7 +610,6 @@ pub mod runvil_engine::metrics
 pub mod runvil_engine::model
 pub mod runvil_engine::packs
 pub mod runvil_engine::prompt
-pub mod runvil_engine::timestamp
 pub mod runvil_engine::vfs
 pub runvil_engine::Error::at: core::option::Option<runvil_engine::SourceLoc>
 pub runvil_engine::Error::code: runvil_engine::ErrorCode
@@ -1189,6 +1188,7 @@ pub struct runvil_engine::Run { /* private fields */ }
 pub struct runvil_engine::RunParams { /* private fields */ }
 pub struct runvil_engine::RunSeed(/* private fields */)
 pub struct runvil_engine::SourceLoc { .. }
+pub struct runvil_engine::Timestamp(/* private fields */)
 pub struct runvil_engine::cancel::CancelHandle { /* private fields */ }
 pub struct runvil_engine::cancel::Canceled { /* private fields */ }
 pub struct runvil_engine::effect::EffectId(/* private fields */)
@@ -1207,7 +1207,6 @@ pub struct runvil_engine::prompt::ArgsDeclIter<'a> { /* private fields */ }
 pub struct runvil_engine::prompt::FileDecl { /* private fields */ }
 pub struct runvil_engine::prompt::Frontmatter { /* private fields */ }
 pub struct runvil_engine::prompt::RoleRequirements { /* private fields */ }
-pub struct runvil_engine::timestamp::Timestamp(/* private fields */)
 pub struct runvil_engine::vfs::Access { /* private fields */ }
 pub struct runvil_engine::vfs::AcquireContext { /* private fields */ }
 pub struct runvil_engine::vfs::AllowAll;
