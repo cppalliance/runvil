@@ -78,7 +78,7 @@ fn the_plugin_contract_depending_into_the_engine_container_passes() {
 }
 
 #[test]
-fn a_root_runvil_crate_other_than_the_named_ones_depending_into_the_engine_container_is_reported() {
+fn a_root_engine_crate_other_than_the_named_ones_depending_into_the_engine_container_is_reported() {
     assert_eq!(
         container_named_exception("runvil-internal"),
         ["runvil-engine", "runvil-plugin"],
@@ -194,7 +194,7 @@ fn an_outside_crate_depending_into_the_harness_container_is_reported() {
     assert!(
         violations[0].contains("workshop-server depends on harness-runner")
             && violations[0].contains(
-                "crates/harness-internal is private to its family; only harness may depend into it"
+                "crates/harness-internal is private to its family; only runvil may depend into it"
             ),
         "the violation includes the harness container privacy message: {violations:?}"
     );
@@ -205,8 +205,8 @@ fn the_harness_facade_depending_into_the_harness_container_passes() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
-        "harness",
-        "harness",
+        "runvil",
+        "runvil",
         "[dependencies]\nharness-runner = { path = \"../harness-internal/runner\" }\n\
          harness-sessions = { path = \"../harness-internal/sessions\" }\n",
     );
@@ -220,7 +220,7 @@ fn the_harness_facade_depending_into_the_harness_container_passes() {
     let violations = product_boundary_violations(root.path());
     assert!(
         violations.is_empty(),
-        "harness is the one outside crate permitted into crates/harness-internal: {violations:?}"
+        "runvil is the one outside crate permitted into crates/harness-internal: {violations:?}"
     );
 }
 

@@ -4,8 +4,9 @@
 
 use std::sync::{Arc, Mutex};
 
-use harness::record::{
-    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder, RunSeed,
+use runvil::RunSeed;
+use runvil::harness::{
+    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
     make_recorder_error,
 };
 use runvil_engine::Error;
@@ -125,7 +126,7 @@ async fn the_tee_returns_the_inner_recorders_refusal_and_keeps_the_event_out() {
         .await
         .expect_err("the inner recorder's refusal is the tee's");
     assert_eq!(
-        harness::display_chain(&refusal),
+        runvil::harness::display_chain(&refusal),
         "the run recorder failed: the log is full",
         "the refusal is the inner recorder's own"
     );

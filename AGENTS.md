@@ -7,7 +7,7 @@ Multi-crate Rust workspace for the Engine, the Harness that runs it, and Worksho
 Seven terms have exactly one meaning each, everywhere in this repository: code comments, docs, rulebooks, and plans. Write them capitalized.
 
 - **Engine**: the `runvil-*` crates. The Engine parses a prompt and steps a run. Whenever a run needs a model reply, a Pack's render of the tools a section offers it, a Pack tool's result, a timer, or a file outside a prelude's install, the Engine emits an effect and waits for its caller to answer it. In production the caller is the Harness.
-- **Harness**: the `harness` and `harness-*` crates. The Harness steps the Engine, performs every effect, returns each answer, and records every run through the recorder the Host supplies. Production code runs prompts only through the Harness.
+- **Harness**: the `runvil` crate and the `harness-*` crates. The Harness steps the Engine, performs every effect, returns each answer, and records every run through the recorder the Host supplies. Production code runs prompts only through the Harness.
 - **Host**: an application that runs prompts through the Harness, such as Workshop or Papergate. The Host makes every policy decision. It may also use the Engine's parser and types to read prompts and show events.
 - **Pack**: code which installs an optional native prelude, an optional Lua prelude, and zero or more tools.
 - **Plugin**: an entry point which installs zero or more Packs.

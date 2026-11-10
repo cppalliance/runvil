@@ -1,4 +1,4 @@
-//! The `harness` facade suite: a Host builds one Harness per run through
+//! The `runvil` facade suite: a Host builds one Harness per run through
 //! the public API alone.
 
 mod broker;

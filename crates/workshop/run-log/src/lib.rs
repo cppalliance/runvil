@@ -7,13 +7,13 @@
 //! - Tier: feature; may depend on: `workshop-protocol`,
 //!   `workshop-registry`, `workshop-support`, and the service crates;
 //!   today it names none of them. Outside the family it may name the
-//!   Harness's public API `harness`, the Engine's public API
+//!   Harness's public API `runvil`, the Engine's public API
 //!   `runvil-engine`, and `shared-*` crates. Never on `workshop-server`, a
 //!   private Harness, Engine, or Gateway crate. `cargo test -p build-xtask`
 //!   enforces the product and container boundaries.
 //! - The Harness holds no database and no storage path: this crate is
 //!   where the Host's recorder keeps a run's history. It reaches the
-//!   Harness only through `harness::record`.
+//!   Harness only through `runvil::harness`.
 //! - `records` is append-only: a record's `seq` is the effect loop's
 //!   order, not the clock's, assigned by the log in call order, and no
 //!   record is updated or deleted once written. A `runs` row is written

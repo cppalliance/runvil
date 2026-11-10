@@ -3,7 +3,7 @@
 //! registry as the run starts, which the run's `ui()` and model
 //! resolution read for the whole run.
 
-use harness::RunSetup;
+use runvil::RunSetup;
 use workshop_menu::MenuHandles;
 use workshop_registry::{Registry, WorkspaceRoots};
 

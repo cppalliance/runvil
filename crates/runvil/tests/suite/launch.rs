@@ -4,9 +4,9 @@
 
 use std::sync::Arc;
 
-use harness::record::MemoryRecorder;
-use harness::vfs::{Origin, VfsRef};
-use harness::{Harness, RunSetup};
+use runvil::harness::MemoryRecorder;
+use runvil::vfs::{Origin, VfsRef};
+use runvil::{Harness, RunSetup};
 use runvil_engine::{ErrorCode, ErrorFact};
 
 use crate::support::{Offline, launch, no_packs};

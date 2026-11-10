@@ -9,9 +9,9 @@ repository.workspace = true
 [dependencies]
 # The recorder trait and the record values the log stores and returns,
 # through the Harness's public API.
-harness.workspace = true
+runvil.workspace = true
 # The Engine's public API: the error a run ends with and its code, which
-# the log stores and rebuilds, since `harness::record` re-exports neither.
+# the log stores and rebuilds, since `runvil` re-exports neither.
 # The fidelity suite also round-trips the Engine's events through the log.
 runvil-engine.workspace = true
 serde_json.workspace = true

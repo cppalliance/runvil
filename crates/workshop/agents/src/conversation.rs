@@ -16,8 +16,8 @@ mod run;
 use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 
-use harness::RunControl;
-use harness::record::RunId;
+use runvil::RunControl;
+use runvil::harness::RunId;
 use runvil_engine::event::Event;
 use tokio::sync::{broadcast, watch};
 

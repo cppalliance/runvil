@@ -1,6 +1,6 @@
 //! Fixture tests for the Harness tokio ban, plus the live check over this
 //! workspace's `crates/harness-internal/` container and its
-//! `crates/harness/` facade.
+//! `crates/runvil/` facade.
 
 use std::path::Path;
 
@@ -17,7 +17,7 @@ fn container(root: &Path) -> std::path::PathBuf {
 }
 
 fn facade(root: &Path) -> std::path::PathBuf {
-    root.join("crates").join("harness")
+    root.join("crates").join("runvil")
 }
 
 /// Writes a crate directory whose manifest is a fixture package followed by
@@ -148,12 +148,12 @@ fn a_facade_directory_without_a_manifest_is_reported() {
 fn the_harness_crates_are_the_three_container_crates_and_the_facade() {
     let root = crate::product::test_support::workspace_root();
     let internal = root.join("crates").join("harness-internal");
-    let covered = harness_crates(&internal, &root.join("crates").join("harness"));
+    let covered = harness_crates(&internal, &root.join("crates").join("runvil"));
     let expected = [
         internal.join("plugin-loader"),
         internal.join("runner"),
         internal.join("test-plugin"),
-        root.join("crates").join("harness"),
+        root.join("crates").join("runvil"),
     ];
     assert_eq!(
         covered.len(),
@@ -175,7 +175,7 @@ fn harness_crates_declare_no_tokio_outside_dev_dependencies() {
     let crates_dir = root.join("crates");
     let violations = harness_tokio_bans(
         &crates_dir.join("harness-internal"),
-        &crates_dir.join("harness"),
+        &crates_dir.join("runvil"),
     );
     assert!(
         violations.is_empty(),

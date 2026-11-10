@@ -11,7 +11,7 @@ exclude = ["crates/runvil-internal", "crates/workshop", "crates/harness-internal
 # compile on a fresh macOS or Linux clone with no native toolkit, no
 # CUDA, and no Tauri system packages. The desktop app is an explicit
 # choice: `cargo build -p workshop`.
-default-members = ["crates/runvil-engine", "crates/runvil-plugin", "crates/harness", "crates/harness-gateway-client"]
+default-members = ["crates/runvil", "crates/runvil-engine", "crates/runvil-plugin", "crates/harness-gateway-client"]
 
 [workspace.package]
 version = "0.3.0"
@@ -33,7 +33,7 @@ runvil-plugin-sys = { version = "0.2.0", git = "https://github.com/cppalliance/r
 runvil-types = { path = "crates/runvil-internal/types" }
 workshop-gateway-discovery = { path = "crates/workshop/gateway-discovery" }
 shared-error-source = { path = "crates/shared-error-source" }
-harness = { path = "crates/harness" }
+runvil = { path = "crates/runvil" }
 harness-gateway-client = { path = "crates/harness-gateway-client" }
 harness-runner = { path = "crates/harness-internal/runner" }
 harness-plugin-loader = { path = "crates/harness-internal/plugin-loader" }

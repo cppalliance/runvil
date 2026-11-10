@@ -3,9 +3,9 @@
 
 use std::sync::Arc;
 
-use harness::pack::{PackRegistry, Packs};
-use harness::record::MemoryRecorder;
-use harness::{BoxFuture, Host, InferenceBroker, RunSetup};
+use runvil::harness::{BoxFuture, InferenceBroker, MemoryRecorder, Packs};
+use runvil::plugin::PackRegistry;
+use runvil::{Host, RunSetup};
 use runvil_engine::effect::Round;
 use runvil_engine::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,

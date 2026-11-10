@@ -16,11 +16,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use harness::pack::{HostServices, Packs};
-use harness::record::MemoryRecorder;
-use harness::vfs::VfsRef;
-use harness::{BoxFuture, Host, InferenceBroker, RunSetup};
 use plugin_web::SEARCH_PROVIDER;
+use runvil::harness::{BoxFuture, InferenceBroker, MemoryRecorder, Packs};
+use runvil::plugin::HostServices;
+use runvil::vfs::VfsRef;
+use runvil::{Host, RunSetup};
 use runvil_engine::effect::Round;
 use runvil_engine::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,

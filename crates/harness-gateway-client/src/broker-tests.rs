@@ -8,7 +8,7 @@
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex};
 
-use harness::InferenceBroker;
+use runvil::harness::InferenceBroker;
 use runvil_engine::effect::Round;
 use runvil_engine::event::ReplyOrigin;
 use runvil_engine::ids::RoundId;

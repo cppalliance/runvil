@@ -2236,27 +2236,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "harness"
-version = "0.3.0"
-dependencies = [
- "harness-plugin-loader",
- "harness-runner",
- "runvil-engine",
- "runvil-plugin",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "harness-gateway-client"
 version = "0.3.0"
 dependencies = [
  "async-trait",
  "axum",
  "bytes",
- "harness",
  "plugin-web",
  "reqwest",
+ "runvil",
  "runvil-engine",
  "serde",
  "serde_json",
@@ -4708,6 +4696,18 @@ checksum = "18bd8a37d17a58532776dcdf6041ce64929adca78e8489d5cacbafe99229d3e1"
 dependencies = [
  "bytemuck",
  "byteorder",
+]
+
+[[package]]
+name = "runvil"
+version = "0.3.0"
+dependencies = [
+ "harness-plugin-loader",
+ "harness-runner",
+ "runvil-engine",
+ "runvil-plugin",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -7889,8 +7889,8 @@ dependencies = [
 name = "workshop-agents"
 version = "0.0.0"
 dependencies = [
- "harness",
  "rand 0.9.5",
+ "runvil",
  "runvil-engine",
  "serde",
  "serde_json",
@@ -7973,7 +7973,7 @@ dependencies = [
 name = "workshop-run-log"
 version = "0.0.0"
 dependencies = [
- "harness",
+ "runvil",
  "runvil-engine",
  "serde_json",
  "shared-error-source",
@@ -7991,12 +7991,12 @@ dependencies = [
  "axum",
  "build-ui",
  "futures-util",
- "harness",
  "harness-gateway-client",
  "plugin-mcp",
  "plugin-std",
  "plugin-web",
  "reqwest",
+ "runvil",
  "runvil-engine",
  "runvil-plugin",
  "rust-embed",

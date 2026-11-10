@@ -241,7 +241,7 @@ fn rustdoc_pages_are_not_checked() {
     );
     write_page(
         site.path(),
-        "harness/harness/index.html",
+        "runvil/runvil/index.html",
         &page(&["gone.html"]),
     );
     write_page(
@@ -289,7 +289,7 @@ fn books_only_skips_only_the_rustdoc_folders() {
     let site = site_with(&[]);
     let html = page(&[
         "runvil-engine/index.html",
-        "harness/index.html",
+        "runvil/index.html",
         "gateway/index.html",
         "runvil-extra/index.html",
     ]);
@@ -306,7 +306,7 @@ fn books_only_skips_only_the_rustdoc_folders() {
 #[test]
 fn books_only_skips_a_book_pages_link_into_the_rustdoc_folders() {
     let site = site_with(&[]);
-    let html = page(&["../runvil-engine/index.html", "../harness/index.html"]);
+    let html = page(&["../runvil-engine/index.html", "../runvil/index.html"]);
     assert_eq!(
         broken_links(site.path(), "gateway/index.html", &html, false).len(),
         2
@@ -337,14 +337,14 @@ fn the_crate_page_uses_the_underscored_crate_name() {
         crate_page("harness-gateway-client"),
         "harness_gateway_client/index.html"
     );
-    assert_eq!(crate_page("harness"), "harness/index.html");
+    assert_eq!(crate_page("runvil"), "runvil/index.html");
     assert_eq!(crate_page("runvil-engine"), "runvil_engine/index.html");
 }
 
 #[test]
 fn the_rustdoc_sites_document_each_public_harness_crate_and_the_web_plugin() {
     for krate in [
-        "harness",
+        "runvil",
         "harness-gateway-client",
         "plugin-web",
         "plugin-mcp",
@@ -464,12 +464,12 @@ fn the_stage_outputs_files_land_in_the_site_root_without_the_book_trees() {
 
 #[test]
 fn the_redirect_sends_only_to_the_crate_page() {
-    let html = redirect_page("harness");
+    let html = redirect_page("runvil");
     assert!(
-        html.contains("<meta http-equiv=\"refresh\" content=\"0; url=harness/index.html\">"),
+        html.contains("<meta http-equiv=\"refresh\" content=\"0; url=runvil/index.html\">"),
         "{html}"
     );
-    assert_eq!(hrefs(&html).collect::<Vec<_>>(), ["harness/index.html"]);
+    assert_eq!(hrefs(&html).collect::<Vec<_>>(), ["runvil/index.html"]);
 }
 
 #[test]

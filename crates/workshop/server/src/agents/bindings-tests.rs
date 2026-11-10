@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use harness::record::MemoryRecorder;
+use runvil::harness::MemoryRecorder;
 use tokio::sync::watch;
 use workshop_menu::{CatalogBus, MenuBus};
 use workshop_registry::{WorkspaceRoots, WorkspaceRootsAdapter};

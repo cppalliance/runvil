@@ -10,7 +10,7 @@ todos:
     status: completed
   - id: step3-host-facade
     content: "Step 3: rename harness to runvil with its 35 items at their final paths, update Host imports, the product matrix family rule, fixtures, CI and docs, pass the gate and full verification, commit"
-    status: pending
+    status: completed
   - id: step4-complete-surface
     content: "Step 4: add the remaining 80 Engine names and 9 Plugin contract names to runvil, switch Host crates to runvil alone, add the Workshop matrix rule, pass the gate and full verification, commit"
     status: pending

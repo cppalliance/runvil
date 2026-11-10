@@ -5,7 +5,7 @@
 //! so a float whose text does not parse exactly, or an object whose key
 //! order changes, would make a replayed run differ from the run that ran.
 
-use harness::record::RunSeed;
+use runvil::RunSeed;
 use runvil_engine::Error;
 use runvil_engine::event::{Event, ReplyOrigin};
 use runvil_engine::ids::{Provenance, RoundId, TaskId};

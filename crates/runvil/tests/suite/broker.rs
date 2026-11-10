@@ -5,8 +5,8 @@
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use harness::record::MemoryRecorder;
-use harness::{BoxFuture, InferenceBroker, RunSetup};
+use runvil::RunSetup;
+use runvil::harness::{BoxFuture, InferenceBroker, MemoryRecorder};
 use runvil_engine::Error;
 use runvil_engine::effect::Round;
 use runvil_engine::event::ReplyOrigin;

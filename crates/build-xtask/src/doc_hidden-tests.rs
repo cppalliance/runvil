@@ -52,7 +52,7 @@ const HIDDEN: &[u8] = b"#[doc(hidden)]\npub struct Seam;\n";
 /// reported missing.
 const BANNED_DIR_LIBS: [(&str, &[u8]); 4] = [
     ("crates/runvil-engine/src/lib.rs", b"pub use x::Y;\n"),
-    ("crates/harness/src/lib.rs", b"pub use x::Y;\n"),
+    ("crates/runvil/src/lib.rs", b"pub use x::Y;\n"),
     (
         "crates/runvil-internal/lua/src/lib.rs",
         b"pub struct Plain;\n",
@@ -277,7 +277,7 @@ fn every_rs_file_under_the_facade_and_the_container_is_scanned() {
 
 #[test]
 fn a_doc_hidden_under_the_harness_facade_is_rejected() {
-    assert_scanned("crates/harness/src/log.rs");
+    assert_scanned("crates/runvil/src/log.rs");
 }
 
 #[test]
@@ -305,7 +305,7 @@ fn files_outside_the_facades_and_containers_are_not_scanned() {
 fn a_missing_facade_or_container_directory_is_reported_not_skipped() {
     for missing in [
         "crates/runvil-engine",
-        "crates/harness",
+        "crates/runvil",
         "crates/runvil-internal",
         "crates/harness-internal",
     ] {

@@ -12,7 +12,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use harness::{BoxFuture, InferenceBroker};
+use runvil::harness::{BoxFuture, InferenceBroker};
 use runvil_engine::Error;
 use runvil_engine::effect::Round;
 use runvil_engine::model::{

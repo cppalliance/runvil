@@ -14,7 +14,7 @@ axum.workspace = true
 futures-util.workspace = true
 # The Harness public API: each conversation's launch builds the per-run
 # Harness that runs it.
-harness.workspace = true
+runvil.workspace = true
 # The Gateway web search client the agent sessions' search provider
 # sends each search through.
 harness-gateway-client.workspace = true

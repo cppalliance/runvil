@@ -145,7 +145,7 @@ fn an_outside_crate_reaching_past_the_one_public_crate_is_reported() {
 }
 
 #[test]
-fn an_outside_crate_depending_on_a_root_runvil_crate_other_than_the_facade_is_reported() {
+fn an_outside_crate_depending_on_a_root_engine_crate_other_than_the_facade_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
@@ -262,7 +262,7 @@ fn package_renames_are_resolved_before_classification() {
 }
 
 #[test]
-fn a_runvil_crate_depending_on_a_workshop_crate_is_reported() {
+fn an_engine_crate_depending_on_a_workshop_crate_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
@@ -276,25 +276,25 @@ fn a_runvil_crate_depending_on_a_workshop_crate_is_reported() {
     assert!(
         violations.iter().all(|v| v.contains("runvil-runtime"))
             && violations[0]
-                .contains("runvil crates must not depend on workshop or harness crates"),
-        "the violation names the runvil crate and the workshop ban: {violations:?}"
+                .contains("Engine crates must not depend on workshop or harness crates"),
+        "the violation names the Engine crate and the workshop ban: {violations:?}"
     );
 }
 
 #[test]
-fn a_runvil_crate_depending_on_the_harness_facade_is_reported() {
+fn an_engine_crate_depending_on_the_harness_facade_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
         "runvil-internal/runtime",
         "runvil-runtime",
-        "[dependencies]\nharness = { path = \"../../harness\" }\n",
+        "[dependencies]\nrunvil = { path = \"../../runvil\" }\n",
     );
-    write_crate(root.path(), "harness", "harness", "");
+    write_crate(root.path(), "runvil", "runvil", "");
     let violations = product_boundary_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations[0].contains("runvil crates must not depend on workshop or harness crates"),
+        violations[0].contains("Engine crates must not depend on workshop or harness crates"),
         "the violation names the harness ban: {violations:?}"
     );
 }
@@ -335,7 +335,7 @@ fn an_unparseable_manifest_is_reported() {
 }
 
 #[test]
-fn a_harness_crate_depending_on_the_runvil_facade_passes() {
+fn a_harness_crate_depending_on_the_engine_facade_passes() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
@@ -385,14 +385,14 @@ fn a_harness_crate_depending_on_a_private_product_crate_is_reported() {
     assert!(
         violations[0].starts_with("harness-plugins depends on runvil-runtime:")
             && violations[0].contains(
-                "outside crates may depend on the runvil family only through runvil-engine or runvil-plugin"
+                "outside crates may depend on the Engine family only through runvil-engine or runvil-plugin"
             ),
         "the violation names the harness crate and the facade rule: {violations:?}"
     );
 }
 
 #[test]
-fn a_harness_crate_reaching_past_the_runvil_facade_is_reported() {
+fn a_harness_crate_reaching_past_the_engine_facade_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
@@ -416,13 +416,13 @@ fn a_workshop_crate_depending_on_the_harness_facade_passes() {
         root.path(),
         "workshop/server",
         "workshop-server",
-        "[dependencies]\nharness = { path = \"../../harness\" }\n",
+        "[dependencies]\nrunvil = { path = \"../../runvil\" }\n",
     );
-    write_crate(root.path(), "harness", "harness", "");
+    write_crate(root.path(), "runvil", "runvil", "");
     let violations = product_boundary_violations(root.path());
     assert!(
         violations.is_empty(),
-        "harness is the harness public crate for workshop crates: {violations:?}"
+        "runvil is the harness public crate for workshop crates: {violations:?}"
     );
 }
 
@@ -440,16 +440,16 @@ fn a_workshop_crate_depending_on_a_harness_crate_other_than_the_facade_is_report
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
         violations[0].starts_with("workshop-server depends on harness-runner:")
-            && violations[0].ends_with("only through harness or harness-gateway-client"),
+            && violations[0].ends_with("only through runvil or harness-gateway-client"),
         "the violation names the workshop crate and the harness facade: {violations:?}"
     );
 }
 
 #[test]
-fn runvil_and_shared_crates_depending_on_harness_are_reported() {
+fn engine_and_shared_crates_depending_on_the_harness_facade_are_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
-    let dep = "[dependencies]\nharness = { path = \"../harness\" }\n";
-    write_crate(root.path(), "harness", "harness", "");
+    let dep = "[dependencies]\nrunvil = { path = \"../runvil\" }\n";
+    write_crate(root.path(), "runvil", "runvil", "");
     write_crate(root.path(), "runvil-engine", "runvil-engine", dep);
     write_crate(root.path(), "shared-crypto", "shared-crypto", dep);
     let violations = product_boundary_violations(root.path());
@@ -458,7 +458,7 @@ fn runvil_and_shared_crates_depending_on_harness_are_reported() {
         assert!(
             violations
                 .iter()
-                .any(|v| v.starts_with(&format!("{package} depends on harness:"))),
+                .any(|v| v.starts_with(&format!("{package} depends on runvil:"))),
             "{package} depending on the harness facade is reported: {violations:?}"
         );
     }
@@ -466,7 +466,7 @@ fn runvil_and_shared_crates_depending_on_harness_are_reported() {
 
 #[test]
 fn family_classification_follows_the_naming_rules() {
-    assert_eq!(family("runvil-runtime"), Family::Runvil);
+    assert_eq!(family("runvil-runtime"), Family::Engine);
     assert_eq!(family("workshop"), Family::Workshop);
     assert_eq!(family("workshop-server"), Family::Workshop);
     assert_eq!(family("shared-crypto"), Family::Shared);
@@ -475,15 +475,15 @@ fn family_classification_follows_the_naming_rules() {
 }
 
 #[test]
-fn the_bare_harness_package_belongs_to_the_harness_family() {
-    assert_eq!(family("harness"), Family::Harness);
+fn the_runvil_package_belongs_to_the_harness_family() {
+    assert_eq!(family("runvil"), Family::Harness);
     assert_eq!(family("harness-runner"), Family::Harness);
+    assert_eq!(family("harness"), Family::Unaffiliated);
     assert_eq!(family("harnesses"), Family::Unaffiliated);
 }
 
 #[test]
-fn only_a_prefixed_runvil_package_belongs_to_the_runvil_family() {
-    assert_eq!(family("runvil-engine"), Family::Runvil);
-    assert_eq!(family("runvil"), Family::Unaffiliated);
+fn only_a_prefixed_runvil_package_belongs_to_the_engine_family() {
+    assert_eq!(family("runvil-engine"), Family::Engine);
     assert_eq!(family("runvilr"), Family::Unaffiliated);
 }

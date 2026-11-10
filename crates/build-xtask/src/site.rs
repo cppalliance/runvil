@@ -56,8 +56,8 @@ const RUSTDOC_SITES: [(&str, &str, &str); 5] = [
         "The Engine: parsing and running prompts",
     ),
     (
-        "harness",
-        "harness",
+        "runvil",
+        "runvil",
         "The Harness: running prompts for a Host",
     ),
     (

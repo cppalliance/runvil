@@ -9,8 +9,8 @@ use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Poll, Waker};
 
-use harness::record::{MemoryRecorder, RecordKind};
-use harness::{BoxFuture, Harness, InferenceBroker, RunSetup};
+use runvil::harness::{BoxFuture, InferenceBroker, MemoryRecorder, RecordKind};
+use runvil::{Harness, RunSetup};
 use runvil_engine::effect::Round;
 use runvil_engine::event::ReplyOrigin;
 use runvil_engine::model::{

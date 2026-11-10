@@ -2,7 +2,7 @@
 //! a normal dependency.
 //!
 //! The Harness polls every effect inside the run's own future and starts
-//! no task, so any executor can drive a run. The `crates/harness/` facade
+//! no task, so any executor can drive a run. The `crates/runvil/` facade
 //! and every crate under `crates/harness-internal/` therefore may not name
 //! `tokio` or `tokio-util` in `[dependencies]` or its target-specific
 //! forms. `[dev-dependencies]` are outside the ban: the suites and doc

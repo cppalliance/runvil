@@ -1,6 +1,6 @@
 //! The read path: the whole transcript for session views.
 
-use harness::record::RunSeed;
+use runvil::RunSeed;
 use serde_json::json;
 use workshop_run_log::{LogError, Record, RecordKind, RunId, RunLog, RunMeta};
 

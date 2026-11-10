@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use harness::record::{Record, RecorderFuture, RunId, RunMeta, RunRecorder, make_recorder_error};
+use runvil::harness::{Record, RecorderFuture, RunId, RunMeta, RunRecorder, make_recorder_error};
 use runvil_engine::Error;
 use tokio::sync::Mutex;
 

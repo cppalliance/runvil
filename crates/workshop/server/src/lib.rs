@@ -4,7 +4,7 @@
 //! and the axum router. Start at
 //! [`Config::load`] for configuration, `AgentSessions` for the
 //! agent-session launcher behind `/agents/ws` (each conversation's run
-//! is a Harness of its own, reached through `harness`), and [`router`]
+//! is a Harness of its own, reached through `runvil`), and [`router`]
 //! for the HTTP API; [`spawn`] runs the whole server in-process on its
 //! own thread for embedding binaries.
 //!
@@ -31,7 +31,7 @@
 //!   the service crates (`workshop-gateway`, `workshop-menu`,
 //!   `workshop-status`), the feature crates (`workshop-agents`,
 //!   `workshop-run-log`, `workshop-user-state`, `workshop-workspace`),
-//!   the Harness's public crates `harness` and `harness-gateway-client`,
+//!   the Harness's public crates `runvil` and `harness-gateway-client`,
 //!   the Plugin crates `plugin-web`, `plugin-mcp`, and `plugin-std`, and
 //!   the Engine's public crates `runvil-engine` and `runvil-plugin`.
 //!   `cargo test -p build-xtask` enforces the product and container

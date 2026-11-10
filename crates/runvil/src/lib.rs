@@ -1,11 +1,12 @@
 //! The Harness, which runs one prompt for a Host and records the run.
 //!
-//! A Host makes a [`pack::PackRegistry`], calls each Plugin it links,
+//! A Host makes a [`plugin::PackRegistry`], calls each Plugin it links,
 //! which inserts its Packs into the registry, and builds one
-//! [`pack::Packs`] over it, which keeps each Pack's factory.
+//! [`harness::Packs`] over it, which keeps each Pack's factory.
 //! It builds one [`Host`] at startup over those Packs, a
-//! [`PromptFinder`], and its [`Timer`], which also stamps each run's
-//! start as a [`Timestamp`], and shares it behind an `Arc`.
+//! [`PromptFinder`], and its [`harness::Timer`], which also stamps each
+//! run's start as a [`timestamp::Timestamp`], and shares it behind an
+//! `Arc`.
 //! [`Host::parse`] finds a prompt by its name and parses it. For each run
 //! the launcher builds a [`RunSetup`] with the run's recorder, inference
 //! broker, filesystem, model selection, workspace roots, [`RunLimits`],
@@ -32,44 +33,30 @@ pub use harness_runner::Host;
 pub use harness_runner::RunControl;
 pub use harness_runner::RunReport;
 pub use harness_runner::RunSetup;
-pub use harness_runner::display_chain;
-pub use harness_runner::performers::BoxFuture;
-pub use harness_runner::performers::InferenceBroker;
-pub use harness_runner::performers::Timer;
 pub use runvil_engine::PromptFinder;
 pub use runvil_engine::RunLimits;
-pub use runvil_engine::timestamp::Timestamp;
+pub use runvil_engine::RunSeed;
 
-pub mod pack {
-    //! The registry a Host's Plugins insert Packs into, the Packs
-    //! installed from it, whose factories make each run's instances, the
-    //! services map a Host fills for its Plugins, and the Pack ids. The
-    //! Plugin crates themselves are the Host's own dependencies.
-
-    pub use harness_runner::Packs;
-    pub use runvil_plugin::HostServices;
-    pub use runvil_plugin::PackId;
-    pub use runvil_plugin::PackOrigin;
-    pub use runvil_plugin::PackRegistry;
-}
-
-pub mod plugin {
-    //! Inserting Plugins into the Pack registry: from the dynamic libraries
-    //! in a Plugin directory, or linked into the Host, and what each insert
-    //! loaded.
+pub mod harness {
+    //! What a Host gives the Harness beside a run's setup, and what the
+    //! Harness hands back: the inference broker and the timer a Host
+    //! supplies, the Packs installed from a Pack registry, whose factories
+    //! make each run's instances, the Plugins a Host inserts into that
+    //! registry, from the dynamic libraries in a Plugin directory or
+    //! linked into the Host, with what each insert loaded, and the
+    //! recorder that receives every effect, answer, and event of a run
+    //! and the result each run ends with, beside an in-memory recorder.
 
     pub use harness_plugin_loader::Plugin;
     pub use harness_plugin_loader::PluginReport;
     pub use harness_plugin_loader::PluginSource;
     pub use harness_plugin_loader::insert_plugin;
     pub use harness_plugin_loader::insert_plugin_dir;
-}
-
-pub mod record {
-    //! The recorder that receives every effect, answer, and event of a run
-    //! and the result each run ends with, an in-memory recorder, and the
-    //! seed each run's meta records.
-
+    pub use harness_runner::Packs;
+    pub use harness_runner::display_chain;
+    pub use harness_runner::performers::BoxFuture;
+    pub use harness_runner::performers::InferenceBroker;
+    pub use harness_runner::performers::Timer;
     pub use harness_runner::recorder::MemoryRecorder;
     pub use harness_runner::recorder::Record;
     pub use harness_runner::recorder::RecordKind;
@@ -78,7 +65,28 @@ pub mod record {
     pub use harness_runner::recorder::RunMeta;
     pub use harness_runner::recorder::RunRecorder;
     pub use harness_runner::recorder::make_recorder_error;
-    pub use runvil_engine::RunSeed;
+}
+
+pub mod packs {
+    //! Pack ids.
+
+    pub use runvil_engine::packs::PackId;
+}
+
+pub mod plugin {
+    //! The registry a Host's Plugins insert Packs into, where each of its
+    //! Packs came from, and the services map a Host fills for its Plugins.
+    //! The Plugin crates themselves are the Host's own dependencies.
+
+    pub use runvil_plugin::HostServices;
+    pub use runvil_plugin::PackOrigin;
+    pub use runvil_plugin::PackRegistry;
+}
+
+pub mod timestamp {
+    //! The start time a Host's timer stamps each run with.
+
+    pub use runvil_engine::timestamp::Timestamp;
 }
 
 pub mod vfs {

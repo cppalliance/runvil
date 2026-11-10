@@ -5,8 +5,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use harness::pack::{PackRegistry, Packs};
-use harness::{BoxFuture, Harness, Host, InferenceBroker, RunSetup, Timer};
+use runvil::harness::{BoxFuture, InferenceBroker, Packs, Timer};
+use runvil::plugin::PackRegistry;
+use runvil::{Harness, Host, RunSetup};
 use runvil_engine::effect::Round;
 use runvil_engine::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,

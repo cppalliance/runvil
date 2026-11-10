@@ -16,7 +16,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use harness::record::{MemoryRecorder, RunId};
+use runvil::harness::{MemoryRecorder, RunId};
 use tokio::sync::broadcast;
 use workshop_agents::{
     Conversation, Conversations, FailureKind, SessionEvent, SessionFailure, SessionState,

@@ -262,10 +262,10 @@ fn an_engine_source_suppressing_disallowed_methods_is_reported() {
     );
     // A crate outside the Engine may suppress the lint, as a binary entry
     // point installing process-global state does.
-    test_support::write_crate(root.path(), "harness", "harness", "");
+    test_support::write_crate(root.path(), "runvil", "runvil", "");
     write(
         root.path(),
-        "crates/harness/src/main.rs",
+        "crates/runvil/src/main.rs",
         "#[expect(clippy::disallowed_methods, reason = \"entry point\")]\nfn main() {}\n",
     );
     let found = engine_clippy_violations(root.path());

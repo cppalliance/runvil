@@ -5,8 +5,8 @@
 
 use std::sync::Arc;
 
-use harness::record::RunRecorder;
-use harness::{Harness, Host, RunReport, RunSetup, display_chain};
+use runvil::harness::{RunRecorder, display_chain};
+use runvil::{Harness, Host, RunReport, RunSetup};
 use runvil_engine::ids::RoundId;
 use runvil_engine::{Error, Prompt};
 

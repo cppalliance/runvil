@@ -5,9 +5,9 @@
 
 use std::sync::{Arc, Mutex, PoisonError};
 
-use harness::RunSetup;
-use harness::record::{MemoryRecorder, RecordKind, RunId};
-use harness::vfs::{Origin, VfsError, VfsRef};
+use runvil::RunSetup;
+use runvil::harness::{MemoryRecorder, RecordKind, RunId};
+use runvil::vfs::{Origin, VfsError, VfsRef};
 use runvil_engine::vfs::{MemoryBackend, Op, Policy, Verdict, VfsPath};
 
 use crate::support::{Offline, launch, no_packs};

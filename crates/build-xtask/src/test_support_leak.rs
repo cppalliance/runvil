@@ -1,8 +1,8 @@
 //! `test-support` leak guard: no non-dev dependency table anywhere in the
-//! workspace enables a runvil or Harness crate's `test-support`
-//! feature. The runvil family is the facade plus every
+//! workspace enables an Engine or Harness crate's `test-support`
+//! feature. The Engine family is its two root crates plus every
 //! `crates/runvil-internal/` member; the Harness family is the
-//! `crates/harness` facade plus every `crates/harness-internal/` member.
+//! `crates/runvil` facade plus every `crates/harness-internal/` member.
 //!
 //! An Engine crate may keep test drivers behind its `test-support` feature
 //! (`runvil-runtime`'s serial driver and scripted model, for its
@@ -46,7 +46,7 @@ const CHECKED_KINDS: [&str; 2] = ["dependencies", "build-dependencies"];
 const EXEMPTING_FEATURE: &str = "test-support";
 
 /// Scans the workspace for non-dev dependency tables, and `[features]`
-/// values, that enable a runvil or Harness crate's `test-support`
+/// values, that enable an Engine or Harness crate's `test-support`
 /// feature.
 #[must_use]
 pub(crate) fn test_support_leak_violations(root: &Path) -> Vec<String> {
@@ -131,7 +131,7 @@ fn scan_features(
                 continue;
             }
             violations.push(format!(
-                "{}: [features] {feature} enables {package}/{EXEMPTING_FEATURE}; only [dev-dependencies] may enable a runvil or harness crate's {EXEMPTING_FEATURE} feature",
+                "{}: [features] {feature} enables {package}/{EXEMPTING_FEATURE}; only [dev-dependencies] may enable an Engine or harness crate's {EXEMPTING_FEATURE} feature",
                 manifest_path.display()
             ));
         }
@@ -186,7 +186,7 @@ fn scan_table(
             });
         if enables {
             violations.push(format!(
-                "{}: [{table}] enables {package}/{EXEMPTING_FEATURE}; only [dev-dependencies] may enable a runvil or harness crate's {EXEMPTING_FEATURE} feature",
+                "{}: [{table}] enables {package}/{EXEMPTING_FEATURE}; only [dev-dependencies] may enable an Engine or harness crate's {EXEMPTING_FEATURE} feature",
                 manifest.display()
             ));
         }
@@ -202,14 +202,14 @@ fn family_of(package: &str, families: &[Vec<String>]) -> Option<usize> {
 }
 
 /// The package names of each guarded family's crates whose manifests
-/// parse: the runvil crates, then the Harness crates.
+/// parse: the Engine crates, then the Harness crates.
 fn guarded_families(root: &Path) -> [Vec<String>; 2] {
     let crates_dir = root.join("crates");
     [
         package_names(&crate::engine_guards::engine_crates(root)),
         package_names(&crate::harness_bans::harness_crates(
             &crates_dir.join("harness-internal"),
-            &crates_dir.join("harness"),
+            &crates_dir.join("runvil"),
         )),
     ]
 }

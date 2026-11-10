@@ -102,7 +102,7 @@ jobs:
         run: cargo doc -p runvil-engine --no-deps
 
       - name: Harness facade docs
-        run: cargo doc -p harness --no-deps
+        run: cargo doc -p runvil --no-deps
 
       - name: Engine docs (private items)
         run: cargo doc --locked --no-deps --all-features -p runvil-runtime --document-private-items

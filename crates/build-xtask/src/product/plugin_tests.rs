@@ -15,7 +15,7 @@ fn plugin_web_naming(deps: &str) -> Vec<String> {
         ("runvil-plugin", "runvil-plugin"),
         ("runvil-engine", "runvil-engine"),
         ("shared-loopback", "shared-loopback"),
-        ("harness", "harness"),
+        ("runvil", "runvil"),
         ("plugin-user-input", "plugin-user-input"),
         ("build-ui", "build-ui"),
     ] {
@@ -41,7 +41,7 @@ fn a_plugin_crate_naming_the_contract_and_a_shared_crate_passes() {
 fn a_plugin_crate_naming_any_other_workspace_crate_is_reported_in_every_table() {
     for (table, dep) in [
         ("dependencies", "runvil-engine"),
-        ("dependencies", "harness"),
+        ("dependencies", "runvil"),
         ("dev-dependencies", "plugin-user-input"),
         ("build-dependencies", "build-ui"),
     ] {
@@ -74,7 +74,7 @@ fn naming_plugin_web(dir: &str, package: &str, table: &str) -> Vec<String> {
 fn engine_and_harness_crates_naming_a_plugin_crate_are_reported() {
     for (dir, package, table) in [
         ("runvil-engine", "runvil-engine", "dependencies"),
-        ("harness", "harness", "dev-dependencies"),
+        ("runvil", "runvil", "dev-dependencies"),
         ("harness-internal/runner", "harness-runner", "dependencies"),
     ] {
         let violations = naming_plugin_web(dir, package, table);
@@ -82,7 +82,7 @@ fn engine_and_harness_crates_naming_a_plugin_crate_are_reported() {
         assert!(
             violations[0].starts_with(&format!("{package} depends on plugin-web:"))
                 && violations[0]
-                    .contains("runvil and harness crates must not depend on plugin crates"),
+                    .contains("Engine and harness crates must not depend on plugin crates"),
             "{package}: {violations:?}"
         );
     }

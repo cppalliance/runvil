@@ -1,7 +1,7 @@
 //! Tidy-style architecture checks for the workshop server decomposition,
 //! the Harness family, the sans-I/O Engine (dependency guard, clippy
 //! guard, and `test-support` leak guard, run from `engine_guards`), the
-//! `runvil-engine` and `harness` facades' source shape (run from
+//! `runvil-engine` and `runvil` facades' source shape (run from
 //! `facade_shape`), the `doc(hidden)` ban over both facades and their
 //! containers (run from `doc_hidden`), the doctest ban over every
 //! workspace crate (run from `no_doctests`), the `Debug` trait's one
@@ -62,7 +62,7 @@ pub(crate) fn all_violations(root: &Path) -> Vec<String> {
     violations.extend(crate::product::product_boundary_violations(root));
     violations.extend(crate::harness_bans::harness_tokio_bans(
         &root.join("crates").join("harness-internal"),
-        &root.join("crates").join("harness"),
+        &root.join("crates").join("runvil"),
     ));
     violations.extend(crate::engine_guards::engine_guard_violations(root));
     violations.extend(crate::facade_shape::facade_shape_violations(root));
@@ -261,7 +261,7 @@ fn marker_violations(root: &Path) -> Vec<String> {
 
 /// Whether a package name places the crate in a family that must have the
 /// marker: `workshop-*`, `harness-*`, and `plugin-*`. The Tauri desktop app
-/// (the `workshop` package) and the `harness` facade fall outside every
+/// (the `workshop` package) and the `runvil` facade fall outside every
 /// prefix, so they are exempt.
 fn family_requires_marker(name: &str) -> bool {
     name != "workshop"

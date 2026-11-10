@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use harness::{BoxFuture, Timer};
+use runvil::harness::{BoxFuture, Timer};
 
 /// Sleeps on tokio's timer wheel.
 ///

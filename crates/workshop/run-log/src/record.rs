@@ -1,13 +1,13 @@
 //! The values the run log stores and returns.
 //!
 //! The values the Harness hands a recorder (`Record`, `RunMeta`, and
-//! their parts) are re-exported from `harness::record`, so a log and the
+//! their parts) are re-exported from `runvil::harness`, so a log and the
 //! effect loop share one definition of each. A run's result is the
 //! Engine's own `Result<String, Error>`.
 
 use std::fmt;
 
-pub use harness::record::{Record, RecordKind, RunId, RunMeta};
+pub use runvil::harness::{Record, RecordKind, RunId, RunMeta};
 use runvil_engine::Error;
 
 /// A record's position in its run: the effect loop's order, assigned by

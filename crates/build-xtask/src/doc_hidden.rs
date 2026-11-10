@@ -1,5 +1,5 @@
 //! The `doc(hidden)` ban, live: no `.rs` file under a facade in
-//! `facade_shape::FACADE_DIRS` (`runvil-engine`, `harness`) or under their
+//! `facade_shape::FACADE_DIRS` (`runvil-engine`, `runvil`) or under their
 //! containers (`crates/runvil-internal/`, `crates/harness-internal/`)
 //! carries a `doc(hidden)` attribute. An item is either on a facade's
 //! surface and documented, or off it: private, or a free function in a

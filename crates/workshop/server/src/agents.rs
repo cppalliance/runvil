@@ -50,10 +50,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use harness::pack::{HostServices, PackRegistry, Packs};
-use harness::record::RunId;
-use harness::{Host, RunSetup};
 use plugin_web::SEARCH_PROVIDER;
+use runvil::harness::{Packs, RunId};
+use runvil::plugin::{HostServices, PackRegistry};
+use runvil::{Host, RunSetup};
 use runvil_engine::{Error, ErrorCode};
 use runvil_plugin::ServiceKey;
 use serde_json::{Map, Value};

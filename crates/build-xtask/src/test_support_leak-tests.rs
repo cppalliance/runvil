@@ -1,6 +1,6 @@
 //! Fixture tests for the `test-support` leak guard, plus the live check
 //! over this workspace: no non-dev dependency table anywhere enables a
-//! runvil or Harness crate's `test-support` feature.
+//! Engine or Harness crate's `test-support` feature.
 
 use std::path::{Path, PathBuf};
 
@@ -348,12 +348,12 @@ fn a_test_support_feature_forwarding_into_the_other_family_is_reported() {
         violations
             .iter()
             .any(|v| v.contains("plugins") && v.contains("runvil-lua/test-support")),
-        "a harness crate forwarding a runvil crate's test-support is reported: {violations:?}"
+        "a harness crate forwarding an Engine crate's test-support is reported: {violations:?}"
     );
     assert!(
         violations
             .iter()
             .any(|v| v.contains("runtime") && v.contains("harness-runner/test-support")),
-        "a runvil crate forwarding a harness crate's test-support is reported: {violations:?}"
+        "an Engine crate forwarding a harness crate's test-support is reported: {violations:?}"
     );
 }

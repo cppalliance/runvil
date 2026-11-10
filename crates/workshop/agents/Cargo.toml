@@ -9,7 +9,7 @@ repository.workspace = true
 [dependencies]
 # The Harness's public API: the per-run Harness a conversation drives, its
 # control, and the recorder tee's trait.
-harness.workspace = true
+runvil.workspace = true
 # The Engine's public API: the events a conversation observes, and the
 # round ids its deltas and transcript stamp.
 runvil-engine.workspace = true

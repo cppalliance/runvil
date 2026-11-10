@@ -18,8 +18,8 @@
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use harness::{BoxFuture, InferenceBroker};
 use harness_gateway_client::{GatewayBroker, StreamDelta};
+use runvil::harness::{BoxFuture, InferenceBroker};
 use runvil_engine::effect::Round;
 use runvil_engine::event::ReplyOrigin;
 use runvil_engine::model::{

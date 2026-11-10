@@ -84,11 +84,11 @@ fn the_harness_facade_is_held_to_the_same_shape() {
         Some(FIXTURE_MANIFEST),
         &[("lib.rs", "pub use runvil_runtime::Run;\n")],
     );
-    let harness = root.path().join("crates").join("harness");
+    let harness = root.path().join("crates").join("runvil");
     write_facade(
         &harness,
         Some(
-            "[package]\nname = \"harness\"\n\n[dependencies]\n\
+            "[package]\nname = \"runvil\"\n\n[dependencies]\n\
              harness-runner.workspace = true\n\
              harness-sessions.workspace = true\n",
         ),
@@ -327,7 +327,7 @@ fn a_missing_facade_crate_root_is_reported_not_skipped() {
     let root = tempfile::TempDir::new().expect("tempdir");
     let violations = facade_shape_violations(root.path());
     assert_eq!(violations.len(), 2, "{violations:?}");
-    for (violation, facade) in violations.iter().zip(["runvil-engine", "harness"]) {
+    for (violation, facade) in violations.iter().zip(["runvil-engine", "runvil"]) {
         let lib = root
             .path()
             .join("crates")
