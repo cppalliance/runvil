@@ -19,7 +19,7 @@ todos:
     status: completed
   - id: final-outline
     content: Regenerate the outlines with cargo outline, confirm the runvil page has no Named, not re-exported section, and report
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -179,3 +179,15 @@ One commit per step, on the branch that is checked out when the work starts. Not
 - Renaming `harness-gateway-client`, `harness-runner` or `harness-plugin-loader`.
 - Trimming Engine names that no Host imports beyond the 17.
 - Teaching vibelight to expand a whole-crate re-export.
+
+## Run deviations
+
+- **This copy of the plan** was added under `plan/` with the first commit, and each commit updated its todo statuses.
+- **The zero-match gates** ran with `rg --hidden -g "!.git"`, because `rg` skips `.github/` by default. Step 3's gate left out the facade's own `harness::` module paths. Step 4's gate ran on `crates/runvil/tests` and `crates/runvil/examples`, because `crates/runvil/src/lib.rs` has to name `runvil_engine::` to re-export it.
+- **`harness-gateway-client` keeps `runvil-engine` as a dev-dependency.** Its `src/wire/request-tests.rs` steps a real run by hand, and `runvil` leaves the stepping API out.
+- **Step 4 changed three product-matrix fixtures** that used `workshop-sessions` as the outside crate to `outside-tool`, because the new Workshop rule refuses that edge. It added one test for the rule.
+- **Step 5 found two doc links to names `runvil` leaves out:** `ToolInfo` linked `ToolCatalog`, and `Round` linked `Effect::Chat`. Both docs now show the name without a link. None of the 17 names came back.
+- **Step 5 added three nightly fixtures**, where the plan asked for one, and two unit tests. The check words a missing re-export of a public crate's item as "an item of public crate", and it lets surface docs name a public crate.
+- **The rustdoc site folders follow the package names.** The Engine's pages moved from `runvil/` to `runvil-engine/`, and the Host facade's pages moved from `harness/` to `runvil/`.
+- **The nightly fixtures also ran in step 2**, because that step changed the fixtures' facade name.
+- **Final counts:** 4,278 and 333 tests in the two suites, 260 `build-xtask` tests, and 21 nightly fixtures. `cargo outline` shows no "Named, not re-exported" section on the `runvil` page.
