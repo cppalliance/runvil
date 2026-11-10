@@ -165,23 +165,18 @@ fn move_path(source: &Path, destination: &Path) -> Result<(), String> {
     })
 }
 
-/// Copies a binary the installer packages install as a program, with mode
-/// `0755` whatever the source's mode.
+/// Copies a binary the installer packages install as a program. On Unix
+/// the copy gets mode `0755` whatever the source's mode; Windows has no
+/// mode to set.
 pub(crate) fn copy_executable(source: &Path, destination: &Path) -> Result<(), String> {
     copy_file(source, destination)?;
-    set_executable(destination)
-        .map_err(|error| format!("cannot make {} executable: {error}", destination.display()))
-}
-
-#[cfg(unix)]
-fn set_executable(path: &Path) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt as _;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755))
-}
-
-/// Only macOS and Linux payloads hold the Gateway outside Workshop.
-#[cfg(not(unix))]
-fn set_executable(_path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        fs::set_permissions(destination, fs::Permissions::from_mode(0o755)).map_err(|error| {
+            format!("cannot make {} executable: {error}", destination.display())
+        })?;
+    }
     Ok(())
 }
 
