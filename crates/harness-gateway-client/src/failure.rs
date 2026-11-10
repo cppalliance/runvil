@@ -8,8 +8,8 @@
 
 use std::fmt::Display;
 
-use runvil_engine::model::{make_completion_error, phrase};
-use runvil_engine::{Error, ErrorCode};
+use runvil::model::{make_completion_error, phrase};
+use runvil::{Error, ErrorCode};
 
 /// A send or read that failed: `Timeout` when `error` was a timeout and
 /// `Transport` otherwise, with `error` appended to the message as its
@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn a_decoded_parts_refusal_is_a_malformed_reply_with_its_specific() {
-        use runvil_engine::model::ToolCall;
+        use runvil::model::ToolCall;
         let refusal = ToolCall::from_parts(" ", "fetch", serde_json::json!({}))
             .expect_err("a blank id is refused");
         assert_eq!(refusal.code, ErrorCode::InvalidParts);

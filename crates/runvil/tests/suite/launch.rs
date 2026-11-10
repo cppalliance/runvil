@@ -6,8 +6,7 @@ use std::sync::Arc;
 
 use runvil::harness::MemoryRecorder;
 use runvil::vfs::{Origin, VfsRef};
-use runvil::{Harness, RunSetup};
-use runvil_engine::{ErrorCode, ErrorFact};
+use runvil::{ErrorCode, ErrorFact, Harness, RunSetup};
 
 use crate::support::{Offline, launch, no_packs};
 

@@ -5,7 +5,7 @@ use std::io;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use runvil_engine::Error;
+use runvil::Error;
 
 use crate::error::LogError;
 use crate::record::{Record, RunId, RunMeta, Seq};

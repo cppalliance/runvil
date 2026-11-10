@@ -3,15 +3,14 @@
 
 use std::sync::Arc;
 
+use runvil::effect::Round;
 use runvil::harness::{BoxFuture, InferenceBroker, MemoryRecorder, Packs};
-use runvil::plugin::PackRegistry;
-use runvil::{Host, RunSetup};
-use runvil_engine::effect::Round;
-use runvil_engine::model::{
+use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };
-use runvil_engine::{Error, ErrorCode};
+use runvil::plugin::PackRegistry;
+use runvil::{Error, ErrorCode, Host, RunSetup};
 use workshop_agents::{Conversation, TokioTimer};
 
 /// The name the fixture Host finds its one agent by.

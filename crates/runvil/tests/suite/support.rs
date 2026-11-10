@@ -5,15 +5,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use runvil::effect::Round;
 use runvil::harness::{BoxFuture, InferenceBroker, Packs, Timer};
-use runvil::plugin::PackRegistry;
-use runvil::{Harness, Host, RunSetup};
-use runvil_engine::effect::Round;
-use runvil_engine::model::{
+use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };
-use runvil_engine::{Error, ErrorCode};
+use runvil::plugin::PackRegistry;
+use runvil::{Error, ErrorCode, Harness, Host, RunSetup};
 
 /// The name every suite Host finds its prompt by.
 const PROMPT: &str = "prompt.md";

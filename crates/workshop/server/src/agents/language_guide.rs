@@ -10,7 +10,7 @@
 
 use std::path::Path;
 
-use runvil_engine::vfs::{RealBackend, VfsRef, Writability};
+use runvil::vfs::{RealBackend, VfsRef, Writability};
 
 /// The switch: `true` mounts the guide in every run.
 const ENABLED: bool = false;

@@ -12,10 +12,10 @@
 use std::fmt;
 use std::sync::Arc;
 
+use runvil::Error;
+use runvil::effect::Round;
 use runvil::harness::{BoxFuture, InferenceBroker};
-use runvil_engine::Error;
-use runvil_engine::effect::Round;
-use runvil_engine::model::{
+use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
 };
 

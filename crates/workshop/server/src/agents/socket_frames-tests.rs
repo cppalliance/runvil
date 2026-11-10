@@ -3,8 +3,8 @@
 //! shapes, and the cursor and wire-index bookkeeping behind every durable
 //! `agent_event` frame.
 
-use runvil_engine::event::Event;
-use runvil_engine::ids::{ChainId, Provenance, TaskId};
+use runvil::event::Event;
+use runvil::ids::{ChainId, Provenance, TaskId};
 use workshop_agents::{Delta, SessionEvent};
 
 use super::{advance, delta_frame};

@@ -130,8 +130,8 @@ fn an_outside_crate_reaching_past_the_one_public_crate_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
-        "workshop-sessions",
-        "workshop-sessions",
+        "outside-tool",
+        "outside-tool",
         "[dependencies]\nrunvil-lua = { path = \"../runvil-lua\" }\nrunvil-engine = { path = \"../runvil-engine\" }\n",
     );
     write_crate(root.path(), "runvil-lua", "runvil-lua", "");
@@ -139,7 +139,7 @@ fn an_outside_crate_reaching_past_the_one_public_crate_is_reported() {
     let violations = product_boundary_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations[0].contains("workshop-sessions") && violations[0].contains("runvil-lua"),
+        violations[0].contains("outside-tool") && violations[0].contains("runvil-lua"),
         "the violation names the crate and the forbidden dep: {violations:?}"
     );
 }
@@ -149,8 +149,8 @@ fn an_outside_crate_depending_on_a_root_engine_crate_other_than_the_facade_is_re
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
-        "workshop-sessions",
-        "workshop-sessions",
+        "outside-tool",
+        "outside-tool",
         "[dependencies]\nrunvil-extra = { path = \"../runvil-extra\" }\n\
          runvil-spare = { path = \"../runvil-spare\" }\n",
     );
@@ -162,7 +162,7 @@ fn an_outside_crate_depending_on_a_root_engine_crate_other_than_the_facade_is_re
     assert!(
         violations
             .iter()
-            .all(|v| v.starts_with("workshop-sessions depends on runvil-")
+            .all(|v| v.starts_with("outside-tool depends on runvil-")
                 && v.ends_with("only through runvil-engine or runvil-plugin")),
         "runvil-engine and runvil-plugin are the public crates, wherever the others sit: {violations:?}"
     );
@@ -304,15 +304,15 @@ fn an_outside_crate_depending_on_the_facade_passes() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
-        "workshop-sessions",
-        "workshop-sessions",
+        "outside-tool",
+        "outside-tool",
         "[dependencies]\nrunvil-engine = { path = \"../runvil-engine\" }\n",
     );
     write_crate(root.path(), "runvil-engine", "runvil-engine", "");
     let violations = product_boundary_violations(root.path());
     assert!(
         violations.is_empty(),
-        "the facade is the one legal runvil dependency for outside crates: {violations:?}"
+        "the Engine facade is a legal dependency for outside crates: {violations:?}"
     );
 }
 
@@ -406,6 +406,31 @@ fn a_harness_crate_reaching_past_the_engine_facade_is_reported() {
     assert!(
         violations[0].starts_with("harness-runner depends on runvil-lua:"),
         "the single-public-crate rule binds harness crates: {violations:?}"
+    );
+}
+
+#[test]
+fn a_workshop_crate_depending_on_an_engine_crate_is_reported() {
+    let root = tempfile::TempDir::new().expect("tempdir");
+    write_crate(
+        root.path(),
+        "workshop-sessions",
+        "workshop-sessions",
+        "[dependencies]\nrunvil-engine = { path = \"../runvil-engine\" }\n\
+         runvil-plugin = { path = \"../runvil-plugin\" }\n\
+         runvil = { path = \"../runvil\" }\n",
+    );
+    for name in ["runvil-engine", "runvil-plugin", "runvil"] {
+        write_crate(root.path(), name, name, "");
+    }
+    let violations = product_boundary_violations(root.path());
+    assert_eq!(violations.len(), 2, "{violations:?}");
+    assert!(
+        violations
+            .iter()
+            .all(|v| v.starts_with("workshop-sessions depends on runvil-")
+                && v.ends_with("they reach the Engine through runvil")),
+        "a workshop crate reaches the Engine through runvil alone: {violations:?}"
     );
 }
 

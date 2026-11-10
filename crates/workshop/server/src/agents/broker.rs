@@ -19,14 +19,14 @@ use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use harness_gateway_client::{GatewayBroker, StreamDelta};
+use runvil::effect::Round;
+use runvil::event::ReplyOrigin;
 use runvil::harness::{BoxFuture, InferenceBroker};
-use runvil_engine::effect::Round;
-use runvil_engine::event::ReplyOrigin;
-use runvil_engine::model::{
+use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };
-use runvil_engine::{Error, ErrorCode};
+use runvil::{Error, ErrorCode};
 use workshop_agents::{Conversation, DeltaKind};
 use workshop_menu::{CatalogBus, MenuHandles};
 use workshop_registry::Registry;

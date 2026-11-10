@@ -17,8 +17,8 @@ use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 
 use runvil::RunControl;
+use runvil::event::Event;
 use runvil::harness::RunId;
-use runvil_engine::event::Event;
 use tokio::sync::{broadcast, watch};
 
 use crate::protocol::{ConversationId, Delta, SessionEvent};

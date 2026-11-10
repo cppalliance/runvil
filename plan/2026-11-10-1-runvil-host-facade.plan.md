@@ -13,7 +13,7 @@ todos:
     status: completed
   - id: step4-complete-surface
     content: "Step 4: add the remaining 80 Engine names and 9 Plugin contract names to runvil, switch Host crates to runvil alone, add the Workshop matrix rule, pass the gate and full verification, commit"
-    status: pending
+    status: completed
   - id: step5-prove-closed
     content: "Step 5: extend xtask api to a second facade (containers list, public crates, per-facade allowlist), fix what it reports, bless crates/runvil/public-api.txt, run the nightly fixtures and full verification, commit"
     status: pending

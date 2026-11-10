@@ -7,7 +7,7 @@ Multi-crate Rust workspace for the Engine, the Harness that runs it, and Worksho
 Seven terms have exactly one meaning each, everywhere in this repository: code comments, docs, rulebooks, and plans. Write them capitalized.
 
 - **Engine**: the `runvil-*` crates. The Engine parses a prompt and steps a run. Whenever a run needs a model reply, a Pack's render of the tools a section offers it, a Pack tool's result, a timer, or a file outside a prelude's install, the Engine emits an effect and waits for its caller to answer it. In production the caller is the Harness.
-- **Harness**: the `runvil` crate and the `harness-*` crates. The Harness steps the Engine, performs every effect, returns each answer, and records every run through the recorder the Host supplies. Production code runs prompts only through the Harness.
+- **Harness**: the `runvil` crate, which is the one crate a Host depends on, and the `harness-*` crates. The Harness steps the Engine, performs every effect, returns each answer, and records every run through the recorder the Host supplies. Production code runs prompts only through the Harness.
 - **Host**: an application that runs prompts through the Harness, such as Workshop or Papergate. The Host makes every policy decision. It may also use the Engine's parser and types to read prompts and show events.
 - **Pack**: code which installs an optional native prelude, an optional Lua prelude, and zero or more tools.
 - **Plugin**: an entry point which installs zero or more Packs.
@@ -36,7 +36,7 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 - A Cargo feature gates a real constraint such as a toolchain requirement or heavy native build, not product shape. Feature-disabled builds must not leak optional types into core paths.
 - Runtime and serve paths never compile native dependencies or invoke build tools.
 - Unsafe code stays in its explicitly owned boundary.
-- Engine and Harness crates report every failure as the universal `Error` in `runvil-types`, which `runvil-engine` re-exports. A new failure is a new `ErrorCode` variant in its hundreds family with a never-used number, plus an `ErrorFact` variant only when no key names the value. No other error enum or struct, `thiserror` derive, or `impl std::error::Error`; a foreign cause joins through `Error::with_cause`. Allowed: `VfsError` in `runvil-vfs`, throwaway test error types, crate-private `Err` markers that the caller turns into `Error`, and pairs such as `InjectFailure`.
+- Engine and Harness crates report every failure as the universal `Error` in `runvil-types`, which `runvil-engine` and `runvil` re-export. A new failure is a new `ErrorCode` variant in its hundreds family with a never-used number, plus an `ErrorFact` variant only when no key names the value. No other error enum or struct, `thiserror` derive, or `impl std::error::Error`; a foreign cause joins through `Error::with_cause`. Allowed: `VfsError` in `runvil-vfs`, throwaway test error types, crate-private `Err` markers that the caller turns into `Error`, and pairs such as `InjectFailure`.
 - Comments explain a non-obvious constraint, ordering requirement, or workaround. A platform or external-bug workaround cites its upstream issue URL.
 - JSON that reaches a recorder or a replay comparison round-trips exactly: object keys sorted, numbers finite, parsed with `float_roundtrip`. A value derived and then logged is rounded to its meaningful precision at the source.
 

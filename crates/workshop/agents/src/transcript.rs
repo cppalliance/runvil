@@ -10,7 +10,7 @@
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use runvil_engine::event::Event;
+use runvil::event::Event;
 
 use crate::protocol::SessionEvent;
 

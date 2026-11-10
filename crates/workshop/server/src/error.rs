@@ -18,7 +18,7 @@
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 
-use runvil_engine::{Error, ErrorCode};
+use runvil::{Error, ErrorCode};
 use workshop_gateway::GatewayError;
 use workshop_protocol::ErrorEnvelope;
 use workshop_support::{LEAK_DETAIL, envelope_response, render_message};

@@ -7,8 +7,9 @@
 //!
 //! - Engine crates (`runvil-*`) must not depend on workshop or Harness
 //!   crates.
-//! - `workshop`/`workshop-*` crates must not depend on Harness crates,
-//!   except through the Harness family's two public crates.
+//! - `workshop`/`workshop-*` crates must not depend on Engine crates,
+//!   which they reach through `runvil`, or on Harness crates, except
+//!   through the Harness family's two public crates.
 //! - Harness crates (`runvil` and `harness-*`) must not depend on shared
 //!   or workshop crates; outside their own family they may name only
 //!   `runvil-engine` and `runvil-plugin`, which rules out `build-*`
@@ -192,6 +193,9 @@ fn boundary_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<String> {
         (Family::Engine, Family::Workshop | Family::Harness) => {
             Some("Engine crates must not depend on workshop or harness crates")
         }
+        (Family::Workshop, Family::Engine) => Some(
+            "workshop crates must not depend on Engine crates; they reach the Engine through runvil",
+        ),
         (Family::Harness, Family::Workshop) => {
             Some("harness crates must not depend on workshop crates")
         }

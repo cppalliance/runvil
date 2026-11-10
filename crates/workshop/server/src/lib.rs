@@ -32,8 +32,9 @@
 //!   `workshop-status`), the feature crates (`workshop-agents`,
 //!   `workshop-run-log`, `workshop-user-state`, `workshop-workspace`),
 //!   the Harness's public crates `runvil` and `harness-gateway-client`,
-//!   the Plugin crates `plugin-web`, `plugin-mcp`, and `plugin-std`, and
-//!   the Engine's public crates `runvil-engine` and `runvil-plugin`.
+//!   and the Plugin crates `plugin-web`, `plugin-mcp`, and `plugin-std`.
+//!   It reaches the Engine and the Plugin contract through `runvil`
+//!   alone, never through an Engine crate.
 //!   `cargo test -p build-xtask` enforces the product and container
 //!   boundaries. Read `crates/workshop/server/AGENTS.md` before adding an
 //!   import.

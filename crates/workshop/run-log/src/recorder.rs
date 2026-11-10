@@ -3,8 +3,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use runvil::Error;
 use runvil::harness::{Record, RecorderFuture, RunId, RunMeta, RunRecorder, make_recorder_error};
-use runvil_engine::Error;
 use tokio::sync::Mutex;
 
 use crate::{LogError, RunLog};

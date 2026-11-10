@@ -7,12 +7,11 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-# The Harness's public API: the per-run Harness a conversation drives, its
-# control, and the recorder tee's trait.
+# The one crate a Host depends on: the per-run Harness a conversation
+# drives, its control, the recorder tee's trait, the events a
+# conversation observes, and the round ids its deltas and transcript
+# stamp.
 runvil.workspace = true
-# The Engine's public API: the events a conversation observes, and the
-# round ids its deltas and transcript stamp.
-runvil-engine.workspace = true
 # Conversation ids are 128 bits from the OS CSPRNG: unguessable by
 # anything that has not seen the acknowledging frame.
 rand.workspace = true

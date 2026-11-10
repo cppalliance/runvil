@@ -11,8 +11,8 @@ use std::fmt;
 use std::num::NonZeroU64;
 use std::time::{Duration, Instant};
 
-use runvil_engine::Error;
-use runvil_engine::model::{Completion, CompletionOptions, Message, ToolSchema};
+use runvil::Error;
+use runvil::model::{Completion, CompletionOptions, Message, ToolSchema};
 
 use crate::config::{
     GatewayEndpoint, SecretString, make_invalid_env_error, make_missing_env_error,
@@ -187,7 +187,7 @@ impl GatewayChat {
     /// `Unavailable`-kind error when the gateway answers 401.
     ///
     /// # Errors
-    /// Returns an [`InvalidValue`](runvil_engine::ErrorCode::InvalidValue)
+    /// Returns an [`InvalidValue`](runvil::ErrorCode::InvalidValue)
     /// setup error when `RUNVIL_GATEWAY_URL` is missing or invalid, when
     /// either variable is set to a value that is not valid Unicode, or when
     /// the URL's host is not loopback (a LAN or remote gateway) and
@@ -214,7 +214,7 @@ impl GatewayChat {
     ///
     /// The returned [`Completion`] holds the reassembled turn, the metadata
     /// parsed from the stream's summary chunk, and a
-    /// [`ClientTiming`](runvil_engine::metrics::ClientTiming) measured on this
+    /// [`ClientTiming`](runvil::metrics::ClientTiming) measured on this
     /// client's own clock: time to first token, mean inter-token latency,
     /// and end-to-end time.
     ///

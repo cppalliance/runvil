@@ -7891,7 +7891,6 @@ version = "0.0.0"
 dependencies = [
  "rand 0.9.5",
  "runvil",
- "runvil-engine",
  "serde",
  "serde_json",
  "tempfile",
@@ -7974,7 +7973,6 @@ name = "workshop-run-log"
 version = "0.0.0"
 dependencies = [
  "runvil",
- "runvil-engine",
  "serde_json",
  "shared-error-source",
  "tempfile",
@@ -7997,8 +7995,6 @@ dependencies = [
  "plugin-web",
  "reqwest",
  "runvil",
- "runvil-engine",
- "runvil-plugin",
  "rust-embed",
  "serde",
  "serde_json",

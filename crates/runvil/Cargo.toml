@@ -6,10 +6,10 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
-# Every crate that defines a re-exported item: each `pub use` names the
-# defining crate's path. The Engine's types a Harness signature names are
-# re-exported through the `runvil-engine` facade, their one public path, and
-# the service map and Pack id through the Plugin contract.
+# Every crate a `pub use` names. The Harness's items come from the two
+# Harness crates that define them. The Engine's items come through the
+# `runvil-engine` facade, their one public path, and the Plugin
+# contract's items from `runvil-plugin`.
 [dependencies]
 harness-plugin-loader.workspace = true
 harness-runner.workspace = true

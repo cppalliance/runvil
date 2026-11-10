@@ -7,17 +7,15 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-# The Harness public API: the `InferenceBroker` trait the Gateway broker
-# implements, with its boxed future.
+# The one crate a Host depends on: the `InferenceBroker` trait the
+# Gateway broker implements, with its boxed future, the chat vocabulary
+# (Message, ToolSchema, Completion) and the universal error the wire
+# code reads and builds through its public constructors, and the
+# canonical metrics and model catalog vocabulary.
 runvil.workspace = true
 # The web Plugin crate's `SearchProvider` trait and its query,
 # result, and error vocabulary, which `GatewaySearch` implements.
 plugin-web.workspace = true
-# The Engine's public API: the chat vocabulary (Message, ToolSchema,
-# Completion) and the universal error the wire code reads and builds
-# through its public constructors, and the canonical metrics and model
-# catalog vocabulary.
-runvil-engine.workspace = true
 # `SearchProvider` is an `async_trait` trait.
 async-trait.workspace = true
 # Names `bytes::Bytes`, the buffer `reqwest` yields per body chunk, as the
@@ -38,6 +36,10 @@ url.workspace = true
 [dev-dependencies]
 # The mock gateways the client tests send real rounds to.
 axum.workspace = true
+# The Engine's stepping items: the request suite steps a real run to get
+# a tool schema and an assistant tool-call message, which have no public
+# constructor.
+runvil-engine.workspace = true
 # The raw-socket mocks read the request and write paced or truncated
 # responses by hand.
 tokio = { workspace = true, features = ["io-util"] }

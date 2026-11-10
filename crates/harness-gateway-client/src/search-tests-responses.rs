@@ -10,7 +10,7 @@ use super::*;
 
 use std::time::Duration;
 
-use runvil_engine::{Error, ErrorCode};
+use runvil::{Error, ErrorCode};
 
 use crate::search::{MAX_ERROR_BODY, MAX_RESPONSE_BODY};
 

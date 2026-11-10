@@ -8,7 +8,7 @@
 use std::error::Error;
 use std::path::Path;
 
-use runvil_engine::vfs::{Access, FileType, Origin, VfsError, VfsRef};
+use runvil::vfs::{Access, FileType, Origin, VfsError, VfsRef};
 use workshop_registry::Registry;
 
 use super::mount_at;

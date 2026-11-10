@@ -52,10 +52,8 @@ use std::sync::Arc;
 
 use plugin_web::SEARCH_PROVIDER;
 use runvil::harness::{Packs, RunId};
-use runvil::plugin::{HostServices, PackRegistry};
-use runvil::{Host, RunSetup};
-use runvil_engine::{Error, ErrorCode};
-use runvil_plugin::ServiceKey;
+use runvil::plugin::{HostServices, PackRegistry, ServiceKey};
+use runvil::{Error, ErrorCode, Host, RunSetup};
 use serde_json::{Map, Value};
 use workshop_agents::{
     Conversation, ConversationId, Conversations, LaunchError, TokioTimer, discover_agents,
@@ -78,7 +76,7 @@ const HARNESS_STATE_DIR: &str = "harness";
 
 /// The key the server provides its runtime under: the Plugin contract's
 /// tokio runtime service, as the handle it supplies.
-const RUNTIME: ServiceKey<tokio::runtime::Handle> = ServiceKey::new(runvil_plugin::TOKIO_RUNTIME);
+const RUNTIME: ServiceKey<tokio::runtime::Handle> = ServiceKey::new(runvil::plugin::TOKIO_RUNTIME);
 
 /// The server's installed Packs over its Host-wide [`services`]. `mcp` is
 /// the `[agents] mcp` setting: the mcp Pack is installed over the servers

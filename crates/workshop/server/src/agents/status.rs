@@ -7,8 +7,8 @@
 //! the conversation's channels close when its run ends, so the loop
 //! returns with it.
 
-use runvil_engine::event::Event;
-use runvil_engine::ids::{ChainId, TaskId};
+use runvil::event::Event;
+use runvil::ids::{ChainId, TaskId};
 use tokio::sync::broadcast;
 use workshop_agents::{Conversation, Delta, DeltaKind, FailureKind, SessionEvent, SessionFailure};
 use workshop_protocol::Activity;

@@ -7,8 +7,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use runvil::RunSetup;
 use runvil::harness::{MemoryRecorder, RecordKind, RunId};
-use runvil::vfs::{Origin, VfsError, VfsRef};
-use runvil_engine::vfs::{MemoryBackend, Op, Policy, Verdict, VfsPath};
+use runvil::vfs::{MemoryBackend, Op, Origin, Policy, Verdict, VfsError, VfsPath, VfsRef};
 
 use crate::support::{Offline, launch, no_packs};
 

@@ -5,16 +5,15 @@
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use runvil::RunSetup;
+use runvil::effect::Round;
+use runvil::event::ReplyOrigin;
 use runvil::harness::{BoxFuture, InferenceBroker, MemoryRecorder};
-use runvil_engine::Error;
-use runvil_engine::effect::Round;
-use runvil_engine::event::ReplyOrigin;
-use runvil_engine::ids::RoundId;
-use runvil_engine::model::{
+use runvil::ids::RoundId;
+use runvil::model::{
     Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
     ModelInfo, ThinkingMode, ToolSchema,
 };
+use runvil::{Error, RunSetup};
 
 use crate::support::{launch, no_packs};
 

@@ -18,8 +18,8 @@
 //! 5. A 400 whose body names a content policy term is `Refused`.
 //! 6. Every other status is `Rejected`.
 
-use runvil_engine::model::{make_completion_error, make_context_overflow_error, phrase};
-use runvil_engine::{Error, ErrorCode};
+use runvil::model::{make_completion_error, make_context_overflow_error, phrase};
+use runvil::{Error, ErrorCode};
 
 use crate::failure::with_detail;
 

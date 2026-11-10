@@ -2,8 +2,8 @@
 //! phrase, per token-count form, the in-stream envelope, and a body that
 //! matches nothing.
 
-use runvil_engine::model::phrase;
-use runvil_engine::{Error, ErrorCode, ErrorFact};
+use runvil::model::phrase;
+use runvil::{Error, ErrorCode, ErrorFact};
 
 use super::{make_classify_http_failure_error, make_classify_stream_error};
 

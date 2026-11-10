@@ -58,7 +58,7 @@ const RUSTDOC_SITES: [(&str, &str, &str); 5] = [
     (
         "runvil",
         "runvil",
-        "The Harness: running prompts for a Host",
+        "The one crate a Host depends on to run prompts",
     ),
     (
         "harness-gateway-client",

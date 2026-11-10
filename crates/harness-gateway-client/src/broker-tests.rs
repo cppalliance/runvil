@@ -8,11 +8,11 @@
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex};
 
+use runvil::effect::Round;
+use runvil::event::ReplyOrigin;
 use runvil::harness::InferenceBroker;
-use runvil_engine::effect::Round;
-use runvil_engine::event::ReplyOrigin;
-use runvil_engine::ids::RoundId;
-use runvil_engine::model::{
+use runvil::ids::RoundId;
+use runvil::model::{
     CompletionOptions, CompletionResult, Message, ModelBinding, ModelId, ModelInvocation,
     ThinkingMode,
 };

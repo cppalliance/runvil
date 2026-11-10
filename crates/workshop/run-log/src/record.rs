@@ -7,8 +7,8 @@
 
 use std::fmt;
 
+use runvil::Error;
 pub use runvil::harness::{Record, RecordKind, RunId, RunMeta};
-use runvil_engine::Error;
 
 /// A record's position in its run: the effect loop's order, assigned by
 /// the log in call order, starting at `0` and strictly increasing.

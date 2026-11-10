@@ -11,8 +11,7 @@
 use std::num::NonZeroU32;
 use std::path::Path;
 
-use runvil::RunSeed;
-use runvil_engine::{Error, ErrorCode, SourceLoc};
+use runvil::{Error, ErrorCode, RunSeed, SourceLoc};
 use workshop_run_log::{LogError, RunId, RunLog, RunMeta, RunRow};
 
 /// The agent the Host launched.

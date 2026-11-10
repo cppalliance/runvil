@@ -6,11 +6,12 @@
 //!
 //! - Tier: feature; may depend on: `workshop-protocol`,
 //!   `workshop-registry`, `workshop-support`, and the service crates;
-//!   today it names none of them. Outside the family it may name the
-//!   Harness's public API `runvil`, the Engine's public API
-//!   `runvil-engine`, and `shared-*` crates. Never on `workshop-server`, a
-//!   private Harness, Engine, or Gateway crate. `cargo test -p build-xtask`
-//!   enforces the product and container boundaries.
+//!   today it names none of them. Outside the family it may name
+//!   `runvil`, the one crate a Host depends on for the Harness and the
+//!   Engine, and `shared-*` crates. Never on `workshop-server`, an Engine
+//!   crate, or a private Harness or Gateway crate.
+//!   `cargo test -p build-xtask` enforces the product and container
+//!   boundaries.
 //! - The Harness holds no database and no storage path: this crate is
 //!   where the Host's recorder keeps a run's history. It reaches the
 //!   Harness only through `runvil::harness`.

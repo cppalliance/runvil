@@ -13,19 +13,19 @@
 //! Each parsed call is built with [`ToolCall::from_parts`], so the Engine's
 //! neutral checks (blank id, blank name, non-object arguments) run on every
 //! decoded call; the duplicate-id check runs when the read loop builds the
-//! [`Completion`](runvil_engine::model::Completion) from the batch. Either
+//! [`Completion`](runvil::model::Completion) from the batch. Either
 //! refusal of decoded parts is reported as a `MalformedResponse`.
 //!
 //! Beside the strict turn parse, [`response_metadata`] leniently parses the
 //! body's call metadata - the serving `model`, `usage` token accounting,
 //! llama.cpp's `timings` extension, and vLLM's `metrics` extension - into the
-//! canonical `runvil_engine::metrics` vocabulary. Metadata never fails a
+//! canonical `runvil::metrics` vocabulary. Metadata never fails a
 //! completion: a malformed section degrades to `None` with a returned
 //! diagnostic naming it.
 
-use runvil_engine::metrics::{CallMetrics, LlamaTimings, Usage, VllmMetrics};
-use runvil_engine::model::{CompletionResult, ToolCall, make_empty_reply_error};
-use runvil_engine::{Error, ErrorFact};
+use runvil::metrics::{CallMetrics, LlamaTimings, Usage, VllmMetrics};
+use runvil::model::{CompletionResult, ToolCall, make_empty_reply_error};
+use runvil::{Error, ErrorFact};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -449,7 +449,7 @@ mod tests {
     //! reasoning side channel.
 
     use super::*;
-    use runvil_engine::ErrorCode;
+    use runvil::ErrorCode;
 
     const EMPTY_REPLY_PHRASE: &str = "the model replied with no text and no tool calls";
 

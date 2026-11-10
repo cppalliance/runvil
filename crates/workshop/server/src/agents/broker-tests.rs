@@ -17,14 +17,14 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use harness_gateway_client::StreamDelta;
+use runvil::effect::Round;
+use runvil::event::ReplyOrigin;
 use runvil::harness::InferenceBroker;
-use runvil_engine::effect::Round;
-use runvil_engine::event::ReplyOrigin;
-use runvil_engine::ids::RoundId;
-use runvil_engine::model::{
+use runvil::ids::RoundId;
+use runvil::model::{
     CompletionOptions, CompletionResult, Message, ModelBinding, ModelId, ModelInvocation, phrase,
 };
-use runvil_engine::{Error, ErrorCode};
+use runvil::{Error, ErrorCode};
 use serde_json::json;
 use workshop_agents::{Conversations, DeltaKind};
 use workshop_gateway::{GatewayBinding, GatewayHandles, GatewayHealth};

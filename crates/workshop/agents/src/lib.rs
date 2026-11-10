@@ -21,10 +21,11 @@
 //! - Tier: feature; may depend on: the vocabulary crates
 //!   (`workshop-protocol`, `workshop-registry`, `workshop-support`), the
 //!   service crates (`workshop-gateway`, `workshop-menu`,
-//!   `workshop-status`), the Harness's public API `runvil`, the Engine's
-//!   public API `runvil-engine`, and third-party crates; today it names
+//!   `workshop-status`), `runvil`, the one crate a Host depends on for
+//!   the Harness and the Engine, and third-party crates; today it names
 //!   none of the Workshop crates. Never on `workshop-server`, another
-//!   feature crate, or a private Harness, Engine, or Gateway crate.
+//!   feature crate, an Engine crate, or a private Harness or Gateway
+//!   crate.
 //!   `cargo test -p build-xtask` enforces the product and container
 //!   boundaries.
 //! - A conversation's transcript is held in memory. The recorder tee adds

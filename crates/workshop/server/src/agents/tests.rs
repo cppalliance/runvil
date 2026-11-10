@@ -17,17 +17,15 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use plugin_web::SEARCH_PROVIDER;
+use runvil::effect::Round;
 use runvil::harness::{BoxFuture, InferenceBroker, MemoryRecorder, Packs};
-use runvil::plugin::HostServices;
-use runvil::vfs::VfsRef;
-use runvil::{Host, RunSetup};
-use runvil_engine::effect::Round;
-use runvil_engine::model::{
+use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };
-use runvil_engine::{Error, ErrorCode};
-use runvil_plugin::{ServiceKey, TOKIO_RUNTIME};
+use runvil::plugin::{HostServices, ServiceKey, TOKIO_RUNTIME};
+use runvil::vfs::VfsRef;
+use runvil::{Error, ErrorCode, Host, RunSetup};
 use serde_json::json;
 use workshop_agents::{Conversations, SessionState, TokioTimer, load_agent};
 use workshop_registry::Registry;
