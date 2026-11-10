@@ -5,8 +5,8 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use runvil::RunLimits;
-use runvil::vfs::VfsRef;
+use runvil_engine::RunLimits;
+use runvil_engine::vfs::VfsRef;
 
 use crate::performers::InferenceBroker;
 use crate::recorder::RunRecorder;

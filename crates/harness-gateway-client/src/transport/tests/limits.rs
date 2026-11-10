@@ -4,8 +4,8 @@
 use std::num::NonZeroU64;
 use std::time::Duration;
 
-use runvil::ErrorCode;
-use runvil::model::{CompletionResult, Message};
+use runvil_engine::ErrorCode;
+use runvil_engine::model::{CompletionResult, Message};
 
 use super::*;
 

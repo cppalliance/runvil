@@ -6,7 +6,7 @@ Multi-crate Rust workspace for the Engine, the Harness that runs it, and Worksho
 
 Seven terms have exactly one meaning each, everywhere in this repository: code comments, docs, rulebooks, and plans. Write them capitalized.
 
-- **Engine**: the `runvil` and `runvil-*` crates. The Engine parses a prompt and steps a run. Whenever a run needs a model reply, a Pack's render of the tools a section offers it, a Pack tool's result, a timer, or a file outside a prelude's install, the Engine emits an effect and waits for its caller to answer it. In production the caller is the Harness.
+- **Engine**: the `runvil-*` crates. The Engine parses a prompt and steps a run. Whenever a run needs a model reply, a Pack's render of the tools a section offers it, a Pack tool's result, a timer, or a file outside a prelude's install, the Engine emits an effect and waits for its caller to answer it. In production the caller is the Harness.
 - **Harness**: the `harness` and `harness-*` crates. The Harness steps the Engine, performs every effect, returns each answer, and records every run through the recorder the Host supplies. Production code runs prompts only through the Harness.
 - **Host**: an application that runs prompts through the Harness, such as Workshop or Papergate. The Host makes every policy decision. It may also use the Engine's parser and types to read prompts and show events.
 - **Pack**: code which installs an optional native prelude, an optional Lua prelude, and zero or more tools.
@@ -36,7 +36,7 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 - A Cargo feature gates a real constraint such as a toolchain requirement or heavy native build, not product shape. Feature-disabled builds must not leak optional types into core paths.
 - Runtime and serve paths never compile native dependencies or invoke build tools.
 - Unsafe code stays in its explicitly owned boundary.
-- Engine and Harness crates report every failure as the universal `Error` in `runvil-types`, which `runvil` re-exports. A new failure is a new `ErrorCode` variant in its hundreds family with a never-used number, plus an `ErrorFact` variant only when no key names the value. No other error enum or struct, `thiserror` derive, or `impl std::error::Error`; a foreign cause joins through `Error::with_cause`. Allowed: `VfsError` in `runvil-vfs`, throwaway test error types, crate-private `Err` markers that the caller turns into `Error`, and pairs such as `InjectFailure`.
+- Engine and Harness crates report every failure as the universal `Error` in `runvil-types`, which `runvil-engine` re-exports. A new failure is a new `ErrorCode` variant in its hundreds family with a never-used number, plus an `ErrorFact` variant only when no key names the value. No other error enum or struct, `thiserror` derive, or `impl std::error::Error`; a foreign cause joins through `Error::with_cause`. Allowed: `VfsError` in `runvil-vfs`, throwaway test error types, crate-private `Err` markers that the caller turns into `Error`, and pairs such as `InjectFailure`.
 - Comments explain a non-obvious constraint, ordering requirement, or workaround. A platform or external-bug workaround cites its upstream issue URL.
 - JSON that reaches a recorder or a replay comparison round-trips exactly: object keys sorted, numbers finite, parsed with `float_roundtrip`. A value derived and then logged is rounded to its meaningful precision at the source.
 
@@ -45,8 +45,8 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 - Tests: `cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features`, and `cargo nextest run --locked -p workshop -p workshop-server -p workshop-server-api`.
 - Lint: `cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features`, and `cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets`, both with `CARGO_BUILD_WARNINGS=deny`. Clippy covers `cargo check`, so never run a standalone `cargo check --workspace`.
 - Format: `cargo fmt --all --check`.
-- Docs: `cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api` and `cargo doc -p runvil --no-deps` (default features), both with `RUSTDOCFLAGS="-D warnings"`. Clippy does not run rustdoc lints, so never skip these.
-- Facade surface: `cargo +<nightly> xtask api --check`, with the nightly named in `crates/build-xtask/src/api/toolchain.rs` and `CARGO_BUILD_WARNINGS` unset (`Remove-Item Env:CARGO_BUILD_WARNINGS` in PowerShell). It fails when the surface names an internal crate or differs from `crates/runvil/public-api.txt`.
+- Docs: `cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api` and `cargo doc -p runvil-engine --no-deps` (default features), both with `RUSTDOCFLAGS="-D warnings"`. Clippy does not run rustdoc lints, so never skip these.
+- Facade surface: `cargo +<nightly> xtask api --check`, with the nightly named in `crates/build-xtask/src/api/toolchain.rs` and `CARGO_BUILD_WARNINGS` unset (`Remove-Item Env:CARGO_BUILD_WARNINGS` in PowerShell). It fails when the surface names an internal crate or differs from `crates/runvil-engine/public-api.txt`.
 - Structural checks: `cargo test -p build-xtask`.
 - Wording: `node --test crates/workshop/ui/test/docs-claims.mjs`, from any directory, no `npm ci` needed.
 

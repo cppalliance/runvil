@@ -11,12 +11,12 @@ use std::time::Duration;
 use harness::pack::{PackRegistry, Packs};
 use harness::record::MemoryRecorder;
 use harness::{BoxFuture, Harness, Host, InferenceBroker, RunSetup, Timer};
-use runvil::effect::Round;
-use runvil::model::{
+use runvil_engine::effect::Round;
+use runvil_engine::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };
-use runvil::{Error, ErrorCode};
+use runvil_engine::{Error, ErrorCode};
 
 /// The name the Host finds the greeting prompt by.
 const GREET_NAME: &str = "greet.md";

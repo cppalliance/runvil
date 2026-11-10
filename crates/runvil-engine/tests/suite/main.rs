@@ -1,4 +1,4 @@
-//! The facade's integration suite, written against `runvil` paths only.
+//! The facade's integration suite, written against `runvil_engine` paths only.
 
 mod cancel;
 mod effect;

@@ -108,7 +108,7 @@ test("rulebooks use Engine, Harness, Host, and Plugin as the root AGENTS.md defi
   assert.deepEqual(offenders, [], "rulebook lines break the root AGENTS.md Definitions");
 });
 
-// Guard for the Engine rule in the root AGENTS.md: the runvil crates call
+// Guard for the Engine rule in the root AGENTS.md: the Engine crates call
 // the code that steps a run "the caller". Coding sessions read Engine prose,
 // strings, and code names as design decisions, so naming the Host, a Host
 // application, or a Harness crate, type, or internal there steers them to build
@@ -116,7 +116,7 @@ test("rulebooks use Engine, Harness, Host, and Plugin as the root AGENTS.md defi
 // and strings included. The plain word "Harness" stays allowed for statements
 // that a responsibility belongs to the Harness, which the AGENTS.md rule
 // governs; a pattern cannot tell those apart.
-const ENGINE_ROOTS = ["crates/runvil", "crates/runvil-internal"];
+const ENGINE_ROOTS = ["crates/runvil-engine", "crates/runvil-internal"];
 const ENGINE_TEXT = /\.(rs|md|lua|toml|txt)$/;
 // Externally defined senses that keep a lowercase "harness".
 const ENGINE_HARNESS_ALLOWED = /harness = false|test harness/g;
@@ -154,7 +154,7 @@ test("Engine crates name the caller, never the Host or the Harness's crates and 
 // say a Pack is made for each run, never activated. Comment lines are
 // checked, not code, so a local variable keeps its name.
 const PLUGIN_DOC_DIRS = [
-  "crates/runvil",
+  "crates/runvil-engine",
   "crates/runvil-internal",
   "crates/runvil-plugin",
   "crates/harness",

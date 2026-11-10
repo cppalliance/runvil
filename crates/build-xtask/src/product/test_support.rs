@@ -54,7 +54,7 @@ pub(crate) fn engine_clippy_toml(omit: Option<&str>) -> String {
 pub(crate) fn write_engine_clippy_tomls(root: &Path) {
     std::fs::write(root.join("clippy.toml"), ROOT_CLIPPY_TOML)
         .expect("the root clippy.toml writes");
-    for dir in ["runvil-internal", "runvil", "runvil-plugin"] {
+    for dir in ["runvil-internal", "runvil-engine", "runvil-plugin"] {
         let dir = root.join("crates").join(dir);
         std::fs::create_dir_all(&dir).expect("the Engine clippy.toml directory creates");
         std::fs::write(dir.join("clippy.toml"), engine_clippy_toml(None))

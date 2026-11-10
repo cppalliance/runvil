@@ -11,8 +11,8 @@ use std::pin::pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll, Waker};
 
-use runvil::effect::{ToolCallOrigin, ToolCaller};
-use runvil::vfs::{Access, Origin, RealBackend, VfsRef};
+use runvil_engine::effect::{ToolCallOrigin, ToolCaller};
+use runvil_engine::vfs::{Access, Origin, RealBackend, VfsRef};
 use runvil_plugin::{
     HostServices, OutputTrust, Pack, PackRegistry, ToolContext, ToolId, ToolOutput,
 };

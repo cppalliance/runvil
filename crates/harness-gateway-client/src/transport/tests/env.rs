@@ -1,9 +1,9 @@
 //! Environment loading, the bearer on the wire, and the credential and
 //! endpoint guards.
 
-use runvil::model::Message;
+use runvil_engine::model::Message;
 
-use runvil::{ErrorCode, ErrorFact};
+use runvil_engine::{ErrorCode, ErrorFact};
 use serde_json::Value;
 
 use super::*;

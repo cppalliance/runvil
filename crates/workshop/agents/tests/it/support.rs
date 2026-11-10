@@ -6,12 +6,12 @@ use std::sync::Arc;
 use harness::pack::{PackRegistry, Packs};
 use harness::record::MemoryRecorder;
 use harness::{BoxFuture, Host, InferenceBroker, RunSetup};
-use runvil::effect::Round;
-use runvil::model::{
+use runvil_engine::effect::Round;
+use runvil_engine::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };
-use runvil::{Error, ErrorCode};
+use runvil_engine::{Error, ErrorCode};
 use workshop_agents::{Conversation, TokioTimer};
 
 /// The name the fixture Host finds its one agent by.

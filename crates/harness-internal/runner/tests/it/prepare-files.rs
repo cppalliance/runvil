@@ -12,8 +12,8 @@ use std::sync::Arc;
 use harness_runner::files::read_output;
 use harness_runner::recorder::MemoryRecorder;
 use harness_runner::{RunReport, RunSetup};
-use runvil::vfs::{MemoryBackend, Mode, ModePolicy, Origin, VfsRef};
-use runvil::{Error, ErrorCode, ErrorFact};
+use runvil_engine::vfs::{MemoryBackend, Mode, ModePolicy, Origin, VfsRef};
+use runvil_engine::{Error, ErrorCode, ErrorFact};
 use serde_json::json;
 
 use super::{PLAIN, assert_no_records, bare, completed, recorder, report_of, run_of, setup_over};

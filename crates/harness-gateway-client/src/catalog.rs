@@ -2,8 +2,8 @@
 
 use std::num::NonZeroU32;
 
-use runvil::Error;
-use runvil::model::{ModelCatalog, ModelId, ModelInfo, ThinkingMode};
+use runvil_engine::Error;
+use runvil_engine::model::{ModelCatalog, ModelId, ModelInfo, ThinkingMode};
 use serde::Deserialize;
 
 use crate::failure::{make_malformed_error, make_transport_failure_error, with_detail};

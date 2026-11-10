@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use harness::record::RunRecorder;
 use harness::{Harness, Host, RunReport, RunSetup, display_chain};
-use runvil::ids::RoundId;
-use runvil::{Error, Prompt};
+use runvil_engine::ids::RoundId;
+use runvil_engine::{Error, Prompt};
 
 use super::{Conversation, lock};
 use crate::protocol::{Delta, DeltaKind};

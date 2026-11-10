@@ -12,8 +12,8 @@ use std::time::Duration;
 
 use harness_runner::effect_loop::drive_run;
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunId};
-use runvil::cancel::CancelHandle;
-use runvil::vfs::VfsRef;
+use runvil_engine::cancel::CancelHandle;
+use runvil_engine::vfs::VfsRef;
 use serde_json::json;
 
 use super::{answers, assert_one_answer_per_effect, begun_log, kinds};

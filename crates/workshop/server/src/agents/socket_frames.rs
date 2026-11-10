@@ -4,7 +4,7 @@
 //! past the per-client cursor.
 
 use axum::extract::ws::WebSocket;
-use runvil::event::Event;
+use runvil_engine::event::Event;
 use workshop_agents::{Delta, DeltaKind, SessionEvent};
 
 use super::socket::Attached;

@@ -2,7 +2,7 @@
 //! bounds, the failure causes kept in the message, the entry filter, and
 //! failure prose that carries no Gateway-supplied text.
 
-use runvil::ErrorCode;
+use runvil_engine::ErrorCode;
 
 use super::*;
 

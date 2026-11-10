@@ -10,13 +10,13 @@ use std::fmt::Write as _;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use runvil::effect::{Effect, EffectAnswer, IssuedEffect};
-use runvil::model::{
+use runvil_engine::effect::{Effect, EffectAnswer, IssuedEffect};
+use runvil_engine::model::{
     Completion, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode, ToolCall,
 };
-use runvil::timestamp::Timestamp;
-use runvil::{Prompt, Run, RunParams, RunSeed, Step};
-use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
+use runvil_engine::timestamp::Timestamp;
+use runvil_engine::{Prompt, Run, RunParams, RunSeed, Step};
+use runvil_engine::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use serde_json::json;
 
 use super::*;

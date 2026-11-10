@@ -19,7 +19,7 @@ fn an_outside_crate_depending_into_the_private_container_is_reported() {
     assert!(
         violations[0].contains("workshop-sessions depends on runvil-lua")
             && violations[0].contains("crates/runvil-internal is private to its family")
-            && violations[0].contains("only runvil or runvil-plugin may depend into it"),
+            && violations[0].contains("only runvil-engine or runvil-plugin may depend into it"),
         "the violation includes the container privacy message: {violations:?}"
     );
 }
@@ -46,8 +46,8 @@ fn the_facade_depending_into_the_engine_container_passes() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
-        "runvil",
-        "runvil",
+        "runvil-engine",
+        "runvil-engine",
         "[dependencies]\nrunvil-lua = { path = \"../runvil-internal/lua\" }\n",
     );
     write_crate(root.path(), "runvil-internal/lua", "runvil-lua", "");
@@ -81,7 +81,7 @@ fn the_plugin_contract_depending_into_the_engine_container_passes() {
 fn a_root_runvil_crate_other_than_the_named_ones_depending_into_the_engine_container_is_reported() {
     assert_eq!(
         container_named_exception("runvil-internal"),
-        ["runvil", "runvil-plugin"],
+        ["runvil-engine", "runvil-plugin"],
         "the facade and the Plugin contract are the container's named crates"
     );
     let root = tempfile::TempDir::new().expect("tempdir");
@@ -96,7 +96,7 @@ fn a_root_runvil_crate_other_than_the_named_ones_depending_into_the_engine_conta
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
         violations[0].starts_with("runvil-extra depends on runvil-lua:")
-            && violations[0].contains("only runvil or runvil-plugin may depend into it"),
+            && violations[0].contains("only runvil-engine or runvil-plugin may depend into it"),
         "no crate outside the container but the named ones enters it: {violations:?}"
     );
 }

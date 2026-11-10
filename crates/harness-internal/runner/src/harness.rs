@@ -22,9 +22,9 @@ use std::task::{Context, Poll};
 
 use futures_util::future::{Either, select};
 use futures_util::task::AtomicWaker;
-use runvil::cancel::CancelHandle;
-use runvil::model::ModelInfo;
-use runvil::{Error, ErrorCode, ErrorFact, Prompt};
+use runvil_engine::cancel::CancelHandle;
+use runvil_engine::model::ModelInfo;
+use runvil_engine::{Error, ErrorCode, ErrorFact, Prompt};
 
 use crate::effect_loop::drive;
 use crate::environment::current_model;
@@ -78,7 +78,7 @@ pub struct RunReport {
     /// fact `not_completed` or `undeclared`, `NotFound` for a completed
     /// run that left no file, or the store's failure, each with the
     /// declared path as the `Path` fact when there is one.
-    pub output: Result<String, runvil::Error>,
+    pub output: Result<String, runvil_engine::Error>,
     /// Messages sent to the main chain that the run
     /// never read, oldest first.
     pub unread: Vec<String>,

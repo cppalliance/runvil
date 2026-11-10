@@ -5,8 +5,7 @@
 
 use rustdoc_types::{GenericBound, GenericParamDef, Id, Path, TraitBoundModifier, Type};
 
-use super::super::super::fixture::workspace;
-use super::super::super::report;
+use super::super::super::fixture::{report, workspace};
 use super::*;
 
 fn trait_path(args: Option<GenericArgs>) -> Path {

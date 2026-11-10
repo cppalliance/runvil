@@ -7,11 +7,11 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use harness::record::MemoryRecorder;
 use harness::{BoxFuture, InferenceBroker, RunSetup};
-use runvil::Error;
-use runvil::effect::Round;
-use runvil::event::ReplyOrigin;
-use runvil::ids::RoundId;
-use runvil::model::{
+use runvil_engine::Error;
+use runvil_engine::effect::Round;
+use runvil_engine::event::ReplyOrigin;
+use runvil_engine::ids::RoundId;
+use runvil_engine::model::{
     Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
     ModelInfo, ThinkingMode, ToolSchema,
 };

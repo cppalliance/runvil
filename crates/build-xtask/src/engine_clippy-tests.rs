@@ -20,7 +20,7 @@ fn clean_root() -> tempfile::TempDir {
     let root = tempfile::TempDir::new().expect("tempdir");
     test_support::write_engine_clippy_tomls(root.path());
     for (dir, package) in [
-        ("runvil", "runvil"),
+        ("runvil-engine", "runvil-engine"),
         ("runvil-plugin", "runvil-plugin"),
         ("runvil-internal/runtime", "runvil-runtime"),
     ] {
@@ -127,7 +127,7 @@ fn a_clippy_toml_missing_a_root_entry_is_reported() {
     );
     write(
         root.path(),
-        "crates/runvil/clippy.toml",
+        "crates/runvil-engine/clippy.toml",
         &test_support::engine_clippy_toml(None)
             .replace(
                 "allow-unwrap-in-tests = true",
@@ -149,14 +149,14 @@ fn a_clippy_toml_missing_a_root_entry_is_reported() {
                 ],
             ),
             (
-                "crates/runvil/clippy.toml",
+                "crates/runvil-engine/clippy.toml",
                 &[
                     "required: the root clippy.toml's setting `allow-unwrap-in-tests = true`",
                     "found: `allow-unwrap-in-tests = false`",
                 ],
             ),
             (
-                "crates/runvil/clippy.toml",
+                "crates/runvil-engine/clippy.toml",
                 &["std::panic::set_hook", "found:", "return an error"],
             ),
             (
@@ -185,7 +185,7 @@ fn a_clippy_toml_missing_a_determinism_ban_is_reported() {
     let root = clean_root();
     write(
         root.path(),
-        "crates/runvil/clippy.toml",
+        "crates/runvil-engine/clippy.toml",
         &test_support::engine_clippy_toml(Some("\"std::thread::park_timeout\"")),
     );
     write(
@@ -202,7 +202,7 @@ fn a_clippy_toml_missing_a_determinism_ban_is_reported() {
         &found,
         &[
             (
-                "crates/runvil/clippy.toml",
+                "crates/runvil-engine/clippy.toml",
                 &[
                     "required: the determinism ban `std::thread::park_timeout` with a reason",
                     "found: no entry",

@@ -3,7 +3,7 @@
 //! and the `test-support` leak guard runs over the whole workspace, as
 //! part of `cargo test -p build-xtask` and `cargo xtask tidy`.
 //!
-//! The Engine is the `runvil` facade, the `runvil-plugin`
+//! The Engine is the `runvil-engine` facade, the `runvil-plugin`
 //! contract, and every crate under the `crates/runvil-internal/`
 //! container. The root crates are named, so a missing manifest is
 //! reported rather than skipped; the container's members are discovered,
@@ -13,7 +13,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// The Engine crates that live directly under `crates/`.
-const ENGINE_ROOT_CRATES: [&str; 2] = ["runvil", "runvil-plugin"];
+const ENGINE_ROOT_CRATES: [&str; 2] = ["runvil-engine", "runvil-plugin"];
 
 /// The private container whose every member is an Engine crate.
 pub(crate) const ENGINE_CONTAINER: &str = "runvil-internal";

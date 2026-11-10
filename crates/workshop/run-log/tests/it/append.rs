@@ -3,7 +3,7 @@
 use std::num::NonZeroU32;
 
 use harness::record::RunSeed;
-use runvil::{Error, ErrorCode, ErrorFact, SourceLoc};
+use runvil_engine::{Error, ErrorCode, ErrorFact, SourceLoc};
 use serde_json::json;
 use workshop_run_log::{LogError, Record, RecordFilter, RecordKind, RunId, RunLog, RunMeta};
 

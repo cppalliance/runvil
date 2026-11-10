@@ -11,9 +11,9 @@
 use std::future::Future;
 use std::time::{Duration, Instant};
 
-use runvil::Error;
-use runvil::metrics::ClientTiming;
-use runvil::model::Completion;
+use runvil_engine::Error;
+use runvil_engine::metrics::ClientTiming;
+use runvil_engine::model::Completion;
 use serde_json::Value;
 
 use super::delta::StreamDelta;
@@ -50,7 +50,7 @@ pub trait ChunkSource {
     /// When a read fails, the implementation returns the [`Error`] that
     /// the round fails with. Its code is `Timeout` when the read ran out of
     /// time and `Transport` otherwise. Build it with
-    /// [`make_completion_error`](runvil::model::make_completion_error) and attach the
+    /// [`make_completion_error`](runvil_engine::model::make_completion_error) and attach the
     /// transport's own error with [`Error::with_cause`].
     fn next_chunk(&mut self) -> impl Future<Output = Result<Option<Self::Chunk>, Error>> + Send;
 }

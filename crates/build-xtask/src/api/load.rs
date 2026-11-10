@@ -1,5 +1,5 @@
-//! Builds rustdoc JSON for the facade and every crate under
-//! `crates/runvil-internal/` with default features, and parses it.
+//! Builds rustdoc JSON for a facade and every crate under its container
+//! with default features, and parses it.
 //!
 //! One `cargo doc` invocation selects the facade and every internal
 //! crate, so each internal crate is documented with the features the
@@ -16,8 +16,32 @@ use rustdoc_types::{Crate, FORMAT_VERSION};
 
 use super::toolchain::PINNED;
 
-/// The facade's package and crate name.
-pub(super) const FACADE: &str = "runvil";
+/// One facade the command checks.
+#[derive(Debug)]
+pub(super) struct Facade {
+    /// The package `cargo doc -p` takes. Its crate name swaps `-` for `_`.
+    pub(super) package: &'static str,
+    /// The crate directory, relative to the workspace root, which holds
+    /// `public-api.txt`.
+    pub(super) dir: [&'static str; 2],
+    /// The container under `crates/` whose crates may define a
+    /// re-exported item.
+    pub(super) container: &'static str,
+}
+
+impl Facade {
+    /// The crate name, which roots every facade path.
+    pub(super) fn crate_name(&self) -> String {
+        self.package.replace('-', "_")
+    }
+}
+
+/// Every facade the command checks, in the order it reports them.
+pub(super) const FACADES: [Facade; 1] = [Facade {
+    package: "runvil-engine",
+    dir: crate::facade_shape::FACADE_DIR,
+    container: crate::engine_guards::ENGINE_CONTAINER,
+}];
 
 /// The rustdoc flags every build passes. Hidden items are documented
 /// because dependents can still name them, and the transport codec is
@@ -34,22 +58,22 @@ const RUSTDOC_FLAGS: [&str; 6] = [
     "warn",
 ];
 
-/// The parsed rustdoc JSON of the facade and its internal crates.
+/// The parsed rustdoc JSON of a facade and its internal crates.
 #[derive(Debug)]
 pub(super) struct Loaded {
+    /// The facade's crate name.
+    pub(super) name: String,
     /// The facade crate.
     pub(super) facade: Crate,
     /// Every internal crate, keyed by its crate name (`runvil_runtime`).
     pub(super) internal: BTreeMap<String, Crate>,
 }
 
-/// The package names of every crate under the internal container, sorted.
+/// The package names of every crate under `container`, sorted.
 /// A manifest that cannot be read or names no package is an error: a
 /// crate the check cannot name cannot be documented or matched.
-fn internal_packages(root: &Path) -> Result<Vec<String>, String> {
-    let container = root
-        .join("crates")
-        .join(crate::engine_guards::ENGINE_CONTAINER);
+fn internal_packages(root: &Path, container: &str) -> Result<Vec<String>, String> {
+    let container = root.join("crates").join(container);
     let mut dirs = Vec::new();
     crate::engine_guards::collect_crates(&container, &mut dirs);
     let mut packages = Vec::new();
@@ -75,20 +99,26 @@ fn internal_packages(root: &Path) -> Result<Vec<String>, String> {
     Ok(packages)
 }
 
-/// Builds and parses the rustdoc JSON for the workspace at `root`.
-pub(super) fn load(root: &Path) -> Result<Loaded, String> {
-    let packages = internal_packages(root)?;
+/// Builds and parses the rustdoc JSON of `facade` and its internal crates
+/// in the workspace at `root`.
+pub(super) fn load(root: &Path, facade: &Facade) -> Result<Loaded, String> {
+    let packages = internal_packages(root, facade.container)?;
     let target = root.join("target").join("xtask-api");
-    run_cargo_doc(root, &target, &packages)?;
+    run_cargo_doc(root, &target, facade.package, &packages)?;
     let doc = target.join("doc");
-    let facade = read_crate(&doc, FACADE)?;
+    let name = facade.crate_name();
+    let krate = read_crate(&doc, &name)?;
     let mut internal = BTreeMap::new();
     for package in &packages {
         let name = package.replace('-', "_");
         let krate = read_crate(&doc, &name)?;
         internal.insert(name, krate);
     }
-    Ok(Loaded { facade, internal })
+    Ok(Loaded {
+        name,
+        facade: krate,
+        internal,
+    })
 }
 
 /// A cargo command in `root` on the pinned nightly: the cargo that runs
@@ -103,14 +133,19 @@ pub(super) fn cargo(root: &Path) -> Command {
     command
 }
 
-fn run_cargo_doc(root: &Path, target: &Path, packages: &[String]) -> Result<(), String> {
+fn run_cargo_doc(
+    root: &Path,
+    target: &Path,
+    facade: &str,
+    packages: &[String],
+) -> Result<(), String> {
     let mut command = cargo(root);
     command
         .env("CARGO_ENCODED_RUSTDOCFLAGS", RUSTDOC_FLAGS.join("\u{1f}"))
         .env_remove("RUSTDOCFLAGS")
         .args(["doc", "--locked", "--no-deps", "--lib", "--target-dir"])
         .arg(target)
-        .args(["-p", FACADE]);
+        .args(["-p", facade]);
     for package in packages {
         command.args(["-p", package]);
     }

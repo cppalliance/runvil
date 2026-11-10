@@ -7,7 +7,7 @@ todos:
     status: completed
   - id: step2-engine-facade
     content: "Step 2: rename the Engine facade runvil to runvil-engine (folder, dependents, check constants, Facade value in xtask api, fixtures, CI, docs), bless its public-api.txt, pass the gate and full verification, commit"
-    status: pending
+    status: completed
   - id: step3-host-facade
     content: "Step 3: rename harness to runvil with its 35 items at their final paths, update Host imports, the product matrix family rule, fixtures, CI and docs, pass the gate and full verification, commit"
     status: pending

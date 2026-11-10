@@ -17,7 +17,7 @@ fn workspace_root() -> PathBuf {
 const FIXTURE_CRATES: [&str; 3] = ["runvil_runtime", "runvil_model_client", "runvil_types"];
 
 /// A facade manifest declaring exactly [`FIXTURE_CRATES`].
-const FIXTURE_MANIFEST: &str = "[package]\nname = \"runvil\"\n\n[dependencies]\n\
+const FIXTURE_MANIFEST: &str = "[package]\nname = \"runvil-engine\"\n\n[dependencies]\n\
     runvil-runtime.workspace = true\n\
     runvil-model-client.workspace = true\n\
     runvil-types.workspace = true\n";
@@ -41,7 +41,7 @@ fn assert_one(text: &str, line: usize, rule: &str) {
 }
 
 fn facade_dir(root: &Path) -> PathBuf {
-    root.join("crates").join("runvil")
+    root.join("crates").join("runvil-engine")
 }
 
 /// Writes `manifest`, when given, as `dir/Cargo.toml`, and each
@@ -60,7 +60,7 @@ fn write_facade(dir: &Path, manifest: Option<&str>, files: &[(&str, &str)]) {
     }
 }
 
-/// A fake workspace whose `crates/runvil/` facade holds `manifest`,
+/// A fake workspace whose `crates/runvil-engine/` facade holds `manifest`,
 /// when given, and each `(path, text)` under its `src/`.
 fn facade_root(manifest: Option<&str>, files: &[(&str, &str)]) -> tempfile::TempDir {
     let root = tempfile::TempDir::new().expect("tempdir");
@@ -194,7 +194,7 @@ fn a_re_export_rooted_outside_the_facade_dependencies_is_rejected() {
 
 #[test]
 fn the_dependency_crates_are_the_manifest_dependency_keys() {
-    let manifest = "[package]\nname = \"runvil\"\n\n\
+    let manifest = "[package]\nname = \"runvil-engine\"\n\n\
         [dependencies]\n\
         runvil-runtime.workspace = true\n\
         types = { package = \"runvil-types\", workspace = true }\n\n\
@@ -327,7 +327,7 @@ fn a_missing_facade_crate_root_is_reported_not_skipped() {
     let root = tempfile::TempDir::new().expect("tempdir");
     let violations = facade_shape_violations(root.path());
     assert_eq!(violations.len(), 2, "{violations:?}");
-    for (violation, facade) in violations.iter().zip(["runvil", "harness"]) {
+    for (violation, facade) in violations.iter().zip(["runvil-engine", "harness"]) {
         let lib = root
             .path()
             .join("crates")

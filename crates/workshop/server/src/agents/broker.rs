@@ -20,13 +20,13 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use harness::{BoxFuture, InferenceBroker};
 use harness_gateway_client::{GatewayBroker, StreamDelta};
-use runvil::effect::Round;
-use runvil::event::ReplyOrigin;
-use runvil::model::{
+use runvil_engine::effect::Round;
+use runvil_engine::event::ReplyOrigin;
+use runvil_engine::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };
-use runvil::{Error, ErrorCode};
+use runvil_engine::{Error, ErrorCode};
 use workshop_agents::{Conversation, DeltaKind};
 use workshop_menu::{CatalogBus, MenuHandles};
 use workshop_registry::Registry;

@@ -13,7 +13,7 @@ use rustdoc_types::{Crate, Id, Item, ItemKind};
 
 use super::Finding;
 use super::items::{Surface, required, target};
-use super::load::{FACADE, Loaded};
+use super::load::Loaded;
 use super::render::Renderer;
 use super::walk::Visit;
 
@@ -59,7 +59,7 @@ pub(super) fn findings(loaded: &Loaded, surface: &Surface, visits: &[Visit<'_>])
             let links = Links {
                 surface,
                 krate: &loaded.facade,
-                crate_name: FACADE,
+                crate_name: &loaded.name,
                 visited: &visited,
             };
             findings.extend(links.findings(label, item));

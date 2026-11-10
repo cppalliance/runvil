@@ -234,7 +234,11 @@ fn every_book_page_is_checked_and_named_in_the_error() {
 fn rustdoc_pages_are_not_checked() {
     let site = tempfile::tempdir().expect("tempdir");
     write_page(site.path(), "index.html", "");
-    write_page(site.path(), "runvil/index.html", &page(&["gone.html"]));
+    write_page(
+        site.path(),
+        "runvil-engine/index.html",
+        &page(&["gone.html"]),
+    );
     write_page(
         site.path(),
         "harness/harness/index.html",
@@ -242,12 +246,12 @@ fn rustdoc_pages_are_not_checked() {
     );
     write_page(
         site.path(),
-        "gateway/runvil/page.html",
+        "gateway/runvil-engine/page.html",
         &page(&["gone.html"]),
     );
     let error = check_links(site.path(), false).expect_err("only the book page is read");
     assert!(error.contains("has 1 broken links"), "{error}");
-    assert!(error.contains("gateway/runvil/page.html"), "{error}");
+    assert!(error.contains("gateway/runvil-engine/page.html"), "{error}");
 }
 
 #[test]
@@ -284,7 +288,7 @@ fn external_mail_and_fragment_links_are_ignored() {
 fn books_only_skips_only_the_rustdoc_folders() {
     let site = site_with(&[]);
     let html = page(&[
-        "runvil/index.html",
+        "runvil-engine/index.html",
         "harness/index.html",
         "gateway/index.html",
         "runvil-extra/index.html",
@@ -302,7 +306,7 @@ fn books_only_skips_only_the_rustdoc_folders() {
 #[test]
 fn books_only_skips_a_book_pages_link_into_the_rustdoc_folders() {
     let site = site_with(&[]);
-    let html = page(&["../runvil/index.html", "../harness/index.html"]);
+    let html = page(&["../runvil-engine/index.html", "../harness/index.html"]);
     assert_eq!(
         broken_links(site.path(), "gateway/index.html", &html, false).len(),
         2
@@ -334,7 +338,7 @@ fn the_crate_page_uses_the_underscored_crate_name() {
         "harness_gateway_client/index.html"
     );
     assert_eq!(crate_page("harness"), "harness/index.html");
-    assert_eq!(crate_page("runvil"), "runvil/index.html");
+    assert_eq!(crate_page("runvil-engine"), "runvil_engine/index.html");
 }
 
 #[test]

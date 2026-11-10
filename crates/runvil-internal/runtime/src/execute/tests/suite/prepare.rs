@@ -2,7 +2,7 @@
 //! claims isolation, the caller's role map filling the model set, and the
 //! run's first step refusing an unsatisfiable prompt with the
 //! model-readable notice or running a satisfiable one. The rest of the
-//! suite runs against the `runvil` facade.
+//! suite runs against the `runvil-engine` facade.
 
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;

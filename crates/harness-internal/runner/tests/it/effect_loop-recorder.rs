@@ -10,9 +10,9 @@ use std::time::Duration;
 use harness_runner::display_chain;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::recorder::{MemoryRecorder, RecordKind, RunRecorder};
-use runvil::cancel::CancelHandle;
-use runvil::vfs::VfsRef;
-use runvil::{ErrorCode, ErrorFact};
+use runvil_engine::cancel::CancelHandle;
+use runvil_engine::vfs::VfsRef;
+use runvil_engine::{ErrorCode, ErrorFact};
 use serde_json::json;
 
 use super::{answers, await_raised, cancel_after, meta};
@@ -24,7 +24,7 @@ use crate::support::{
 
 /// A run of one store write and one read, over a fresh memory store: its
 /// every effect is a Vfs effect, so no performer is ever out.
-fn store_round_trip() -> runvil::Run {
+fn store_round_trip() -> runvil_engine::Run {
     run_over(
         "store.write('a.md', '1')\nreturn store.read('a.md')",
         VfsRef::default(),

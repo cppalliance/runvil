@@ -14,16 +14,16 @@ use harness_runner::RunSetup;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::performers::{BoxFuture, ToolPerformer};
 use harness_runner::recorder::{MemoryRecorder, RecordKind, RunId};
-use runvil::Error;
-use runvil::cancel::CancelHandle;
-use runvil::effect::ToolCallOrigin;
-use runvil::model::{
+use runvil_engine::Error;
+use runvil_engine::cancel::CancelHandle;
+use runvil_engine::effect::ToolCallOrigin;
+use runvil_engine::model::{
     Completion, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode, ToolCall,
 };
-use runvil::timestamp::Timestamp;
-use runvil::vfs::Access;
-use runvil::{Prompt, Run, RunParams};
-use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
+use runvil_engine::timestamp::Timestamp;
+use runvil_engine::vfs::Access;
+use runvil_engine::{Prompt, Run, RunParams};
+use runvil_engine::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use serde_json::{Value, json};
 use tokio::sync::{Notify, Semaphore};
 

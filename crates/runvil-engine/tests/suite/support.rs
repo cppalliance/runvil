@@ -7,11 +7,11 @@ use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use runvil::ErrorCode;
-use runvil::model::{
+use runvil_engine::ErrorCode;
+use runvil_engine::model::{
     CompletionResult, ModelId, ModelInfo, ThinkingMode, ToolCall, make_completion_error, phrase,
 };
-use runvil::{ToolId, ToolInfo, ToolOutput, make_tool_error};
+use runvil_engine::{ToolId, ToolInfo, ToolOutput, make_tool_error};
 use serde_json::Value;
 
 mod scenario;
@@ -20,7 +20,7 @@ pub(super) use scenario::{Built, Scenario, Trace};
 
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
-type Handler = Box<dyn Fn(&Value) -> Result<ToolOutput, runvil::Error>>;
+type Handler = Box<dyn Fn(&Value) -> Result<ToolOutput, runvil_engine::Error>>;
 
 /// A tool a scenario registers under its full id, not its wire name.
 pub(super) struct Tool {
@@ -78,7 +78,7 @@ fn push_trimmed(source: &mut String, text: &str) {
 
 pub(super) enum Reply {
     Completion(CompletionResult),
-    Failure(runvil::Error),
+    Failure(runvil_engine::Error),
 }
 
 pub(super) fn text(reply: &str) -> Reply {

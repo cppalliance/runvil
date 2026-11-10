@@ -8,7 +8,7 @@ use std::fmt::Write as _;
 use std::sync::Arc;
 
 use harness_runner::recorder::MemoryRecorder;
-use runvil::model::{Completion, CompletionResult, ToolCall};
+use runvil_engine::model::{Completion, CompletionResult, ToolCall};
 use serde_json::json;
 
 use super::{PendingTimer, answers_to, answers_where, calls, launch, run_beside, setup, until};

@@ -12,8 +12,8 @@ use std::sync::Arc;
 
 use harness_runner::RunSetup;
 use harness_runner::recorder::MemoryRecorder;
-use runvil::Error;
-use runvil::model::{Completion, CompletionResult, ToolCall};
+use runvil_engine::Error;
+use runvil_engine::model::{Completion, CompletionResult, ToolCall};
 use serde_json::json;
 
 use super::{

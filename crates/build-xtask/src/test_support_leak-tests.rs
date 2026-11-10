@@ -219,8 +219,8 @@ fn the_facade_forwarding_the_engine_test_support_feature_passes() {
     let root = engine_root();
     write_crate(
         root.path(),
-        "runvil",
-        "runvil",
+        "runvil-engine",
+        "runvil-engine",
         "[dependencies]\nrunvil-runtime = { workspace = true }\n\
          [features]\ntest-support = [\"runvil-runtime/test-support\"]\n",
     );

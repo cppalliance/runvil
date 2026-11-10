@@ -132,10 +132,10 @@ fn an_outside_crate_reaching_past_the_one_public_crate_is_reported() {
         root.path(),
         "workshop-sessions",
         "workshop-sessions",
-        "[dependencies]\nrunvil-lua = { path = \"../runvil-lua\" }\nrunvil = { path = \"../runvil\" }\n",
+        "[dependencies]\nrunvil-lua = { path = \"../runvil-lua\" }\nrunvil-engine = { path = \"../runvil-engine\" }\n",
     );
     write_crate(root.path(), "runvil-lua", "runvil-lua", "");
-    write_crate(root.path(), "runvil", "runvil", "");
+    write_crate(root.path(), "runvil-engine", "runvil-engine", "");
     let violations = product_boundary_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
@@ -163,8 +163,8 @@ fn an_outside_crate_depending_on_a_root_runvil_crate_other_than_the_facade_is_re
         violations
             .iter()
             .all(|v| v.starts_with("workshop-sessions depends on runvil-")
-                && v.ends_with("only through runvil or runvil-plugin")),
-        "runvil and runvil-plugin are the public crates, wherever the others sit: {violations:?}"
+                && v.ends_with("only through runvil-engine or runvil-plugin")),
+        "runvil-engine and runvil-plugin are the public crates, wherever the others sit: {violations:?}"
     );
 }
 
@@ -186,7 +186,7 @@ fn an_outside_crate_depending_on_the_plugin_contract_passes() {
 fn a_crate_named_like_the_former_gateway_family_is_an_outside_crate() {
     // The Gateway moved to its own repository, so no crate here is
     // classified into a gateway family. A package that would have been one
-    // is an ordinary outside crate and reaches runvil only through the
+    // is an ordinary outside crate and reaches the Engine only through its
     // facade.
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
@@ -200,7 +200,7 @@ fn a_crate_named_like_the_former_gateway_family_is_an_outside_crate() {
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
         violations[0].starts_with("gateway-routing depends on runvil-lua:")
-            && violations[0].contains("only through runvil or runvil-plugin"),
+            && violations[0].contains("only through runvil-engine or runvil-plugin"),
         "the outside-crate rule binds it as it binds any other: {violations:?}"
     );
 }
@@ -306,9 +306,9 @@ fn an_outside_crate_depending_on_the_facade_passes() {
         root.path(),
         "workshop-sessions",
         "workshop-sessions",
-        "[dependencies]\nrunvil = { path = \"../runvil\" }\n",
+        "[dependencies]\nrunvil-engine = { path = \"../runvil-engine\" }\n",
     );
-    write_crate(root.path(), "runvil", "runvil", "");
+    write_crate(root.path(), "runvil-engine", "runvil-engine", "");
     let violations = product_boundary_violations(root.path());
     assert!(
         violations.is_empty(),
@@ -341,13 +341,13 @@ fn a_harness_crate_depending_on_the_runvil_facade_passes() {
         root.path(),
         "harness-internal/runner",
         "harness-runner",
-        "[dependencies]\nrunvil = { path = \"../../runvil\" }\n",
+        "[dependencies]\nrunvil-engine = { path = \"../../runvil-engine\" }\n",
     );
-    write_crate(root.path(), "runvil", "runvil", "");
+    write_crate(root.path(), "runvil-engine", "runvil-engine", "");
     let violations = product_boundary_violations(root.path());
     assert!(
         violations.is_empty(),
-        "the runvil facade is legal for harness crates: {violations:?}"
+        "the Engine facade is legal for harness crates: {violations:?}"
     );
 }
 
@@ -385,7 +385,7 @@ fn a_harness_crate_depending_on_a_private_product_crate_is_reported() {
     assert!(
         violations[0].starts_with("harness-plugins depends on runvil-runtime:")
             && violations[0].contains(
-                "outside crates may depend on the runvil family only through runvil or runvil-plugin"
+                "outside crates may depend on the runvil family only through runvil-engine or runvil-plugin"
             ),
         "the violation names the harness crate and the facade rule: {violations:?}"
     );
@@ -450,11 +450,11 @@ fn runvil_and_shared_crates_depending_on_harness_are_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     let dep = "[dependencies]\nharness = { path = \"../harness\" }\n";
     write_crate(root.path(), "harness", "harness", "");
-    write_crate(root.path(), "runvil", "runvil", dep);
+    write_crate(root.path(), "runvil-engine", "runvil-engine", dep);
     write_crate(root.path(), "shared-crypto", "shared-crypto", dep);
     let violations = product_boundary_violations(root.path());
     assert_eq!(violations.len(), 2, "{violations:?}");
-    for package in ["runvil", "shared-crypto"] {
+    for package in ["runvil-engine", "shared-crypto"] {
         assert!(
             violations
                 .iter()
@@ -482,7 +482,8 @@ fn the_bare_harness_package_belongs_to_the_harness_family() {
 }
 
 #[test]
-fn the_bare_runvil_package_belongs_to_the_runvil_family() {
-    assert_eq!(family("runvil"), Family::Runvil);
+fn only_a_prefixed_runvil_package_belongs_to_the_runvil_family() {
+    assert_eq!(family("runvil-engine"), Family::Runvil);
+    assert_eq!(family("runvil"), Family::Unaffiliated);
     assert_eq!(family("runvilr"), Family::Unaffiliated);
 }

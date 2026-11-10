@@ -22,7 +22,7 @@
 //!   (`workshop-protocol`, `workshop-registry`, `workshop-support`), the
 //!   service crates (`workshop-gateway`, `workshop-menu`,
 //!   `workshop-status`), the Harness's public API `harness`, the Engine's
-//!   public API `runvil`, and third-party crates; today it names
+//!   public API `runvil-engine`, and third-party crates; today it names
 //!   none of the Workshop crates. Never on `workshop-server`, another
 //!   feature crate, or a private Harness, Engine, or Gateway crate.
 //!   `cargo test -p build-xtask` enforces the product and container

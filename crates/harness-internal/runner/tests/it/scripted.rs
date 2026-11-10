@@ -10,12 +10,12 @@ use std::time::Duration;
 
 use harness_runner::Packs;
 use harness_runner::performers::{BoxFuture, InferenceBroker, Timer};
-use runvil::effect::Round;
-use runvil::model::{
+use runvil_engine::effect::Round;
+use runvil_engine::model::{
     Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
     ModelInfo, ThinkingMode, ToolCall, ToolSchema, make_completion_error, phrase,
 };
-use runvil::{Error, ErrorCode};
+use runvil_engine::{Error, ErrorCode};
 use runvil_plugin::{
     Pack, PackFactory, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
 };

@@ -1,5 +1,5 @@
-//! `cargo xtask api`: proves the `runvil` facade's surface closed and
-//! snapshots it, from rustdoc JSON built on the pinned nightly.
+//! `cargo xtask api`: proves the `runvil-engine` facade's surface closed
+//! and snapshots it, from rustdoc JSON built on the pinned nightly.
 //!
 //! The facade and every internal crate are documented once, with the
 //! facade's default features: each facade `use` must resolve to a single
@@ -7,7 +7,7 @@
 //! signature, fields, bounds, impls, or doc links name must be a facade
 //! re-export, std, core, alloc, or an allowlisted crate, and no surface
 //! doc text may name an internal crate. The listing is compared with
-//! `crates/runvil/public-api.txt`.
+//! `crates/runvil-engine/public-api.txt`.
 //!
 //! A listing line is the item's facade path with its signature, in this
 //! notation:
@@ -24,9 +24,9 @@
 //! - A provided trait method line ends in ` { .. }`, standing in for its
 //!   body.
 //!
-//! So `#[non_exhaustive] pub enum runvil::vfs::VfsError`,
-//! `pub struct runvil::vfs::AllowAll;`, and
-//! `pub struct runvil::vfs::ExecId(/* private fields */)`.
+//! So `#[non_exhaustive] pub enum runvil_engine::vfs::VfsError`,
+//! `pub struct runvil_engine::vfs::AllowAll;`, and
+//! `pub struct runvil_engine::vfs::ExecId(/* private fields */)`.
 //!
 //! - `cargo +<pinned nightly> xtask api` prints every violation and the
 //!   listing's difference.
@@ -114,8 +114,8 @@ pub(crate) fn run(root: &Path, args: &[String]) -> ExitCode {
     }
 }
 
-/// Parses the mode and refuses any toolchain but the pinned nightly
-/// before anything is built.
+/// Parses the mode, refuses any toolchain but the pinned nightly before
+/// anything is built, and runs every facade in [`load::FACADES`] in order.
 fn outcome(root: &Path, args: &[String], active: Option<&str>) -> Result<Outcome, String> {
     let mode = match args {
         [] => Mode::Report,
@@ -124,13 +124,24 @@ fn outcome(root: &Path, args: &[String], active: Option<&str>) -> Result<Outcome
         _ => return Err(USAGE.to_owned()),
     };
     toolchain::require_pinned(active)?;
-    execute(root, mode)
+    let mut all = Outcome {
+        lines: Vec::new(),
+        failed: false,
+    };
+    for facade in &load::FACADES {
+        let outcome = execute(root, facade, mode)?;
+        all.lines.extend(outcome.lines);
+        all.failed |= outcome.failed;
+    }
+    Ok(all)
 }
 
-/// Builds, checks, and compares the workspace at `root` in `mode`.
-fn execute(root: &Path, mode: Mode) -> Result<Outcome, String> {
-    let report = report(root)?;
-    let path = listing::path(root);
+/// Builds, checks, and compares `facade` in the workspace at `root` in
+/// `mode`. The summary line names the facade's package.
+fn execute(root: &Path, facade: &load::Facade, mode: Mode) -> Result<Outcome, String> {
+    let report = report(root, facade)?;
+    let path = listing::path(root, facade);
+    let package = facade.package;
     let committed = match std::fs::read_to_string(&path) {
         Ok(text) => Some(text),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
@@ -142,7 +153,7 @@ fn execute(root: &Path, mode: Mode) -> Result<Outcome, String> {
     if mode == Mode::Bless {
         if violations > 0 {
             lines.push(format!(
-                "api: bless refused: {violations} violations remain"
+                "api: {package}: bless refused: {violations} violations remain"
             ));
             return Ok(Outcome {
                 lines,
@@ -164,16 +175,16 @@ fn execute(root: &Path, mode: Mode) -> Result<Outcome, String> {
     let differs = !difference.is_empty();
     lines.extend(difference);
     lines.push(format!(
-        "api: {violations} violations; the listing {} public-api.txt",
+        "api: {package}: {violations} violations; the listing {} public-api.txt",
         if differs { "differs from" } else { "matches" }
     ));
     let failed = mode == Mode::Check && (violations > 0 || differs);
     Ok(Outcome { lines, failed })
 }
 
-/// Loads the facade's rustdoc JSON and runs every check over it.
-fn report(root: &Path) -> Result<Report, String> {
-    let loaded = load::load(root)?;
+/// Loads `facade`'s rustdoc JSON and runs every check over it.
+fn report(root: &Path, facade: &load::Facade) -> Result<Report, String> {
+    let loaded = load::load(root, facade)?;
     let (surface, mut findings) = items::Surface::resolve(&loaded);
     let visits = walk::visits(&loaded, &surface);
     findings.extend(closure::findings(&loaded, &surface, &visits));

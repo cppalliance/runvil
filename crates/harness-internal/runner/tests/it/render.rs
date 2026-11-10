@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex};
 
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind};
 use harness_runner::{Harness, Packs};
-use runvil::Error;
-use runvil::model::{Completion, CompletionResult, ToolCall};
+use runvil_engine::Error;
+use runvil_engine::model::{Completion, CompletionResult, ToolCall};
 use runvil_plugin::{
     ModelInfo, Pack, PackFactory, PackFuture, PackId, PackInfo, PackRegistry, RenderContext,
     ToolContext, ToolId, ToolInfo, ToolOutput,

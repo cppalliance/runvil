@@ -1,6 +1,6 @@
 //! Operations on the wire types that only the Engine performs.
 //!
-//! The `runvil` facade never re-exports this module, so only Engine
+//! The `runvil-engine` facade never re-exports this module, so only Engine
 //! crates reach it. Each function reaches a field or a construction step
 //! the facade-visible type keeps private. [`completion_into_result`] is the
 //! one that splits a completion into the result the tool loop consumes and

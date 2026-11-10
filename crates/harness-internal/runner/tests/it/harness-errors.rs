@@ -13,8 +13,8 @@ use std::task::Poll;
 
 use harness_runner::recorder::{MemoryRecorder, RunId};
 use harness_runner::{Harness, RunReport, RunSetup, display_chain};
-use runvil::model::{Completion, phrase};
-use runvil::{Error, ErrorCode, ErrorFact};
+use runvil_engine::model::{Completion, phrase};
+use runvil_engine::{Error, ErrorCode, ErrorFact};
 
 use super::{PendingTimer, answers_to, launch, no_packs, plain_harness, run_beside, setup, until};
 use crate::scripted::{Listing, ScriptedBroker};

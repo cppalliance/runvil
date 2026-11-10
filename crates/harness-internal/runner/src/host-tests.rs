@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use runvil::{Error, ErrorCode, Prompt, make_tool_error};
+use runvil_engine::{Error, ErrorCode, Prompt, make_tool_error};
 use runvil_plugin::{
     Pack, PackFuture, PackId, PackInfo, PackRegistry, ToolContext, ToolInfo, ToolOutput,
 };

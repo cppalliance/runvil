@@ -1,7 +1,7 @@
 //! The read side: one run's row and its records, whole or sliced by kind.
 
 use harness::record::RunSeed;
-use runvil::{Error, ErrorCode};
+use runvil_engine::{Error, ErrorCode};
 
 use crate::append::{RunLog, unsigned};
 use crate::error::LogError;

@@ -11,7 +11,7 @@ exclude = ["crates/runvil-internal", "crates/workshop", "crates/harness-internal
 # compile on a fresh macOS or Linux clone with no native toolkit, no
 # CUDA, and no Tauri system packages. The desktop app is an explicit
 # choice: `cargo build -p workshop`.
-default-members = ["crates/runvil", "crates/runvil-plugin", "crates/harness", "crates/harness-gateway-client"]
+default-members = ["crates/runvil-engine", "crates/runvil-plugin", "crates/harness", "crates/harness-gateway-client"]
 
 [workspace.package]
 version = "0.3.0"
@@ -24,7 +24,7 @@ repository = "https://github.com/cppalliance/runvil"
 
 [workspace.dependencies]
 bytes = "1"
-runvil = { path = "crates/runvil" }
+runvil-engine = { path = "crates/runvil-engine" }
 runvil-runtime = { path = "crates/runvil-internal/runtime" }
 runvil-plugin = { path = "crates/runvil-plugin" }
 # The C Plugin contract, version 0.2, from its own repository, pinned by
@@ -105,7 +105,7 @@ mlua = { version = "0.12", features = ["lua55", "vendored", "serialize", "send"]
 # already pulls in, instead of compiling two toml lines (and the 0.8 line's
 # exclusive toml_edit 0.19 and winnow 0.5 tail).
 toml = "1"
-# Parses the runvil facade's source for build-xtask's shape check;
+# Parses the facades' source for build-xtask's shape check;
 # `full` is the feature that parses items and `use` trees. 3 is the newest
 # major the lockfile already carries.
 syn = { version = "3", features = ["full"] }

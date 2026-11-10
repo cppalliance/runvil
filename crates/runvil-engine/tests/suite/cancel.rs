@@ -7,8 +7,8 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread::{self, Thread};
 
-use runvil::cancel::CancelHandle;
-use runvil::effect::Effect;
+use runvil_engine::cancel::CancelHandle;
+use runvil_engine::effect::Effect;
 
 use super::support::{Scenario, TestResult, note};
 

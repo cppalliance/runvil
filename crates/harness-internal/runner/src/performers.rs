@@ -2,9 +2,9 @@
 //! effects, and one for timer effects: the traits the effect loop
 //! performs a run's effects through.
 //!
-//! The Engine issues an [`Effect`](runvil::effect::Effect) as a
+//! The Engine issues an [`Effect`](runvil_engine::effect::Effect) as a
 //! value and waits for its
-//! [`EffectAnswer`](runvil::effect::EffectAnswer); a performer is
+//! [`EffectAnswer`](runvil_engine::effect::EffectAnswer); a performer is
 //! the Harness code that turns the one into the other. Each trait takes the
 //! effect's fields and returns the answer's payload for its kind, so a
 //! performer never sees the run, the recorder, or another kind's effects. The
@@ -30,14 +30,14 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use runvil::Error;
-use runvil::effect::{PackToolSets, Round, ToolCallOrigin};
-use runvil::model::{
+use runvil_engine::Error;
+use runvil_engine::effect::{PackToolSets, Round, ToolCallOrigin};
+use runvil_engine::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ModelInfo, ToolSchema,
 };
-use runvil::timestamp::Timestamp;
-use runvil::vfs::Access;
-use runvil::{ToolId, ToolInfo, ToolOutput};
+use runvil_engine::timestamp::Timestamp;
+use runvil_engine::vfs::Access;
+use runvil_engine::{ToolId, ToolInfo, ToolOutput};
 use serde_json::Value;
 
 /// The boxed future a performer returns for the Harness to poll.

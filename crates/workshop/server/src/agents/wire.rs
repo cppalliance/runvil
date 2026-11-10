@@ -41,9 +41,9 @@
 //! SPA suite's `crates/workshop/ui/test/agent-wire-fixtures.mjs`, so drift
 //! on either side fails that side's tests.
 
-use runvil::event::Event;
-use runvil::ids::{ChainId, TaskId};
-use runvil::metrics::{CallMetrics, ToolCallEvent};
+use runvil_engine::event::Event;
+use runvil_engine::ids::{ChainId, TaskId};
+use runvil_engine::metrics::{CallMetrics, ToolCallEvent};
 use serde::{Deserialize, Serialize};
 
 /// A session request the client sends: `launch`, `attach`, or `cancel`.

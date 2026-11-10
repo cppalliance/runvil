@@ -18,7 +18,7 @@ fn internal_packages_are_every_container_crate_by_package_name_sorted() {
         "",
     );
     assert_eq!(
-        internal_packages(root.path()),
+        internal_packages(root.path(), "runvil-internal"),
         Ok(vec!["runvil-alpha".to_owned(), "runvil-zeta".to_owned()])
     );
 }
@@ -33,7 +33,8 @@ fn an_internal_manifest_without_a_package_name_is_an_error() {
         .join("broken");
     std::fs::create_dir_all(&dir).expect("the crate directory creates");
     std::fs::write(dir.join("Cargo.toml"), "[workspace]\n").expect("the manifest writes");
-    let error = internal_packages(root.path()).expect_err("an unnamed crate is refused");
+    let error =
+        internal_packages(root.path(), "runvil-internal").expect_err("an unnamed crate is refused");
     assert!(error.ends_with("no readable package name"), "{error}");
 }
 

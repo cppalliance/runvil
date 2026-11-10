@@ -1,7 +1,7 @@
 # Clippy reads only the nearest `clippy.toml` above a crate's manifest and
 # never merges it with the root file, so this file repeats every root entry,
 # then adds the Engine's determinism bans. The same text sits in
-# `crates/runvil-internal/`, `crates/runvil/`, and
+# `crates/runvil-internal/`, `crates/runvil-engine/`, and
 # `crates/runvil-plugin/`. `cargo test -p build-xtask` checks that every
 # Engine crate resolves to one of the three, that each holds every root entry
 # and every ban, and that no Engine source allows or expects

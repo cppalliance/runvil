@@ -9,7 +9,7 @@ use std::collections::{BTreeSet, HashMap};
 use rustdoc_types::{Crate, Id, ItemEnum, ItemKind, Use};
 
 use super::Finding;
-use super::load::{FACADE, Loaded};
+use super::load::Loaded;
 
 /// Crates any surface item may mention.
 const STD_CRATES: [&str; 3] = ["std", "core", "alloc"];
@@ -77,6 +77,8 @@ pub(super) struct Surface {
     /// Each facade module (the crate root first) and its id in the
     /// facade's JSON.
     pub(super) modules: Vec<(String, Id)>,
+    /// The facade's crate name, which roots every facade path.
+    pub(super) root: String,
     /// The internal crates' names.
     pub(super) internal: BTreeSet<String>,
     /// Defining crate, then definition path, to facade path.
@@ -96,13 +98,14 @@ impl Surface {
                 .map(|(name, krate)| (name.as_str(), local_paths(krate)))
                 .collect(),
             surface: Surface {
+                root: loaded.name.clone(),
                 internal: loaded.internal.keys().cloned().collect(),
                 ..Surface::default()
             },
             uses: Vec::new(),
             findings: Vec::new(),
         };
-        resolver.module(loaded.facade.root, FACADE);
+        resolver.module(loaded.facade.root, &loaded.name);
         let mut uses = std::mem::take(&mut resolver.uses);
         uses.sort_by(|a, b| a.0.cmp(&b.0));
         for (label, reexport) in uses {
@@ -119,7 +122,7 @@ impl Surface {
     /// Why mentioning the item at `path` in `krate` breaks closure, or
     /// `None` when the facade re-exports it or its crate is allowed.
     pub(super) fn refusal(&self, krate: &str, path: &[String]) -> Option<String> {
-        if krate == FACADE
+        if krate == self.root
             || STD_CRATES.contains(&krate)
             || ALLOWLIST.contains(&krate)
             || self.facade_path(krate, path).is_some()

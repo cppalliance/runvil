@@ -1,9 +1,9 @@
-//! The facade shape check, live: every `.rs` file under the `runvil`
-//! and `harness` facades' `src/` holds only grouping `pub mod` blocks with
-//! doc comments, single-item `pub use internal_crate::path::Item;`
-//! re-exports, and doc attributes, so every surface item is defined in an
-//! internal crate. Runs as part of `cargo test -p build-xtask` and
-//! `cargo xtask tidy`.
+//! The facade shape check, live: every `.rs` file under the
+//! `runvil-engine` and `harness` facades' `src/` holds only grouping
+//! `pub mod` blocks with doc comments, single-item
+//! `pub use internal_crate::path::Item;` re-exports, and doc attributes,
+//! so every surface item is defined in an internal crate. Runs as part of
+//! `cargo test -p build-xtask` and `cargo xtask tidy`.
 //!
 //! A re-export's path must start at a crate the facade manifest declares
 //! under `[dependencies]`. Uniform paths resolve any other head, such as a
@@ -23,9 +23,9 @@ use syn::spanned::Spanned;
 use syn::{Attribute, Item, ItemMod, ItemUse, Meta};
 use syn::{UseTree, Visibility};
 
-/// The `runvil` facade's crate directory, relative to the workspace
-/// root.
-pub(crate) const FACADE_DIR: [&str; 2] = ["crates", "runvil"];
+/// The `runvil-engine` facade's crate directory, relative to the
+/// workspace root.
+pub(crate) const FACADE_DIR: [&str; 2] = ["crates", "runvil-engine"];
 
 /// Every facade the shape check covers, relative to the workspace root.
 pub(crate) const FACADE_DIRS: [[&str; 2]; 2] = [FACADE_DIR, ["crates", "harness"]];

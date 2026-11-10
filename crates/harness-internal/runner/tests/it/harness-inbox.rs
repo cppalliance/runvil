@@ -22,8 +22,8 @@ use harness_runner::recorder::{
     MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
 };
 use harness_runner::{RunControl, RunSetup};
-use runvil::vfs::VfsRef;
-use runvil::{Error, ErrorCode};
+use runvil_engine::vfs::VfsRef;
+use runvil_engine::{Error, ErrorCode};
 use serde_json::json;
 use tokio::sync::Notify;
 

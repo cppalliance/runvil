@@ -18,7 +18,7 @@ futures-util.workspace = true
 runvil-plugin.workspace = true
 # The Engine's public API: the Run this crate drives, the effects and
 # answers it correlates, and the run's VFS handle.
-runvil.workspace = true
+runvil-engine.workspace = true
 # The run seed's 32 bytes are drawn from the OS CSPRNG at preparation: it
 # is the untrusted-envelope nonce's source, so it must be unguessable.
 rand.workspace = true

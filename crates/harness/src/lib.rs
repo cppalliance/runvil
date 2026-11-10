@@ -36,9 +36,9 @@ pub use harness_runner::display_chain;
 pub use harness_runner::performers::BoxFuture;
 pub use harness_runner::performers::InferenceBroker;
 pub use harness_runner::performers::Timer;
-pub use runvil::PromptFinder;
-pub use runvil::RunLimits;
-pub use runvil::timestamp::Timestamp;
+pub use runvil_engine::PromptFinder;
+pub use runvil_engine::RunLimits;
+pub use runvil_engine::timestamp::Timestamp;
 
 pub mod pack {
     //! The registry a Host's Plugins insert Packs into, the Packs
@@ -78,7 +78,7 @@ pub mod record {
     pub use harness_runner::recorder::RunMeta;
     pub use harness_runner::recorder::RunRecorder;
     pub use harness_runner::recorder::make_recorder_error;
-    pub use runvil::RunSeed;
+    pub use runvil_engine::RunSeed;
 }
 
 pub mod vfs {
@@ -86,8 +86,8 @@ pub mod vfs {
     //! access each tool call receives through its context, and the origin
     //! each file operation carries to say who asked for it.
 
-    pub use runvil::vfs::Access;
-    pub use runvil::vfs::Origin;
-    pub use runvil::vfs::VfsError;
-    pub use runvil::vfs::VfsRef;
+    pub use runvil_engine::vfs::Access;
+    pub use runvil_engine::vfs::Origin;
+    pub use runvil_engine::vfs::VfsError;
+    pub use runvil_engine::vfs::VfsRef;
 }

@@ -6,7 +6,7 @@
 //! `store` call outside a prelude's install, and timer as an [`Effect`] the
 //! Harness performs and answers, and reports every boundary as an event
 //! returned from `step`. Other crates reach these items through the
-//! `runvil` facade.
+//! `runvil-engine` facade.
 //!
 //! ## Invariants
 //!
@@ -32,7 +32,7 @@ use crate::error::{Error, Result};
 
 // The crate root is the one path to this crate's items; the
 // `execute` module stays private and every item that remains public inside it
-// is re-exported here, so the `runvil` facade names
+// is re-exported here, so the `runvil-engine` facade names
 // `runvil_runtime::X`, not a module path.
 pub use crate::execute::{
     Effect, EffectAnswer, EffectId, IssuedEffect, PackToolSets, Round, Run, RunLimits, RunParams,

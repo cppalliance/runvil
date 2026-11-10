@@ -8,8 +8,10 @@
 //! each operation like any other. Both are synchronous, like the VFS, and
 //! the Harness runs them inline in the run's future.
 
-use runvil::vfs::{Origin, VfsError, VfsOp, VfsOutcome, VfsRef, make_store_error, perform_vfs_op};
-use runvil::{Error, ErrorCode, ErrorFact};
+use runvil_engine::vfs::{
+    Origin, VfsError, VfsOp, VfsOutcome, VfsRef, make_store_error, perform_vfs_op,
+};
+use runvil_engine::{Error, ErrorCode, ErrorFact};
 
 /// Puts the prompt's declared input in place in `vfs`'s store: writes
 /// `text` at `declared`, overwriting any file there, or, when the launch
@@ -151,8 +153,8 @@ mod tests {
     //! that replaces it when the run did not complete, the prompt declares no
     //! output, the run left no file, or the store refuses the read.
 
-    use runvil::vfs::{Origin, VfsRef};
-    use runvil::{Error, ErrorCode, ErrorFact};
+    use runvil_engine::vfs::{Origin, VfsRef};
+    use runvil_engine::{Error, ErrorCode, ErrorFact};
     use serde_json::json;
 
     use super::report_output;

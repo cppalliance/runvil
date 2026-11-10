@@ -6,8 +6,8 @@
 //! launcher puts its selection in each run's `RunSetup`, and the run binds
 //! the model the broker lists under that selection.
 
-use runvil::model::{ModelId, ModelInfo};
-use runvil::{Error, ErrorCode, ErrorFact};
+use runvil_engine::model::{ModelId, ModelInfo};
+use runvil_engine::{Error, ErrorCode, ErrorFact};
 
 use crate::performers::InferenceBroker;
 

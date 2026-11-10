@@ -16,10 +16,10 @@ use std::time::Duration;
 use harness_runner::display_chain;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder};
-use runvil::Step;
-use runvil::cancel::CancelHandle;
-use runvil::vfs::{MemoryBackend, Origin, VfsRef};
-use runvil::{Error, ErrorCode};
+use runvil_engine::Step;
+use runvil_engine::cancel::CancelHandle;
+use runvil_engine::vfs::{MemoryBackend, Origin, VfsRef};
+use runvil_engine::{Error, ErrorCode};
 use serde_json::json;
 
 use crate::support::{

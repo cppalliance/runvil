@@ -9,6 +9,17 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
+use super::load::Facade;
+use super::{Mode, Outcome, Report};
+
+/// The fixture workspaces' facade: `crates/runvil` over
+/// `crates/runvil-internal/`.
+pub(super) const FIXTURE: Facade = Facade {
+    package: "runvil",
+    dir: ["crates", "runvil"],
+    container: "runvil-internal",
+};
+
 const WORKSPACE: &str = "[workspace]\nresolver = \"3\"\nmembers = [\
     \"crates/runvil\", \"crates/runvil-internal/*\", \"crates/serde\"]\n";
 
@@ -95,9 +106,19 @@ pub(super) fn write(root: &Path, path: &str, text: &str) {
     std::fs::write(file, text).expect("the fixture file writes");
 }
 
+/// The report for the fixture facade of the workspace at `root`.
+pub(super) fn report(root: &Path) -> Result<Report, String> {
+    super::report(root, &FIXTURE)
+}
+
+/// Runs the fixture facade of the workspace at `root` in `mode`.
+pub(super) fn execute(root: &Path, mode: Mode) -> Result<Outcome, String> {
+    super::execute(root, &FIXTURE, mode)
+}
+
 /// The findings for the workspace at `root`, as printed.
 pub(super) fn findings(root: &Path) -> BTreeSet<String> {
-    super::report(root)
+    report(root)
         .expect("the fixture documents")
         .findings
         .iter()

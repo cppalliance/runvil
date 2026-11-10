@@ -54,7 +54,7 @@ use harness::pack::{HostServices, PackRegistry, Packs};
 use harness::record::RunId;
 use harness::{Host, RunSetup};
 use plugin_web::SEARCH_PROVIDER;
-use runvil::{Error, ErrorCode};
+use runvil_engine::{Error, ErrorCode};
 use runvil_plugin::ServiceKey;
 use serde_json::{Map, Value};
 use workshop_agents::{

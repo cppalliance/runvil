@@ -11,9 +11,9 @@ use std::task::{Poll, Waker};
 
 use harness::record::{MemoryRecorder, RecordKind};
 use harness::{BoxFuture, Harness, InferenceBroker, RunSetup};
-use runvil::effect::Round;
-use runvil::event::ReplyOrigin;
-use runvil::model::{
+use runvil_engine::effect::Round;
+use runvil_engine::event::ReplyOrigin;
+use runvil_engine::model::{
     Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
     ModelInfo, ThinkingMode, ToolSchema,
 };
@@ -94,7 +94,7 @@ struct Stuck {
 }
 
 impl InferenceBroker for Stuck {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, runvil::Error>> {
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, runvil_engine::Error>> {
         let catalog = self.catalog.clone();
         Box::pin(async move { Ok(catalog) })
     }
@@ -106,7 +106,7 @@ impl InferenceBroker for Stuck {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         _round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, runvil::Error>> {
+    ) -> BoxFuture<Result<Box<Completion>, runvil_engine::Error>> {
         self.started.raise();
         Box::pin(std::future::pending())
     }
@@ -133,7 +133,7 @@ struct Streaming {
 }
 
 impl InferenceBroker for Streaming {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, runvil::Error>> {
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, runvil_engine::Error>> {
         let catalog = self.catalog.clone();
         Box::pin(async move { Ok(catalog) })
     }
@@ -145,7 +145,7 @@ impl InferenceBroker for Streaming {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, runvil::Error>> {
+    ) -> BoxFuture<Result<Box<Completion>, runvil_engine::Error>> {
         let window = (round.origin == ReplyOrigin::Chat).then(|| self.window.clone());
         let said = messages
             .last()
@@ -213,7 +213,7 @@ async fn a_run_canceled_before_it_begins_is_recorded_as_canceled_before_it_start
         report
             .result
             .as_ref()
-            .is_err_and(runvil::Error::is_canceled),
+            .is_err_and(runvil_engine::Error::is_canceled),
         "the run ends canceled: {:?}",
         report.result
     );

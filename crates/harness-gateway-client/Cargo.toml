@@ -17,7 +17,7 @@ plugin-web.workspace = true
 # Completion) and the universal error the wire code reads and builds
 # through its public constructors, and the canonical metrics and model
 # catalog vocabulary.
-runvil.workspace = true
+runvil-engine.workspace = true
 # `SearchProvider` is an `async_trait` trait.
 async-trait.workspace = true
 # Names `bytes::Bytes`, the buffer `reqwest` yields per body chunk, as the

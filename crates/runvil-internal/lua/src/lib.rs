@@ -55,7 +55,7 @@
 //! executor, which drives the VM and the coroutine protocol; the facade
 //! re-exports the store protocol ([`VfsOp`], [`VfsOutcome`],
 //! [`make_store_error`]) and the roster entry ([`RosterEntry`]);
-//! `crates/runvil/public-api.txt` holds the full surface. The
+//! `crates/runvil-engine/public-api.txt` holds the full surface. The
 //! `test_support` module, built for this crate's tests and under the
 //! `test-support` feature, holds what tests reach beyond that surface.
 //!

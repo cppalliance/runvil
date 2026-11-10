@@ -80,7 +80,7 @@ fn the_engine_crate_set_is_the_root_crates_plus_every_container_member() {
     assert_eq!(
         names,
         [
-            "runvil",
+            "runvil-engine",
             "runvil-internal/lua",
             "runvil-internal/store",
             "runvil-plugin",
@@ -119,8 +119,8 @@ fn the_facade_forwarding_the_engine_test_support_feature_passes_every_engine_gua
     test_support::write_crate(root.path(), "runvil-internal/types", "runvil-types", "");
     test_support::write_crate(
         root.path(),
-        "runvil",
-        "runvil",
+        "runvil-engine",
+        "runvil-engine",
         "[dependencies]\nrunvil-runtime = { path = \"../runvil-internal/runtime\" }\n\
          [features]\ntest-support = [\"runvil-runtime/test-support\"]\n",
     );
@@ -165,7 +165,11 @@ fn a_missing_root_engine_crate_is_reported_not_skipped() {
         "[dependencies]\nserde = \"1\"\n",
         "pub struct Live;\n",
     );
-    let facade_manifest = root.path().join("crates").join("runvil").join("Cargo.toml");
+    let facade_manifest = root
+        .path()
+        .join("crates")
+        .join("runvil-engine")
+        .join("Cargo.toml");
     let violations = engine_guard_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(

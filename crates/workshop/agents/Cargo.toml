@@ -12,7 +12,7 @@ repository.workspace = true
 harness.workspace = true
 # The Engine's public API: the events a conversation observes, and the
 # round ids its deltas and transcript stamp.
-runvil.workspace = true
+runvil-engine.workspace = true
 # Conversation ids are 128 bits from the OS CSPRNG: unguessable by
 # anything that has not seen the acknowledging frame.
 rand.workspace = true

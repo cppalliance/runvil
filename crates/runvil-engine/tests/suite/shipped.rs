@@ -4,8 +4,8 @@
 use std::fs;
 use std::path::Path;
 
-use runvil::ToolCatalog;
-use runvil::effect::{ToolCallOrigin, ToolCaller};
+use runvil_engine::ToolCatalog;
+use runvil_engine::effect::{ToolCallOrigin, ToolCaller};
 use serde_json::{Value, json};
 
 use super::support::{Scenario, TestResult, Tool, Trace, calls, text, tool_info};

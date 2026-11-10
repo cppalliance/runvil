@@ -2,7 +2,7 @@
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use runvil::{Error, ErrorFact};
+use runvil_engine::{Error, ErrorFact};
 use serde_json::Value;
 
 use crate::recorder::{Record, RecorderFuture, RunId, RunMeta, RunRecorder, make_recorder_error};

@@ -10,19 +10,19 @@ use harness_runner::display_chain;
 use harness_runner::recorder::{
     MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder, make_recorder_error,
 };
-use runvil::{ErrorCode, ErrorFact};
+use runvil_engine::{ErrorCode, ErrorFact};
 use serde_json::json;
 
 use crate::support::TEST_SEED;
 
 /// The result of a canceled run.
-fn canceled() -> Result<String, runvil::Error> {
-    Err(runvil::Error::canceled())
+fn canceled() -> Result<String, runvil_engine::Error> {
+    Err(runvil_engine::Error::canceled())
 }
 
 /// Asserts `error` is the memory recorder's refusal of run `run` for
 /// `reason`.
-fn assert_refused(error: &runvil::Error, run: i64, reason: &str) {
+fn assert_refused(error: &runvil_engine::Error, run: i64, reason: &str) {
     assert_eq!(error.code, ErrorCode::RecorderFailed);
     assert_eq!(error.facts.get(&ErrorFact::Reason), Some(&json!(reason)));
     assert_eq!(error.facts.get(&ErrorFact::Run), Some(&json!(run)));
@@ -248,7 +248,7 @@ async fn a_second_end_run_fails_and_keeps_the_first_result() {
     recorder.end_run(run, canceled()).await.unwrap();
 
     let code = ErrorCode::Internal;
-    let second = runvil::Error::new(code, "a second end", code.prose());
+    let second = runvil_engine::Error::new(code, "a second end", code.prose());
     let error = recorder
         .end_run(run, Err(second))
         .await

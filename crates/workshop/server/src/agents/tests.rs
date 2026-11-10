@@ -21,12 +21,12 @@ use harness::record::MemoryRecorder;
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Host, InferenceBroker, RunSetup};
 use plugin_web::SEARCH_PROVIDER;
-use runvil::effect::Round;
-use runvil::model::{
+use runvil_engine::effect::Round;
+use runvil_engine::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };
-use runvil::{Error, ErrorCode};
+use runvil_engine::{Error, ErrorCode};
 use runvil_plugin::{ServiceKey, TOKIO_RUNTIME};
 use serde_json::json;
 use workshop_agents::{Conversations, SessionState, TokioTimer, load_agent};

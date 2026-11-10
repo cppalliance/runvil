@@ -2241,7 +2241,7 @@ version = "0.3.0"
 dependencies = [
  "harness-plugin-loader",
  "harness-runner",
- "runvil",
+ "runvil-engine",
  "runvil-plugin",
  "serde_json",
  "tokio",
@@ -2257,7 +2257,7 @@ dependencies = [
  "harness",
  "plugin-web",
  "reqwest",
- "runvil",
+ "runvil-engine",
  "serde",
  "serde_json",
  "tokio",
@@ -2279,7 +2279,7 @@ version = "0.3.0"
 dependencies = [
  "futures-util",
  "rand 0.9.5",
- "runvil",
+ "runvil-engine",
  "runvil-plugin",
  "serde_json",
  "thiserror 2.0.19",
@@ -4711,7 +4711,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "runvil"
+name = "runvil-engine"
 version = "0.3.0"
 dependencies = [
  "runvil-lua",
@@ -7891,7 +7891,7 @@ version = "0.0.0"
 dependencies = [
  "harness",
  "rand 0.9.5",
- "runvil",
+ "runvil-engine",
  "serde",
  "serde_json",
  "tempfile",
@@ -7974,7 +7974,7 @@ name = "workshop-run-log"
 version = "0.0.0"
 dependencies = [
  "harness",
- "runvil",
+ "runvil-engine",
  "serde_json",
  "shared-error-source",
  "tempfile",
@@ -7997,7 +7997,7 @@ dependencies = [
  "plugin-std",
  "plugin-web",
  "reqwest",
- "runvil",
+ "runvil-engine",
  "runvil-plugin",
  "rust-embed",
  "serde",

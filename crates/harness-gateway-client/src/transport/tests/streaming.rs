@@ -1,8 +1,8 @@
 //! The streamed round end to end: what goes on the wire, and how the
 //! stream comes back as one completion.
 
-use runvil::model::{CompletionResult, Message};
-use runvil::{ErrorCode, ErrorFact};
+use runvil_engine::model::{CompletionResult, Message};
+use runvil_engine::{ErrorCode, ErrorFact};
 
 use super::*;
 use crate::StreamDelta;

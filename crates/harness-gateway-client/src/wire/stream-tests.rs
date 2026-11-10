@@ -1,7 +1,7 @@
 //! Tests for the streaming accumulator and the SSE data-line scanner.
 
-use runvil::model::CompletionResult;
-use runvil::{ErrorCode, ErrorFact};
+use runvil_engine::model::CompletionResult;
+use runvil_engine::{ErrorCode, ErrorFact};
 use serde_json::Value;
 
 use super::*;

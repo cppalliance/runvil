@@ -9,7 +9,7 @@ use std::sync::{Arc, OnceLock};
 
 use harness_runner::recorder::MemoryRecorder;
 use harness_runner::{RunControl, RunSetup};
-use runvil::vfs::VfsRef;
+use runvil_engine::vfs::VfsRef;
 use serde_json::json;
 
 use super::{

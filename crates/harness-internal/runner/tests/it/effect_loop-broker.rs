@@ -11,17 +11,17 @@ use harness_runner::RunSetup;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::performers::{BoxFuture, InferenceBroker};
 use harness_runner::recorder::{RecordKind, RunRecorder};
-use runvil::Error;
-use runvil::cancel::CancelHandle;
-use runvil::effect::Round;
-use runvil::event::ReplyOrigin;
-use runvil::ids::RoundId;
-use runvil::model::{
+use runvil_engine::Error;
+use runvil_engine::cancel::CancelHandle;
+use runvil_engine::effect::Round;
+use runvil_engine::event::ReplyOrigin;
+use runvil_engine::ids::RoundId;
+use runvil_engine::model::{
     Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
     ModelInfo, ModelRole, ThinkingMode, ToolSchema,
 };
-use runvil::timestamp::Timestamp;
-use runvil::{Prompt, Run, RunParams};
+use runvil_engine::timestamp::Timestamp;
+use runvil_engine::{Prompt, Run, RunParams};
 use serde_json::{Value, json};
 
 use super::begun_log;

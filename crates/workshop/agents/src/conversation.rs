@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 
 use harness::RunControl;
 use harness::record::RunId;
-use runvil::event::Event;
+use runvil_engine::event::Event;
 use tokio::sync::{broadcast, watch};
 
 use crate::protocol::{ConversationId, Delta, SessionEvent};

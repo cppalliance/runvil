@@ -1,7 +1,7 @@
 //! The gateway client against an axum mock gateway: environment loading,
 //! the bearer on the wire, the streamed round, and the bounds.
 
-use runvil::model::CompletionOptions;
+use runvil_engine::model::CompletionOptions;
 use serde_json::Value;
 
 use super::*;

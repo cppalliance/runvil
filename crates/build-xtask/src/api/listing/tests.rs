@@ -7,8 +7,8 @@
 //! `#[non_exhaustive]` prefix, the kind suffix, and the private-fields
 //! marker, each read from the rustdoc JSON the pinned nightly writes.
 
-use super::super::fixture::{leak, workspace, write};
-use super::super::{Mode, execute, report};
+use super::super::Mode;
+use super::super::fixture::{FIXTURE, execute, leak, report, workspace, write};
 use super::*;
 
 fn owned(lines: &[&str]) -> Vec<String> {
@@ -96,7 +96,7 @@ fn a_snapshot_difference_fails_check_until_blessed() {
     assert!(!clean.failed, "{:?}", clean.lines);
     assert_eq!(
         clean.lines,
-        ["api: 0 violations; the listing matches public-api.txt"]
+        ["api: runvil: 0 violations; the listing matches public-api.txt"]
     );
     write(
         root.path(),
@@ -124,9 +124,9 @@ fn bless_refuses_while_a_violation_remains() {
     assert!(outcome.failed, "{:?}", outcome.lines);
     assert_eq!(
         outcome.lines.last().map(String::as_str),
-        Some("api: bless refused: 1 violations remain")
+        Some("api: runvil: bless refused: 1 violations remain")
     );
-    assert!(!path(root.path()).exists());
+    assert!(!path(root.path(), &FIXTURE).exists());
 }
 
 #[test]
@@ -134,11 +134,11 @@ fn bless_refuses_while_a_violation_remains() {
 fn a_violation_alone_fails_check_and_a_plain_run_only_prints_it() {
     let root = workspace(LEAKING_INNER, LEAKING_FACADE);
     let listing = report(root.path()).expect("the fixture documents").listing;
-    std::fs::write(path(root.path()), text(&listing)).expect("the listing writes");
+    std::fs::write(path(root.path(), &FIXTURE), text(&listing)).expect("the listing writes");
     let leak = leak("runvil_inner");
     let expected = [
         format!("runvil::make: mentions `runvil_inner::Secret` in its signature: {leak}"),
-        "api: 1 violations; the listing matches public-api.txt".to_owned(),
+        "api: runvil: 1 violations; the listing matches public-api.txt".to_owned(),
     ];
     let check = execute(root.path(), Mode::Check).expect("the fixture documents");
     assert!(check.failed, "{:?}", check.lines);

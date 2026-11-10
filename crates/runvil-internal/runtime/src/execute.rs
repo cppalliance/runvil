@@ -2,7 +2,7 @@
 //!
 //! The public design - the section walk, the caller's step loop, reporting,
 //! tool binding, and running without a runtime - is documented on the
-//! `runvil` facade's crate page and its role modules.
+//! `runvil-engine` facade's crate page and its role modules.
 //!
 //! # Module layout
 //!

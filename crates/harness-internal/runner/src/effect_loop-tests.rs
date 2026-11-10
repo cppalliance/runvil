@@ -7,15 +7,15 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use runvil::cancel::CancelHandle;
-use runvil::effect::{Round, ToolCallOrigin};
-use runvil::model::{
+use runvil_engine::cancel::CancelHandle;
+use runvil_engine::effect::{Round, ToolCallOrigin};
+use runvil_engine::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
 };
-use runvil::timestamp::Timestamp;
-use runvil::vfs::Access;
-use runvil::{Error, ErrorCode, Prompt, Run, RunParams, RunSeed, Step};
-use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
+use runvil_engine::timestamp::Timestamp;
+use runvil_engine::vfs::Access;
+use runvil_engine::{Error, ErrorCode, Prompt, Run, RunParams, RunSeed, Step};
+use runvil_engine::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use serde_json::{Value, json};
 
 use super::{STALLED, drive};

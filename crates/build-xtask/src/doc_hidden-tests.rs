@@ -51,7 +51,7 @@ const HIDDEN: &[u8] = b"#[doc(hidden)]\npub struct Seam;\n";
 /// One clean source under each directory the ban covers, so none is
 /// reported missing.
 const BANNED_DIR_LIBS: [(&str, &[u8]); 4] = [
-    ("crates/runvil/src/lib.rs", b"pub use x::Y;\n"),
+    ("crates/runvil-engine/src/lib.rs", b"pub use x::Y;\n"),
     ("crates/harness/src/lib.rs", b"pub use x::Y;\n"),
     (
         "crates/runvil-internal/lua/src/lib.rs",
@@ -252,8 +252,8 @@ fn a_violation_names_the_file_line_rule_required_and_found() {
 #[test]
 fn every_rs_file_under_the_facade_and_the_container_is_scanned() {
     let hidden = [
-        "crates/runvil/tests/suite/main.rs",
-        "crates/runvil/benches/surface.rs",
+        "crates/runvil-engine/tests/suite/main.rs",
+        "crates/runvil-engine/benches/surface.rs",
         "crates/runvil-internal/lua/src/nested/deep.rs",
         "crates/runvil-internal/lua/build.rs",
         "crates/runvil-internal/model-client/src/client/wire.rs",
@@ -294,7 +294,7 @@ fn files_outside_the_facades_and_containers_are_not_scanned() {
         ("crates/runvil-internal-old/src/lib.rs", HIDDEN),
         ("crates/harness-internal-old/src/lib.rs", HIDDEN),
         ("crates/runvil-internal/target/debug/out.rs", HIDDEN),
-        ("crates/runvil/src/notes.md", HIDDEN),
+        ("crates/runvil-engine/src/notes.md", HIDDEN),
     ]);
     let root = tree(&files);
     let violations = doc_hidden_violations(root.path());
@@ -304,7 +304,7 @@ fn files_outside_the_facades_and_containers_are_not_scanned() {
 #[test]
 fn a_missing_facade_or_container_directory_is_reported_not_skipped() {
     for missing in [
-        "crates/runvil",
+        "crates/runvil-engine",
         "crates/harness",
         "crates/runvil-internal",
         "crates/harness-internal",

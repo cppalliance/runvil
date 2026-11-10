@@ -1,9 +1,9 @@
 //! The greeter, one tour at a time, up to the complete program in
 //! `examples/greeter.rs`.
 
-use runvil::Prompt;
-use runvil::cancel::CancelHandle;
-use runvil::effect::{Effect, EffectAnswer};
+use runvil_engine::Prompt;
+use runvil_engine::cancel::CancelHandle;
+use runvil_engine::effect::{Effect, EffectAnswer};
 
 use super::support::{Scenario, TestResult, note, prompt, shout, text};
 

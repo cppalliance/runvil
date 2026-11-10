@@ -11,7 +11,7 @@ use axum::http::StatusCode;
 use plugin_web::{
     Freshness, SafeSearch, SearchError, SearchErrorKind, SearchProvider, SearchQuery, SearchResult,
 };
-use runvil::{Error, ErrorCode};
+use runvil_engine::{Error, ErrorCode};
 
 /// Asserts `error`'s source is the Gateway's failure under `code`, whose
 /// prose is `error`'s text and whose message holds that text and more.

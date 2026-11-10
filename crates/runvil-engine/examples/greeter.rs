@@ -10,14 +10,16 @@ use std::error::Error;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use runvil::cancel::CancelHandle;
-use runvil::effect::{Effect, EffectAnswer, IssuedEffect};
-use runvil::event::Event;
-use runvil::model::{Completion, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode};
-use runvil::timestamp::Timestamp;
-use runvil::vfs::perform_vfs_op;
-use runvil::{Prompt, Run, RunParams, RunSeed, Step};
-use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
+use runvil_engine::cancel::CancelHandle;
+use runvil_engine::effect::{Effect, EffectAnswer, IssuedEffect};
+use runvil_engine::event::Event;
+use runvil_engine::model::{
+    Completion, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode,
+};
+use runvil_engine::timestamp::Timestamp;
+use runvil_engine::vfs::perform_vfs_op;
+use runvil_engine::{Prompt, Run, RunParams, RunSeed, Step};
+use runvil_engine::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 
 /// Writes a note, asks the default model to reply, and shouts the reply.
 pub const GREETER: &str = concat!(

@@ -1,8 +1,8 @@
 //! Tests for model resolution: nothing to resolve, a model list the broker
 //! cannot fetch, and a selection the list lacks.
 
-use runvil::effect::Round;
-use runvil::model::{
+use runvil_engine::effect::Round;
+use runvil_engine::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };

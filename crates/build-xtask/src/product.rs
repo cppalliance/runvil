@@ -5,29 +5,28 @@
 //! family, and its dependencies of every kind (normal, dev, build, and
 //! target-specific) are checked against the matrix:
 //!
-//! - `runvil`/`runvil-*` crates must not depend on workshop or Harness
-//!   crates.
+//! - `runvil-*` crates must not depend on workshop or Harness crates.
 //! - `workshop`/`workshop-*` crates must not depend on Harness crates,
 //!   except through the Harness family's two public crates.
 //! - `harness`/`harness-*` crates must not depend on shared or
 //!   workshop crates; outside their own family they may name only
-//!   `runvil` and `runvil-plugin`, which rules out `build-*`
+//!   `runvil-engine` and `runvil-plugin`, which rules out `build-*`
 //!   and other unaffiliated crates.
 //! - `plugin-*` crates may depend only on `runvil-plugin`, `shared-*`
-//!   crates, and outside libraries. `runvil` and Harness crates must not
-//!   depend on `plugin-*` crates, except `harness-gateway-client`, which
+//!   crates, and outside libraries. `runvil-*` and Harness crates must
+//!   not depend on `plugin-*` crates, except `harness-gateway-client`, which
 //!   implements web's `SearchProvider`.
 //! - `shared-*` crates must not depend on any product crate.
 //! - Public API: a crate outside the runvil family may depend on
-//!   the family only through its two public crates, `runvil` and
+//!   the family only through its two public crates, `runvil-engine` and
 //!   `runvil-plugin`, and a crate outside the Harness family on that
 //!   family only through its two public crates, `harness` and
 //!   `harness-gateway-client`. The `build-*` crates are bound too.
 //! - Container privacy: the manifestless `crates/runvil-internal/`,
 //!   `crates/workshop/`, and `crates/harness-internal/` directories are
 //!   private to their families; only the crates inside a container and the
-//!   container's named outside exceptions (`runvil` and `runvil-plugin`
-//!   for `crates/runvil-internal/`, `harness` for
+//!   container's named outside exceptions (`runvil-engine` and
+//!   `runvil-plugin` for `crates/runvil-internal/`, `harness` for
 //!   `crates/harness-internal/`; the workshop container names none) may
 //!   depend on the crates it holds.
 //! - Desktop-app boundary: the `workshop` desktop app may depend on no
@@ -60,7 +59,7 @@ enum Family {
 
 /// Classifies a package name into its product family.
 fn family(package: &str) -> Family {
-    if package == "runvil" || package.starts_with("runvil-") {
+    if package.starts_with("runvil-") {
         Family::Runvil
     } else if package == "workshop" || package.starts_with("workshop-") {
         Family::Workshop
@@ -135,7 +134,7 @@ const SERVER_API: &str = "workshop-server-api";
 const SERVER: &str = "workshop-server";
 /// The runvil-family crates outside crates may depend on directly:
 /// the Engine facade and the Plugin contract.
-const PUBLIC_RUNVIL: [&str; 2] = ["runvil", "runvil-plugin"];
+const PUBLIC_RUNVIL: [&str; 2] = ["runvil-engine", "runvil-plugin"];
 /// The Harness family's facade: the one outside crate permitted into
 /// `crates/harness-internal/`.
 const HARNESS_FACADE: &str = "harness";
@@ -199,10 +198,10 @@ fn boundary_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<String> {
             Some("harness crates must not depend on shared crates")
         }
         (Family::Harness, Family::Build) => Some(
-            "harness crates must not depend on build-* crates; outside their family they may name only runvil and runvil-plugin",
+            "harness crates must not depend on build-* crates; outside their family they may name only runvil-engine and runvil-plugin",
         ),
         (Family::Harness, Family::Unaffiliated) => Some(
-            "harness crates must not depend on unaffiliated crates; outside their family they may name only runvil and runvil-plugin",
+            "harness crates must not depend on unaffiliated crates; outside their family they may name only runvil-engine and runvil-plugin",
         ),
         (Family::Shared, Family::Runvil | Family::Workshop | Family::Harness | Family::Plugin) => {
             Some("shared crates must not depend on product crates")
@@ -215,7 +214,7 @@ fn boundary_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<String> {
             && !PUBLIC_RUNVIL.contains(&dep.package.as_str())
         {
             Some(
-                "outside crates may depend on the runvil family only through runvil or runvil-plugin"
+                "outside crates may depend on the runvil family only through runvil-engine or runvil-plugin"
                     .to_owned(),
             )
         } else if from != Family::Harness
@@ -285,7 +284,7 @@ fn container_of(dir: &Path) -> Option<String> {
 /// the container names none.
 fn container_named_exception(container: &str) -> &'static [&'static str] {
     match container {
-        "runvil-internal" => &["runvil", "runvil-plugin"],
+        "runvil-internal" => &["runvil-engine", "runvil-plugin"],
         "harness-internal" => &[HARNESS_FACADE],
         _ => &[],
     }

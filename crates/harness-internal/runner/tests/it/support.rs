@@ -13,19 +13,19 @@ use harness_runner::recorder::{
     MemoryRecorder, Record, RecorderFuture, RunId, RunMeta, RunRecorder, make_recorder_error,
 };
 use harness_runner::{Host, Packs, RunSetup};
-use runvil::cancel::CancelHandle;
-use runvil::effect::{Round, ToolCallOrigin};
-use runvil::model::{
+use runvil_engine::cancel::CancelHandle;
+use runvil_engine::effect::{Round, ToolCallOrigin};
+use runvil_engine::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
 };
-use runvil::timestamp::Timestamp;
-use runvil::vfs::{
+use runvil_engine::timestamp::Timestamp;
+use runvil_engine::vfs::{
     Access, AcquireContext, Entry, ExecId, MemoryBackend, Stat, Vfs, VfsAccess, VfsError, VfsPath,
     VfsRef,
 };
-use runvil::{Error, ErrorCode, ErrorFact};
-use runvil::{Prompt, Run, RunParams, RunSeed};
-use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
+use runvil_engine::{Error, ErrorCode, ErrorFact};
+use runvil_engine::{Prompt, Run, RunParams, RunSeed};
+use runvil_engine::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil_plugin::{Pack, PackId, PackInfo, PackRegistry};
 use serde_json::{Value, json};
 
@@ -352,7 +352,7 @@ impl FailingRecorder {
         &self.inner
     }
 
-    fn count(&self) -> Result<(), runvil::Error> {
+    fn count(&self) -> Result<(), runvil_engine::Error> {
         let call = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
         if call == self.fail_on {
             return Err(make_recorder_error(format!(

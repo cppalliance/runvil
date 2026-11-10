@@ -1,7 +1,7 @@
 //! Operations on the parser's facade-visible types that only
 //! `runvil-runtime` performs.
 //!
-//! The `runvil` facade never re-exports this module, so only Engine
+//! The `runvil-engine` facade never re-exports this module, so only Engine
 //! crates reach it.
 
 use std::num::NonZeroU32;

@@ -51,8 +51,8 @@ pub(crate) const DOCS_VAR: &str = "RUNVIL_DOCS";
 /// the few broad words its landing row shows under Covers.
 const RUSTDOC_SITES: [(&str, &str, &str); 5] = [
     (
-        "runvil",
-        "runvil",
+        "runvil-engine",
+        "runvil-engine",
         "The Engine: parsing and running prompts",
     ),
     (

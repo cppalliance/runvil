@@ -13,7 +13,7 @@ harness.workspace = true
 # The Engine's public API: the error a run ends with and its code, which
 # the log stores and rebuilds, since `harness::record` re-exports neither.
 # The fidelity suite also round-trips the Engine's events through the log.
-runvil.workspace = true
+runvil-engine.workspace = true
 serde_json.workspace = true
 shared-error-source = { workspace = true, features = ["database", "json"] }
 thiserror.workspace = true

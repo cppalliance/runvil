@@ -1,8 +1,8 @@
 //! Tests for the transcript: every event is numbered from zero, and a
 //! round's content events take their `reply` from that round.
 
-use runvil::event::{Event, ReplyOrigin};
-use runvil::ids::{Provenance, RoundId};
+use runvil_engine::event::{Event, ReplyOrigin};
+use runvil_engine::ids::{Provenance, RoundId};
 
 use super::*;
 

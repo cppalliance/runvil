@@ -12,7 +12,7 @@ use std::num::NonZeroU32;
 use std::path::Path;
 
 use harness::record::RunSeed;
-use runvil::{Error, ErrorCode, SourceLoc};
+use runvil_engine::{Error, ErrorCode, SourceLoc};
 use workshop_run_log::{LogError, RunId, RunLog, RunMeta, RunRow};
 
 /// The agent the Host launched.

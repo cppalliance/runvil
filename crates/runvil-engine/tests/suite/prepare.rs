@@ -3,11 +3,11 @@
 //! isolation case and the start-check refusals that reach engine-only
 //! items sit in `runvil-runtime`'s own suite.
 
-use runvil::ErrorCode;
-use runvil::event::Event;
-use runvil::model::{ModelRole, ThinkingMode};
-use runvil::vfs::{MemoryBackend, Origin, RealBackend, VfsError, VfsRef};
-use runvil::{ToolCatalog, ToolInfo, ToolOutput};
+use runvil_engine::ErrorCode;
+use runvil_engine::event::Event;
+use runvil_engine::model::{ModelRole, ThinkingMode};
+use runvil_engine::vfs::{MemoryBackend, Origin, RealBackend, VfsError, VfsRef};
+use runvil_engine::{ToolCatalog, ToolInfo, ToolOutput};
 
 use super::support::{Scenario, TempRoot, TestResult, Tool, Trace, model, prompt, text, tool_info};
 

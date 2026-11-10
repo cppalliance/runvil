@@ -4,7 +4,7 @@
 //! resume`. Every step's events are handed to the run's recorder before any
 //! of the step's effects is issued, so an effect's record never precedes the
 //! events its step reported. Each effect is appended as its
-//! [`record`](runvil::effect::Effect::record) and then handled by
+//! [`record`](runvil_engine::effect::Effect::record) and then handled by
 //! kind. A chat, render, tool-call, or timer effect's performer future
 //! joins the effects in flight, which the loop polls inside the run's own
 //! future: the loop starts no task, so a run is one future that any
@@ -87,13 +87,13 @@ use std::task::{Context, Poll, Waker};
 
 use futures_util::future::{AbortHandle, Abortable, Aborted, FutureExt as _};
 use futures_util::stream::{FuturesUnordered, StreamExt as _};
-use runvil::cancel::CancelHandle;
-use runvil::effect::{Effect, EffectAnswer, EffectId, IssuedEffect};
-use runvil::event::Event;
-use runvil::ids::{Provenance, TaskId};
-use runvil::vfs::{Access, VfsOp, perform_vfs_op};
-use runvil::{Error, ErrorCode};
-use runvil::{Run, Step};
+use runvil_engine::cancel::CancelHandle;
+use runvil_engine::effect::{Effect, EffectAnswer, EffectId, IssuedEffect};
+use runvil_engine::event::Event;
+use runvil_engine::ids::{Provenance, TaskId};
+use runvil_engine::vfs::{Access, VfsOp, perform_vfs_op};
+use runvil_engine::{Error, ErrorCode};
+use runvil_engine::{Run, Step};
 use tracing::Instrument as _;
 
 use crate::harness::{RunControl, SendQueue, StopSignal};

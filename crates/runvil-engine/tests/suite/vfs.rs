@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use runvil::vfs::{
+use runvil_engine::vfs::{
     MemoryBackend, Mode, ModePolicy, Op, OpEvent, Origin, VfsError, VfsOp, VfsOutcome, VfsRef,
     perform_vfs_op,
 };

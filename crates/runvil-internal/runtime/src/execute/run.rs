@@ -1,6 +1,6 @@
 //! The run: the Engine's boundary with its caller, which `Run`'s methods
 //! cross by exchanging effects and events as values. The caller's loop is
-//! documented on the `runvil` facade's crate page and its `effect` and
+//! documented on the `runvil-engine` facade's crate page and its `effect` and
 //! `cancel` modules.
 //!
 //! The effect vocabulary - [`Effect`] with its [`Round`] and

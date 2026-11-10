@@ -13,7 +13,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use harness::record::{Record, RecordKind, RunId, RunMeta, RunRecorder, RunSeed};
-use runvil::{Error, ErrorCode};
+use runvil_engine::{Error, ErrorCode};
 use serde_json::json;
 use workshop_run_log::{LogError, RecordFilter, RunLog, TursoRecorder};
 

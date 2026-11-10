@@ -1,6 +1,6 @@
 //! Answering every kind of effect, and logging each with its answer.
 
-use runvil::effect::{ToolCallOrigin, ToolCaller};
+use runvil_engine::effect::{ToolCallOrigin, ToolCaller};
 use serde_json::{Value, json};
 
 use super::support::{Scenario, TestResult, prompt, shout, text};
