@@ -2,7 +2,7 @@
 
 use std::num::NonZeroU32;
 
-use runvil::{Error, ErrorCode, ErrorFact, RunSeed, SourceLoc};
+use runvil::{Error, ErrorCode, ErrorFact, RunSeed, SourceLoc, Timestamp};
 use serde_json::json;
 use workshop_run_log::{LogError, Record, RecordFilter, RecordKind, RunId, RunLog, RunMeta};
 
@@ -20,7 +20,7 @@ fn meta() -> RunMeta {
     RunMeta {
         seed: RunSeed::from_bytes([0xfe; 32]),
         flags: 0,
-        started_at: 1_700_000_000_000,
+        started_at: Timestamp::from_unix_millis(1_700_000_000_000),
     }
 }
 
@@ -102,7 +102,7 @@ async fn a_run_with_three_records_round_trips_through_an_in_memory_log() {
         assert_eq!(stored.record.task_id, "0");
         assert_eq!(stored.record.task_seq, task_seq);
         assert_eq!(stored.record.payload, json!({ "task_seq": task_seq }));
-        assert!(stored.at >= row.meta.started_at);
+        assert!(stored.at >= row.meta.started_at.unix_millis());
     }
 }
 
@@ -224,7 +224,10 @@ async fn end_run_fills_ended_at_and_the_result() {
     log.end_run(run, Ok("done".to_owned())).await.unwrap();
 
     let row = log.run(run).await.unwrap();
-    assert!(row.ended_at.is_some_and(|at| at >= row.meta.started_at));
+    assert!(
+        row.ended_at
+            .is_some_and(|at| at >= row.meta.started_at.unix_millis())
+    );
     assert_eq!(row.result, Some(Ok("done".to_owned())));
 }
 

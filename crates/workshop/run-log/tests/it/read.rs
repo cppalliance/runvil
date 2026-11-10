@@ -1,6 +1,6 @@
 //! The read path: the whole transcript for session views.
 
-use runvil::RunSeed;
+use runvil::{RunSeed, Timestamp};
 use serde_json::json;
 use workshop_run_log::{LogError, Record, RecordKind, RunId, RunLog, RunMeta};
 
@@ -12,7 +12,7 @@ fn meta() -> RunMeta {
     RunMeta {
         seed: RunSeed::from_bytes([3; 32]),
         flags: 0,
-        started_at: 1_700_000_000_000,
+        started_at: Timestamp::from_unix_millis(1_700_000_000_000),
     }
 }
 

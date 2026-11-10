@@ -9,7 +9,7 @@ use runvil::harness::{
     MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder, make_recorder_error,
 };
 use runvil::ids::Provenance;
-use runvil::{BoxFuture, Error, RunSeed};
+use runvil::{BoxFuture, Error, RunSeed, Timestamp};
 
 use crate::state::FailureKind;
 use crate::table::Conversations;
@@ -20,7 +20,7 @@ fn meta() -> RunMeta {
     RunMeta {
         seed: RunSeed::from_bytes([7; 32]),
         flags: 0,
-        started_at: 0,
+        started_at: Timestamp::UNIX_EPOCH,
     }
 }
 

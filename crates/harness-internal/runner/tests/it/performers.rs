@@ -14,7 +14,7 @@ use runvil_engine::Error;
 use runvil_engine::cancel::CancelHandle;
 use runvil_engine::effect::ToolCallOrigin;
 use runvil_engine::vfs::Access;
-use runvil_engine::{BoxFuture, ToolId, ToolOutput};
+use runvil_engine::{BoxFuture, Timestamp, ToolId, ToolOutput};
 use serde_json::{Value, json};
 
 use crate::support::{
@@ -44,7 +44,7 @@ fn meta() -> RunMeta {
     RunMeta {
         seed: TEST_SEED,
         flags: 0,
-        started_at: 0,
+        started_at: Timestamp::UNIX_EPOCH,
     }
 }
 

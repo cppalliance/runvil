@@ -1000,7 +1000,7 @@ pub runvil::harness::RecordKind::Effect
 pub runvil::harness::RecordKind::Event
 pub runvil::harness::RunMeta::flags: u32
 pub runvil::harness::RunMeta::seed: runvil::RunSeed
-pub runvil::harness::RunMeta::started_at: i64
+pub runvil::harness::RunMeta::started_at: runvil::Timestamp
 pub runvil::ids::AbandonReason::OwnerAborted
 pub runvil::ids::AbandonReason::OwnerFailed
 pub runvil::ids::AbandonReason::OwnerReturned

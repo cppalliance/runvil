@@ -25,8 +25,8 @@
 
 use std::fmt;
 
-use runvil_engine::RunSeed;
 use runvil_engine::{BoxFuture, Error, ErrorCode, ErrorFact};
+use runvil_engine::{RunSeed, Timestamp};
 
 pub use crate::recorder_memory::MemoryRecorder;
 
@@ -148,10 +148,10 @@ pub struct RunMeta {
     pub seed: RunSeed,
     /// Reserved. No flag is defined, and the Harness records 0.
     pub flags: u32,
-    /// When the run started, in UTC milliseconds since the Unix epoch.
-    /// The Engine receives the same value as `started_at`, so the record
-    /// and the run agree.
-    pub started_at: i64,
+    /// When the run started, as the Host's timer read it. The Engine
+    /// receives the same value as `started_at`, so the record and the
+    /// run agree.
+    pub started_at: Timestamp,
 }
 
 /// Which side of the effect loop a record came from.

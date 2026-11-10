@@ -168,11 +168,11 @@ impl Pack for Echo {
     }
 }
 
-/// The wall clock now, UTC milliseconds since the Unix epoch, the unit of
-/// `RunMeta::started_at`.
-fn unix_millis_now() -> i64 {
+/// The wall clock now, as the `Timestamp` that `RunMeta::started_at`
+/// holds.
+fn wall_clock_now() -> Timestamp {
     let elapsed = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    i64::try_from(elapsed.as_millis()).unwrap()
+    Timestamp::from_unix_millis(i64::try_from(elapsed.as_millis()).unwrap())
 }
 
 /// The final text of a completed run.
@@ -246,10 +246,10 @@ async fn a_refused_first_record_fails_the_run_as_a_recorder_failure_naming_the_r
 #[tokio::test]
 async fn two_runs_draw_different_seeds_and_both_begin_at_the_recorder_at_the_wall_clock() {
     let recorder = recorder();
-    let before = unix_millis_now();
+    let before = wall_clock_now();
     let first = report_of(PLAIN, bare(), setup_over(&recorder)).await;
     let second = report_of(PLAIN, bare(), setup_over(&recorder)).await;
-    let after = unix_millis_now();
+    let after = wall_clock_now();
 
     assert_ne!(
         first.run_id, second.run_id,
@@ -305,8 +305,7 @@ async fn a_pinned_timer_stamps_the_runs_start() {
         .meta(report.run_id)
         .expect("the recorder began the run");
     assert_eq!(
-        meta.started_at,
-        pinned.unix_millis(),
+        meta.started_at, pinned,
         "the run starts at the Host's clock"
     );
 }

@@ -58,7 +58,7 @@ pub(crate) async fn begin(
         .begin_run(RunMeta {
             seed,
             flags: 0,
-            started_at: started_at.unix_millis(),
+            started_at,
         })
         .await?;
     Ok((run_id, RunParams::new(seed, started_at)))

@@ -8,7 +8,7 @@
 use runvil::event::{Event, ReplyOrigin};
 use runvil::ids::{Provenance, RoundId, TaskId};
 use runvil::metrics::{CallMetrics, ClientTiming, LlamaTimings, Usage, VllmMetrics};
-use runvil::{Error, RunSeed};
+use runvil::{Error, RunSeed, Timestamp};
 use serde_json::{Map, Value, json};
 use workshop_run_log::{Record, RecordFilter, RecordKind, RunLog, RunMeta};
 
@@ -27,7 +27,7 @@ fn meta() -> RunMeta {
     RunMeta {
         seed: RunSeed::from_bytes([3; 32]),
         flags: 0,
-        started_at: 1_700_000_000_000,
+        started_at: Timestamp::from_unix_millis(1_700_000_000_000),
     }
 }
 

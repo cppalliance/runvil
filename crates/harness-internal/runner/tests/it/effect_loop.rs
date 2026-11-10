@@ -19,7 +19,7 @@ use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunId, RunMet
 use runvil_engine::Step;
 use runvil_engine::cancel::CancelHandle;
 use runvil_engine::vfs::{MemoryBackend, Origin, VfsRef};
-use runvil_engine::{Error, ErrorCode};
+use runvil_engine::{Error, ErrorCode, Timestamp};
 use serde_json::json;
 
 use crate::support::{
@@ -42,7 +42,7 @@ fn meta() -> RunMeta {
     RunMeta {
         seed: TEST_SEED,
         flags: 0,
-        started_at: 0,
+        started_at: Timestamp::UNIX_EPOCH,
     }
 }
 

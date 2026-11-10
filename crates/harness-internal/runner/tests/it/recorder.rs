@@ -10,7 +10,7 @@ use harness_runner::display_chain;
 use harness_runner::recorder::{
     MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder, make_recorder_error,
 };
-use runvil_engine::{ErrorCode, ErrorFact};
+use runvil_engine::{ErrorCode, ErrorFact, Timestamp};
 use serde_json::json;
 
 use crate::support::TEST_SEED;
@@ -32,7 +32,7 @@ fn meta() -> RunMeta {
     RunMeta {
         seed: TEST_SEED,
         flags: 0,
-        started_at: 1_700_000_000_000,
+        started_at: Timestamp::from_unix_millis(1_700_000_000_000),
     }
 }
 

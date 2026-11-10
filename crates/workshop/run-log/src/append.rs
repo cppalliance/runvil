@@ -68,8 +68,8 @@ impl RunLog {
     }
 
     /// Opens a run of `agent`, the agent the Host launched, and returns its
-    /// identity. `meta.started_at` is stored as given; the log stamps
-    /// nothing at begin.
+    /// identity. `meta.started_at` is stored as its UTC milliseconds since
+    /// the Unix epoch; the log stamps nothing at begin.
     ///
     /// # Errors
     /// Returns [`LogError::Database`] when the row cannot be written.
@@ -81,7 +81,7 @@ impl RunLog {
                     agent,
                     meta.seed.to_string(),
                     i64::from(meta.flags),
-                    meta.started_at,
+                    meta.started_at.unix_millis(),
                 ),
             )
             .await?;

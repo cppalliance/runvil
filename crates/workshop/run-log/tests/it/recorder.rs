@@ -13,7 +13,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use runvil::harness::{Record, RecordKind, RunId, RunMeta, RunRecorder};
-use runvil::{Error, ErrorCode, RunSeed};
+use runvil::{Error, ErrorCode, RunSeed, Timestamp};
 use serde_json::json;
 use workshop_run_log::{LogError, RecordFilter, RunLog, TursoRecorder};
 
@@ -27,14 +27,14 @@ const ALL: RecordFilter = RecordFilter {
 const AGENT: &str = "chat";
 
 /// When a test's first run starts.
-const FIRST: i64 = 1_700_000_000_000;
+const FIRST: Timestamp = Timestamp::from_unix_millis(1_700_000_000_000);
 
 /// When a test's second run starts, so a read tells the two runs apart.
-const SECOND: i64 = 1_700_000_000_001;
+const SECOND: Timestamp = Timestamp::from_unix_millis(1_700_000_000_001);
 
 /// A run's opening row as the Harness would write it, starting at
 /// `started_at`.
-fn meta(started_at: i64) -> RunMeta {
+fn meta(started_at: Timestamp) -> RunMeta {
     RunMeta {
         seed: RunSeed::from_bytes([0xfe; 32]),
         flags: 0,

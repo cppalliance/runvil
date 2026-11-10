@@ -1,6 +1,6 @@
 //! The read side: one run's row and its records, whole or sliced by kind.
 
-use runvil::{Error, ErrorCode, RunSeed};
+use runvil::{Error, ErrorCode, RunSeed, Timestamp};
 
 use crate::append::{RunLog, unsigned};
 use crate::error::LogError;
@@ -22,7 +22,7 @@ impl RunLog {
         let meta = RunMeta {
             seed: to_seed(row.get::<String>(1)?)?,
             flags: to_u32(row.get(2)?, "flags")?,
-            started_at: row.get(3)?,
+            started_at: Timestamp::from_unix_millis(row.get(3)?),
         };
         let agent = row.get(0)?;
         let ended_at: Option<i64> = row.get(4)?;

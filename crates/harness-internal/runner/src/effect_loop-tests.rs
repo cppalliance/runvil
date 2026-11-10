@@ -137,7 +137,7 @@ async fn a_run_left_with_nothing_to_await_reports_the_message_it_never_delivered
     let meta = RunMeta {
         seed: SEED,
         flags: 0,
-        started_at: 0,
+        started_at: Timestamp::UNIX_EPOCH,
     };
     let run_id = recorder.begin_run(meta).await.unwrap();
     assert!(control.send("first".to_owned()));

@@ -11,7 +11,7 @@
 use std::num::NonZeroU32;
 use std::path::Path;
 
-use runvil::{Error, ErrorCode, RunSeed, SourceLoc};
+use runvil::{Error, ErrorCode, RunSeed, SourceLoc, Timestamp};
 use workshop_run_log::{LogError, RunId, RunLog, RunMeta, RunRow};
 
 /// The agent the Host launched.
@@ -22,7 +22,7 @@ fn meta() -> RunMeta {
     RunMeta {
         seed: RunSeed::from_bytes([5; 32]),
         flags: 0,
-        started_at: 1_700_000_000_000,
+        started_at: Timestamp::from_unix_millis(1_700_000_000_000),
     }
 }
 
