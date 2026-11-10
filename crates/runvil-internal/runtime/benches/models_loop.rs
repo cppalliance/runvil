@@ -6,7 +6,7 @@
 //! overflow, which runs zero rounds and measures the overflow failure
 //! path.
 //!
-//! Run with `cargo bench -p runvil-engine`.
+//! Run with `cargo bench -p runvil-runtime`.
 
 // The criterion_group! macro expansion generates an undocumented public
 // entry point; bench targets have no docs contract.
@@ -24,10 +24,10 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use runvil_engine::test_support::scripted_chat::{ScriptedChat, ScriptedReply};
-use runvil_engine::test_support::{drive, perform_locally};
-use runvil_engine::{Effect, EffectAnswer, Run, RunParams};
 use runvil_prompt::Prompt;
+use runvil_runtime::test_support::scripted_chat::{ScriptedChat, ScriptedReply};
+use runvil_runtime::test_support::{drive, perform_locally};
+use runvil_runtime::{Effect, EffectAnswer, Run, RunParams};
 use runvil_types::error::{Error, ErrorCode};
 use runvil_types::models::{ModelCatalog, ModelId, ModelInfo, ModelRole, ThinkingMode};
 use runvil_types::seed::RunSeed;

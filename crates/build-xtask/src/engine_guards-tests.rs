@@ -112,8 +112,8 @@ fn the_facade_forwarding_the_engine_test_support_feature_passes_every_engine_gua
     test_support::write_engine_clippy_tomls(root.path());
     test_support::write_crate(
         root.path(),
-        "runvil-internal/engine",
-        "runvil-engine",
+        "runvil-internal/runtime",
+        "runvil-runtime",
         "[features]\ntest-support = []\n",
     );
     test_support::write_crate(root.path(), "runvil-internal/types", "runvil-types", "");
@@ -121,8 +121,8 @@ fn the_facade_forwarding_the_engine_test_support_feature_passes_every_engine_gua
         root.path(),
         "runvil",
         "runvil",
-        "[dependencies]\nrunvil-engine = { path = \"../runvil-internal/engine\" }\n\
-         [features]\ntest-support = [\"runvil-engine/test-support\"]\n",
+        "[dependencies]\nrunvil-runtime = { path = \"../runvil-internal/runtime\" }\n\
+         [features]\ntest-support = [\"runvil-runtime/test-support\"]\n",
     );
     test_support::write_crate(root.path(), "runvil-plugin", "runvil-plugin", "");
     let violations = engine_guard_violations(root.path());
@@ -155,7 +155,7 @@ fn a_missing_root_engine_crate_is_reported_not_skipped() {
     test_support::write_engine_clippy_tomls(root.path());
     write_crate(
         root.path(),
-        "runvil-internal/engine",
+        "runvil-internal/runtime",
         "[dependencies]\nserde = \"1\"\n",
         "pub struct Live;\n",
     );

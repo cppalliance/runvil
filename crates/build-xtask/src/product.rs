@@ -265,7 +265,7 @@ fn desktop_boundary_face(package: &str) -> Option<&'static str> {
 
 /// The root-relative path of the deepest manifestless `crates/<container>/`
 /// directory holding the crate whose root-relative manifest directory is
-/// `dir` (`crates/runvil-internal/engine` is in `runvil-internal`), or
+/// `dir` (`crates/runvil-internal/runtime` is in `runvil-internal`), or
 /// `None` for a crate directly under `crates/`.
 fn container_of(dir: &Path) -> Option<String> {
     let mut components = dir.components();

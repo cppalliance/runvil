@@ -258,7 +258,7 @@ fn graph_findings(root: &Path, dir: &str) -> Vec<String> {
 
 #[test]
 fn a_forbidden_crate_reached_through_a_dev_dependency_is_reported() {
-    let engine = "crates/runvil-internal/engine";
+    let engine = "crates/runvil-internal/runtime";
     let root = graph_workspace(&[
         (
             "vendor/driver",
@@ -267,7 +267,7 @@ fn a_forbidden_crate_reached_through_a_dev_dependency_is_reported() {
         ),
         (
             engine,
-            "runvil-engine",
+            "runvil-runtime",
             "[dev-dependencies]\ndriver = { path = \"../../../vendor/driver\" }\n",
         ),
     ]);
@@ -279,7 +279,7 @@ fn a_forbidden_crate_reached_through_a_dev_dependency_is_reported() {
     let found = graph_findings(root.path(), engine);
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(
-        found[0].contains("runvil-engine")
+        found[0].contains("runvil-runtime")
             && found[0].contains("resolved graph")
             && found[0].contains("tokio"),
         "the finding names the Engine crate, the graph, and the package: {found:?}"
@@ -288,7 +288,7 @@ fn a_forbidden_crate_reached_through_a_dev_dependency_is_reported() {
 
 #[test]
 fn a_forbidden_crate_reached_only_on_another_platform_is_reported() {
-    let engine = "crates/runvil-internal/engine";
+    let engine = "crates/runvil-internal/runtime";
     let root = graph_workspace(&[
         (
             "vendor/driver",
@@ -297,7 +297,7 @@ fn a_forbidden_crate_reached_only_on_another_platform_is_reported() {
         ),
         (
             engine,
-            "runvil-engine",
+            "runvil-runtime",
             "[dependencies]\ndriver = { path = \"../../../vendor/driver\" }\n",
         ),
     ]);
@@ -309,7 +309,7 @@ fn a_forbidden_crate_reached_only_on_another_platform_is_reported() {
     let found = graph_findings(root.path(), engine);
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(
-        found[0].contains("runvil-engine")
+        found[0].contains("runvil-runtime")
             && found[0].contains("resolved graph")
             && found[0].contains("tokio"),
         "a forbidden crate behind a non-host target edge is reported: {found:?}"
@@ -382,7 +382,7 @@ fn a_clean_engine_crate_graph_has_no_violations() {
     // `driver` turns on `clean`'s optional tokio. Resolving the workspace as
     // a whole would unify that feature into the Engine crate's graph;
     // resolving the Engine crate alone does not.
-    let engine = "crates/runvil-internal/engine";
+    let engine = "crates/runvil-internal/runtime";
     let root = graph_workspace(&[
         (
             "vendor/clean",
@@ -397,7 +397,7 @@ fn a_clean_engine_crate_graph_has_no_violations() {
         ),
         (
             engine,
-            "runvil-engine",
+            "runvil-runtime",
             "[dependencies]\nclean = { path = \"../../../vendor/clean\" }\n\
              [build-dependencies]\nclean = { path = \"../../../vendor/clean\" }\n\
              [dev-dependencies]\nclean = { path = \"../../../vendor/clean\" }\n",

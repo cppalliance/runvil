@@ -1,6 +1,6 @@
 //! Matches items across crates. Rustdoc ids are only meaningful inside the
 //! JSON that assigned them, and the facade's JSON names a re-exported item
-//! by its defining crate and its definition path (`runvil_engine::
+//! by its defining crate and its definition path (`runvil_runtime::
 //! execute::run::Run`, private modules included), so every cross-crate
 //! match here goes by crate name and path, never by id.
 

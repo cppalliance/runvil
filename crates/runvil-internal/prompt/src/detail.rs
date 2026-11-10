@@ -1,5 +1,5 @@
 //! Operations on the parser's facade-visible types that only
-//! `runvil-engine` performs.
+//! `runvil-runtime` performs.
 //!
 //! The `runvil` facade never re-exports this module, so only Engine
 //! crates reach it.

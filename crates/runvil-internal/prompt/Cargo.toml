@@ -21,7 +21,7 @@ runvil-lua = { workspace = true, features = ["test-support"] }
 [features]
 # `test_support`, the synthetic section constructors, the prompt source
 # builder, and the parse assertions, for companion crates' tests;
-# `runvil-engine` enables it from `[dev-dependencies]` only.
+# `runvil-runtime` enables it from `[dev-dependencies]` only.
 test-support = []
 
 [lints]

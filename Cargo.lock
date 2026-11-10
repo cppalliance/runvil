@@ -4714,30 +4714,13 @@ dependencies = [
 name = "runvil"
 version = "0.3.0"
 dependencies = [
- "runvil-engine",
  "runvil-lua",
  "runvil-model-client",
  "runvil-prompt",
+ "runvil-runtime",
  "runvil-types",
  "runvil-vfs",
  "serde_json",
-]
-
-[[package]]
-name = "runvil-engine"
-version = "0.3.0"
-dependencies = [
- "criterion",
- "mlua",
- "regex",
- "runvil-lua",
- "runvil-model-client",
- "runvil-prompt",
- "runvil-types",
- "runvil-vfs",
- "serde",
- "serde_json",
- "tracing",
 ]
 
 [[package]]
@@ -4786,6 +4769,23 @@ dependencies = [
  "runvil-types",
  "serde",
  "serde_yaml_ng",
+]
+
+[[package]]
+name = "runvil-runtime"
+version = "0.3.0"
+dependencies = [
+ "criterion",
+ "mlua",
+ "regex",
+ "runvil-lua",
+ "runvil-model-client",
+ "runvil-prompt",
+ "runvil-types",
+ "runvil-vfs",
+ "serde",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "crates/runvil-internal/types", "crates/runvil-internal/engine", "crates/runvil-internal/lua", "crates/runvil-internal/prompt", "crates/runvil-internal/vfs", "crates/runvil-internal/model-client", "crates/workshop/desktop", "crates/workshop/server", "crates/workshop/server-api", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/harness-internal/runner", "crates/harness-internal/plugin-loader", "crates/harness-internal/test-plugin"]
+members = ["crates/*", "crates/runvil-internal/types", "crates/runvil-internal/runtime", "crates/runvil-internal/lua", "crates/runvil-internal/prompt", "crates/runvil-internal/vfs", "crates/runvil-internal/model-client", "crates/workshop/desktop", "crates/workshop/server", "crates/workshop/server-api", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/harness-internal/runner", "crates/harness-internal/plugin-loader", "crates/harness-internal/test-plugin"]
 # crates/runvil-internal, crates/workshop, and crates/harness-internal
 # are manifestless containers holding their families' private crates.
 # Cargo prunes excluded subtrees from member globs, so a "crates/workshop/*"
@@ -25,7 +25,7 @@ repository = "https://github.com/cppalliance/runvil"
 [workspace.dependencies]
 bytes = "1"
 runvil = { path = "crates/runvil" }
-runvil-engine = { path = "crates/runvil-internal/engine" }
+runvil-runtime = { path = "crates/runvil-internal/runtime" }
 runvil-plugin = { path = "crates/runvil-plugin" }
 # The C Plugin contract, version 0.2, from its own repository, pinned by
 # commit. `version` beside `git` keeps cargo-deny's wildcard check quiet.

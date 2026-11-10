@@ -1,4 +1,4 @@
-//! Test support: what this crate's own tests and `runvil-engine`'s
+//! Test support: what this crate's own tests and `runvil-runtime`'s
 //! tests and benches reach beyond the production surface. Built for this
 //! crate's tests and under the `test-support` feature, which only
 //! dev-dependencies and bench `required-features` enable.

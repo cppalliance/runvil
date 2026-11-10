@@ -14,11 +14,11 @@ fn workspace_root() -> PathBuf {
 }
 
 /// The dependency crates the source fixtures may re-export from.
-const FIXTURE_CRATES: [&str; 3] = ["runvil_engine", "runvil_model_client", "runvil_types"];
+const FIXTURE_CRATES: [&str; 3] = ["runvil_runtime", "runvil_model_client", "runvil_types"];
 
 /// A facade manifest declaring exactly [`FIXTURE_CRATES`].
 const FIXTURE_MANIFEST: &str = "[package]\nname = \"runvil\"\n\n[dependencies]\n\
-    runvil-engine.workspace = true\n\
+    runvil-runtime.workspace = true\n\
     runvil-model-client.workspace = true\n\
     runvil-types.workspace = true\n";
 
@@ -82,7 +82,7 @@ fn the_real_facades_pass_the_shape_check() {
 fn the_harness_facade_is_held_to_the_same_shape() {
     let root = facade_root(
         Some(FIXTURE_MANIFEST),
-        &[("lib.rs", "pub use runvil_engine::Run;\n")],
+        &[("lib.rs", "pub use runvil_runtime::Run;\n")],
     );
     let harness = root.path().join("crates").join("harness");
     write_facade(
@@ -113,9 +113,9 @@ fn the_harness_facade_is_held_to_the_same_shape() {
 fn every_allowed_form_passes() {
     let text = r#"#![doc = include_str!("lib.md")]
 
-pub use runvil_engine::Run;
+pub use runvil_runtime::Run;
 pub use runvil_model_client::model::CompletionOptions as ModelOptions;
-pub use ::runvil_engine::Step;
+pub use ::runvil_runtime::Step;
 
 /// The effects a run issues.
 pub mod effect {
@@ -123,11 +123,11 @@ pub mod effect {
 
     /// A re-export may carry its own docs.
     #[doc(inline)]
-    pub use runvil_engine::Effect;
+    pub use runvil_runtime::Effect;
 
     /// A grouping module may nest.
     pub mod record {
-        pub use runvil_engine::EffectRecord;
+        pub use runvil_runtime::EffectRecord;
     }
 }
 
@@ -140,11 +140,11 @@ pub mod event;
 
 #[test]
 fn a_violation_names_the_file_line_rule_required_and_found() {
-    let violations = check("/// Effects.\npub mod effect {\n    pub use runvil_engine::*;\n}\n");
+    let violations = check("/// Effects.\npub mod effect {\n    pub use runvil_runtime::*;\n}\n");
     assert_eq!(
         violations,
         [format!(
-            "lib.rs:3: glob re-export: required {REEXPORT}, found `pub use runvil_engine::*;`"
+            "lib.rs:3: glob re-export: required {REEXPORT}, found `pub use runvil_runtime::*;`"
         )]
     );
 }
@@ -152,13 +152,13 @@ fn a_violation_names_the_file_line_rule_required_and_found() {
 #[test]
 fn glob_grouped_crate_and_facade_path_re_exports_are_rejected() {
     for (text, rule) in [
-        ("pub use runvil_engine::*;", "glob re-export"),
-        ("pub use runvil_engine::input::*;", "glob re-export"),
-        ("pub use runvil_engine::{Run, Step};", "grouped use list"),
-        ("pub use runvil_engine::{Run};", "grouped use list"),
-        ("pub use runvil_engine;", "crate re-export"),
-        ("pub use runvil_engine as engine;", "crate re-export"),
-        ("pub use ::runvil_engine;", "crate re-export"),
+        ("pub use runvil_runtime::*;", "glob re-export"),
+        ("pub use runvil_runtime::input::*;", "glob re-export"),
+        ("pub use runvil_runtime::{Run, Step};", "grouped use list"),
+        ("pub use runvil_runtime::{Run};", "grouped use list"),
+        ("pub use runvil_runtime;", "crate re-export"),
+        ("pub use runvil_runtime as engine;", "crate re-export"),
+        ("pub use ::runvil_runtime;", "crate re-export"),
         (
             "pub use crate::effect::Effect;",
             "re-export of a facade path",
@@ -168,8 +168,8 @@ fn glob_grouped_crate_and_facade_path_re_exports_are_rejected() {
             "re-export of a facade path",
         ),
         ("pub use super::Run;", "re-export of a facade path"),
-        ("use runvil_engine::Run;", "non-public use"),
-        ("pub(crate) use runvil_engine::Run;", "non-public use"),
+        ("use runvil_runtime::Run;", "non-public use"),
+        ("pub(crate) use runvil_runtime::Run;", "non-public use"),
     ] {
         assert_one(text, 1, rule);
     }
@@ -196,13 +196,13 @@ fn a_re_export_rooted_outside_the_facade_dependencies_is_rejected() {
 fn the_dependency_crates_are_the_manifest_dependency_keys() {
     let manifest = "[package]\nname = \"runvil\"\n\n\
         [dependencies]\n\
-        runvil-engine.workspace = true\n\
+        runvil-runtime.workspace = true\n\
         types = { package = \"runvil-types\", workspace = true }\n\n\
         [target.'cfg(windows)'.dependencies]\n\
         runvil-vfs.workspace = true\n\n\
         [dev-dependencies]\n\
         serde_json.workspace = true\n";
-    let lib = "pub use runvil_engine::Run;\n\
+    let lib = "pub use runvil_runtime::Run;\n\
         pub use types::event::Event;\n\
         pub use runvil_vfs::Vfs;\n\
         pub use serde_json::Value;\n\
@@ -233,7 +233,7 @@ fn every_item_definition_is_rejected_with_its_kind() {
         ("pub type Result = ();", "type alias"),
         ("macro_rules! forward { () => {} }", "macro_rules!"),
         ("pub union Bits { a: u32 }", "union"),
-        ("extern crate runvil_engine;", "extern crate"),
+        ("extern crate runvil_runtime;", "extern crate"),
         ("extern \"C\" {}", "extern block"),
         ("include!(\"items.rs\");", "macro invocation"),
     ] {
@@ -254,18 +254,18 @@ fn an_item_definition_inside_a_grouping_module_is_rejected() {
 fn attributes_other_than_doc_are_rejected() {
     for (text, line) in [
         ("#![forbid(unsafe_code)]\n", 1),
-        ("#[allow(unused_imports)]\npub use runvil_engine::Run;", 1),
-        ("#[cfg(test)]\npub use runvil_engine::Run;", 1),
+        ("#[allow(unused_imports)]\npub use runvil_runtime::Run;", 1),
+        ("#[cfg(test)]\npub use runvil_runtime::Run;", 1),
         (
-            "#[cfg(feature = \"other\")]\npub use runvil_engine::Run;",
+            "#[cfg(feature = \"other\")]\npub use runvil_runtime::Run;",
             1,
         ),
         (
-            "#[cfg(feature = \"test-support\")]\npub use runvil_engine::Run;",
+            "#[cfg(feature = \"test-support\")]\npub use runvil_runtime::Run;",
             1,
         ),
         (
-            "#[cfg(not(feature = \"test-support\"))]\npub use runvil_engine::Run;",
+            "#[cfg(not(feature = \"test-support\"))]\npub use runvil_runtime::Run;",
             1,
         ),
         ("/// Effects.\n#[path = \"effects.rs\"]\npub mod effect;", 2),
@@ -298,7 +298,7 @@ fn a_module_must_be_public_and_carry_a_doc_comment() {
 #[test]
 fn unparseable_source_is_reported_at_its_line() {
     assert_one(
-        "pub use runvil_engine::Run;\npub use = Step;\n",
+        "pub use runvil_runtime::Run;\npub use = Step;\n",
         2,
         "unparseable source",
     );

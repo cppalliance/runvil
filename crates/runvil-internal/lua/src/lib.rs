@@ -51,7 +51,7 @@
 //! can rebind. `models.loop` runs over it, and a compactor rewrites it in
 //! place.
 //!
-//! Most of this crate's public items exist for `runvil-engine`'s
+//! Most of this crate's public items exist for `runvil-runtime`'s
 //! executor, which drives the VM and the coroutine protocol; the facade
 //! re-exports the store protocol ([`VfsOp`], [`VfsOutcome`],
 //! [`make_store_error`]) and the roster entry ([`RosterEntry`]);
@@ -120,7 +120,7 @@ pub(crate) mod test_vm;
 #[cfg(test)]
 mod tests;
 
-// The executor-facing surface: every item `runvil-engine` names crosses here.
+// The executor-facing surface: every item `runvil-runtime` names crosses here.
 pub use crate::adhoc::AdhocTools;
 pub use crate::argv::Argv;
 pub use crate::bindings::{

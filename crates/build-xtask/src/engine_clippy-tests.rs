@@ -22,7 +22,7 @@ fn clean_root() -> tempfile::TempDir {
     for (dir, package) in [
         ("runvil", "runvil"),
         ("runvil-plugin", "runvil-plugin"),
-        ("runvil-internal/engine", "runvil-engine"),
+        ("runvil-internal/runtime", "runvil-runtime"),
     ] {
         test_support::write_crate(root.path(), dir, package, "");
         write(
@@ -231,7 +231,7 @@ fn a_clippy_toml_missing_a_determinism_ban_is_reported() {
 #[test]
 fn an_engine_source_suppressing_disallowed_methods_is_reported() {
     let root = clean_root();
-    let engine = "crates/runvil-internal/engine";
+    let engine = "crates/runvil-internal/runtime";
     write(
         root.path(),
         &format!("{engine}/src/lib.rs"),

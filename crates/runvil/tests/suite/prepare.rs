@@ -1,7 +1,7 @@
 //! A run's start: real-file claims, the caller's tool catalog, and model
 //! roles, whose requirements the run's first step checks. The store-mount
 //! isolation case and the start-check refusals that reach engine-only
-//! items sit in `runvil-engine`'s own suite.
+//! items sit in `runvil-runtime`'s own suite.
 
 use runvil::ErrorCode;
 use runvil::event::Event;

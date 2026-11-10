@@ -8,7 +8,7 @@
 //! sibling drives: the test model and tool sets, the VM builder, and the
 //! start-and-parse helpers.
 //!
-//! These sit in `runvil-engine` (not in `runvil-lua`)
+//! These sit in `runvil-runtime` (not in `runvil-lua`)
 //! because the real setup path they exercise is the executor's
 //! `section_vm` composition, which stays with the executor to keep the
 //! dependency one-directional.

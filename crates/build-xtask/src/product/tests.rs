@@ -266,15 +266,15 @@ fn a_runvil_crate_depending_on_a_workshop_crate_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
-        "runvil-internal/engine",
-        "runvil-engine",
+        "runvil-internal/runtime",
+        "runvil-runtime",
         "[dependencies]\nworkshop-protocol = { path = \"../../workshop-protocol\" }\n",
     );
     write_crate(root.path(), "workshop-protocol", "workshop-protocol", "");
     let violations = product_boundary_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations.iter().all(|v| v.contains("runvil-engine"))
+        violations.iter().all(|v| v.contains("runvil-runtime"))
             && violations[0]
                 .contains("runvil crates must not depend on workshop or harness crates"),
         "the violation names the runvil crate and the workshop ban: {violations:?}"
@@ -286,8 +286,8 @@ fn a_runvil_crate_depending_on_the_harness_facade_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
-        "runvil-internal/engine",
-        "runvil-engine",
+        "runvil-internal/runtime",
+        "runvil-runtime",
         "[dependencies]\nharness = { path = \"../../harness\" }\n",
     );
     write_crate(root.path(), "harness", "harness", "");
@@ -377,13 +377,13 @@ fn a_harness_crate_depending_on_a_private_product_crate_is_reported() {
         root.path(),
         "harness-internal/plugins",
         "harness-plugins",
-        "[dependencies]\nrunvil-engine = { path = \"../../runvil-engine\" }\n",
+        "[dependencies]\nrunvil-runtime = { path = \"../../runvil-runtime\" }\n",
     );
-    write_crate(root.path(), "runvil-engine", "runvil-engine", "");
+    write_crate(root.path(), "runvil-runtime", "runvil-runtime", "");
     let violations = product_boundary_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations[0].starts_with("harness-plugins depends on runvil-engine:")
+        violations[0].starts_with("harness-plugins depends on runvil-runtime:")
             && violations[0].contains(
                 "outside crates may depend on the runvil family only through runvil or runvil-plugin"
             ),
@@ -466,7 +466,7 @@ fn runvil_and_shared_crates_depending_on_harness_are_reported() {
 
 #[test]
 fn family_classification_follows_the_naming_rules() {
-    assert_eq!(family("runvil-engine"), Family::Runvil);
+    assert_eq!(family("runvil-runtime"), Family::Runvil);
     assert_eq!(family("workshop"), Family::Workshop);
     assert_eq!(family("workshop-server"), Family::Workshop);
     assert_eq!(family("shared-crypto"), Family::Shared);

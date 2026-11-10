@@ -16,12 +16,12 @@
 //!
 //! The crate's `greeter` example is that whole loop in one program.
 
-pub use runvil_engine::Run;
-pub use runvil_engine::RunLimits;
-pub use runvil_engine::RunParams;
-pub use runvil_engine::Step;
 pub use runvil_prompt::Prompt;
 pub use runvil_prompt::PromptFinder;
+pub use runvil_runtime::Run;
+pub use runvil_runtime::RunLimits;
+pub use runvil_runtime::RunParams;
+pub use runvil_runtime::Step;
 pub use runvil_types::seed::RunSeed;
 
 /* Universal Error types
@@ -45,14 +45,14 @@ pub mod effect {
     //! The outside work a run asks for, the answers it takes back, and the
     //! records a run log stores for both.
 
-    pub use runvil_engine::Effect;
-    pub use runvil_engine::EffectAnswer;
-    pub use runvil_engine::EffectId;
-    pub use runvil_engine::IssuedEffect;
-    pub use runvil_engine::PackToolSets;
-    pub use runvil_engine::Round;
-    pub use runvil_engine::ToolCallOrigin;
-    pub use runvil_engine::ToolCaller;
+    pub use runvil_runtime::Effect;
+    pub use runvil_runtime::EffectAnswer;
+    pub use runvil_runtime::EffectId;
+    pub use runvil_runtime::IssuedEffect;
+    pub use runvil_runtime::PackToolSets;
+    pub use runvil_runtime::Round;
+    pub use runvil_runtime::ToolCallOrigin;
+    pub use runvil_runtime::ToolCaller;
 }
 
 pub mod event {
@@ -130,10 +130,10 @@ pub mod vfs {
     //! A run's files: the store every section shares, real directories
     //! beside it, and the policy that decides what the run may change.
 
-    pub use runvil_engine::perform_vfs_op;
     pub use runvil_lua::VfsOp;
     pub use runvil_lua::VfsOutcome;
     pub use runvil_lua::make_store_error;
+    pub use runvil_runtime::perform_vfs_op;
     pub use runvil_vfs::Access;
     pub use runvil_vfs::AcquireContext;
     pub use runvil_vfs::AllowAll;

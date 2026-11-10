@@ -34,7 +34,7 @@ const MAX_FIELDS: usize = 12;
 /// reason, never a way to make a change pass.
 const ALLOWED: &[Allowed] = &[
     Allowed {
-        krate: "crates/runvil-internal/engine",
+        krate: "crates/runvil-internal/runtime",
         name: "ChainOps",
         limit: Limit::Methods,
         recorded: 34,
@@ -42,7 +42,7 @@ const ALLOWED: &[Allowed] = &[
                  own chain runs here, in an `impl` block beside the arm it serves.",
     },
     Allowed {
-        krate: "crates/runvil-internal/engine",
+        krate: "crates/runvil-internal/runtime",
         name: "Scheduler",
         limit: Limit::Methods,
         recorded: 82,
@@ -54,7 +54,7 @@ const ALLOWED: &[Allowed] = &[
                  the task arena closed (12 are test hooks).",
     },
     Allowed {
-        krate: "crates/runvil-internal/engine",
+        krate: "crates/runvil-internal/runtime",
         name: "Chain",
         limit: Limit::Fields,
         recorded: 16,
@@ -62,7 +62,7 @@ const ALLOWED: &[Allowed] = &[
                  per-chain handles, which the chain arena owns as one value.",
     },
     Allowed {
-        krate: "crates/runvil-internal/engine",
+        krate: "crates/runvil-internal/runtime",
         name: "Scenario",
         limit: Limit::Fields,
         recorded: 14,
@@ -70,7 +70,7 @@ const ALLOWED: &[Allowed] = &[
                  before it runs or steps the scenario.",
     },
     Allowed {
-        krate: "crates/runvil-internal/engine",
+        krate: "crates/runvil-internal/runtime",
         name: "SectionVmSetup",
         limit: Limit::Fields,
         recorded: 14,
@@ -79,7 +79,7 @@ const ALLOWED: &[Allowed] = &[
                  dozen parameters.",
     },
     Allowed {
-        krate: "crates/runvil-internal/engine",
+        krate: "crates/runvil-internal/runtime",
         name: "SharedState",
         limit: Limit::Fields,
         recorded: 14,

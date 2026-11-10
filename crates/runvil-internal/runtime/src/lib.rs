@@ -33,7 +33,7 @@ use crate::error::{Error, Result};
 // The crate root is the one path to this crate's items; the
 // `execute` module stays private and every item that remains public inside it
 // is re-exported here, so the `runvil` facade names
-// `runvil_engine::X`, not a module path.
+// `runvil_runtime::X`, not a module path.
 pub use crate::execute::{
     Effect, EffectAnswer, EffectId, IssuedEffect, PackToolSets, Round, Run, RunLimits, RunParams,
     Step, ToolCallOrigin, ToolCaller, perform_vfs_op,

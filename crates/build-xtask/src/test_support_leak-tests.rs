@@ -36,8 +36,8 @@ fn engine_root() -> tempfile::TempDir {
     let features = "[features]\ntest-support = []\n";
     write_crate(
         root.path(),
-        "runvil-internal/engine",
-        "runvil-engine",
+        "runvil-internal/runtime",
+        "runvil-runtime",
         features,
     );
     write_crate(
@@ -81,13 +81,13 @@ fn a_dependencies_table_enabling_an_engine_test_support_feature_is_reported() {
         "harness-internal/plugins",
         "harness-plugins",
         "[dependencies]\n\
-         runvil-engine = { workspace = true, features = [\"test-support\"] }\n",
+         runvil-runtime = { workspace = true, features = [\"test-support\"] }\n",
     );
     let violations = test_support_leak_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
         violations[0].contains("[dependencies]")
-            && violations[0].contains("runvil-engine/test-support")
+            && violations[0].contains("runvil-runtime/test-support")
             && violations[0].contains("plugins"),
         "the leak names the table, the feature, and the consuming crate: {violations:?}"
     );
@@ -100,9 +100,9 @@ fn a_dev_dependencies_table_enabling_an_engine_test_support_feature_passes() {
         root.path(),
         "harness-internal/plugins",
         "harness-plugins",
-        "[dependencies]\nrunvil-engine = { workspace = true }\n\
+        "[dependencies]\nrunvil-runtime = { workspace = true }\n\
          [dev-dependencies]\n\
-         runvil-engine = { workspace = true, features = [\"test-support\"] }\n\
+         runvil-runtime = { workspace = true, features = [\"test-support\"] }\n\
          [target.'cfg(unix)'.dev-dependencies]\n\
          runvil-lua = { workspace = true, features = [\"test-support\"] }\n",
     );
@@ -121,7 +121,7 @@ fn build_and_target_tables_are_scanned_renames_resolved_and_non_engine_features_
         "harness-internal/runner",
         "harness-runner",
         "[build-dependencies]\n\
-         rt = { package = \"runvil-engine\", features = [\"test-support\"] }\n\
+         rt = { package = \"runvil-runtime\", features = [\"test-support\"] }\n\
          [target.'cfg(windows)'.dependencies]\n\
          runvil-lua = { workspace = true, features = [\"serialize\", \"test-support\"] }\n\
          [dependencies]\n\
@@ -131,10 +131,9 @@ fn build_and_target_tables_are_scanned_renames_resolved_and_non_engine_features_
     let violations = test_support_leak_violations(root.path());
     assert_eq!(violations.len(), 2, "{violations:?}");
     assert!(
-        violations
-            .iter()
-            .any(|v| v.contains("[build-dependencies]")
-                && v.contains("runvil-engine/test-support")),
+        violations.iter().any(
+            |v| v.contains("[build-dependencies]") && v.contains("runvil-runtime/test-support")
+        ),
         "the renamed build-dependency is reported by package name: {violations:?}"
     );
     assert!(
@@ -151,7 +150,7 @@ fn a_workspace_dependencies_entry_enabling_an_engine_test_support_feature_is_rep
     std::fs::write(
         root.path().join("Cargo.toml"),
         "[workspace]\nmembers = []\n[workspace.dependencies]\n\
-         runvil-engine = { path = \"crates/runvil-internal/engine\", features = [\"test-support\"] }\n\
+         runvil-runtime = { path = \"crates/runvil-internal/runtime\", features = [\"test-support\"] }\n\
          runvil-lua = { path = \"crates/runvil-internal/lua\" }\n",
     )
     .expect("the root manifest writes");
@@ -159,7 +158,7 @@ fn a_workspace_dependencies_entry_enabling_an_engine_test_support_feature_is_rep
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
         violations[0].contains("[workspace.dependencies]")
-            && violations[0].contains("runvil-engine/test-support"),
+            && violations[0].contains("runvil-runtime/test-support"),
         "the inherited entry is reported against the root manifest: {violations:?}"
     );
 }
@@ -172,12 +171,12 @@ fn a_features_value_enabling_an_engine_test_support_feature_is_reported() {
         "workshop/server",
         "workshop-server",
         "[dependencies]\n\
-         runvil-engine = { workspace = true }\n\
+         runvil-runtime = { workspace = true }\n\
          rt-types = { package = \"runvil-types\", workspace = true, optional = true }\n\
          runvil-lua = { workspace = true, optional = true }\n\
          harness-plugins = { workspace = true }\n\
          [features]\n\
-         default = [\"runvil-engine/test-support\"]\n\
+         default = [\"runvil-runtime/test-support\"]\n\
          types = [\"rt-types?/test-support\"]\n\
          fixtures = [\"dep:runvil-lua\", \"harness-plugins/test-support\", \"runvil-lua/serialize\"]\n",
     );
@@ -185,7 +184,7 @@ fn a_features_value_enabling_an_engine_test_support_feature_is_reported() {
     assert_eq!(violations.len(), 2, "{violations:?}");
     assert!(
         violations.iter().any(|v| v.contains("[features] default")
-            && v.contains("runvil-engine/test-support")
+            && v.contains("runvil-runtime/test-support")
             && v.contains("server")),
         "the plain dependency-feature reference names the feature, the engine crate, and the consuming crate: {violations:?}"
     );
@@ -202,8 +201,8 @@ fn an_engine_crate_forwarding_its_own_test_support_feature_passes() {
     let root = engine_root();
     write_crate(
         root.path(),
-        "runvil-internal/engine",
-        "runvil-engine",
+        "runvil-internal/runtime",
+        "runvil-runtime",
         "[dependencies]\nrunvil-lua = { workspace = true }\n\
          [features]\ntest-support = [\"runvil-lua/test-support\"]\n\
          other = [\"runvil-lua/serialize\"]\n",
@@ -222,8 +221,8 @@ fn the_facade_forwarding_the_engine_test_support_feature_passes() {
         root.path(),
         "runvil",
         "runvil",
-        "[dependencies]\nrunvil-engine = { workspace = true }\n\
-         [features]\ntest-support = [\"runvil-engine/test-support\"]\n",
+        "[dependencies]\nrunvil-runtime = { workspace = true }\n\
+         [features]\ntest-support = [\"runvil-runtime/test-support\"]\n",
     );
     let violations = test_support_leak_violations(root.path());
     assert!(
@@ -237,8 +236,8 @@ fn an_engine_crate_enabling_a_sibling_test_support_feature_outside_dev_is_report
     let root = engine_root();
     write_crate(
         root.path(),
-        "runvil-internal/engine",
-        "runvil-engine",
+        "runvil-internal/runtime",
+        "runvil-runtime",
         "[dependencies]\nrunvil-lua = { workspace = true, features = [\"test-support\"] }\n\
          [features]\ntest-support = []\n",
     );
@@ -338,8 +337,8 @@ fn a_test_support_feature_forwarding_into_the_other_family_is_reported() {
     );
     write_crate(
         root.path(),
-        "runvil-internal/engine",
-        "runvil-engine",
+        "runvil-internal/runtime",
+        "runvil-runtime",
         "[dependencies]\nharness-runner = { workspace = true }\n\
          [features]\ntest-support = [\"harness-runner/test-support\"]\n",
     );
@@ -354,7 +353,7 @@ fn a_test_support_feature_forwarding_into_the_other_family_is_reported() {
     assert!(
         violations
             .iter()
-            .any(|v| v.contains("engine") && v.contains("harness-runner/test-support")),
+            .any(|v| v.contains("runtime") && v.contains("harness-runner/test-support")),
         "a runvil crate forwarding a harness crate's test-support is reported: {violations:?}"
     );
 }
