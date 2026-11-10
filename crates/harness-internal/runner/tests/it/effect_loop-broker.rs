@@ -42,8 +42,7 @@ const INFERS_THEN_CHATS: &str = "---\nname: runner-broker\ndescription: infers t
 /// A run over [`INFERS_THEN_CHATS`] with the `default` role filled by one
 /// current model.
 fn infers_then_chats() -> Run {
-    let (prompt, _parse_events) =
-        Prompt::parse(&|_: &str| Ok(INFERS_THEN_CHATS.to_owned()), "prompt");
+    let prompt = Prompt::parse(&|_: &str| Ok(INFERS_THEN_CHATS.to_owned()), "prompt");
     let prompt = Arc::new(prompt.expect("the broker fixture parses"));
     let model = ModelInfo::new(
         ModelId::gateway("m").expect("the model id is valid"),

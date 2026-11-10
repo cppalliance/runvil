@@ -18,8 +18,6 @@ fn long_running_lua_block_cancels_cooperatively() {
         "prompt",
         "cancel loop",
         NonZeroU32::MIN,
-        &null_emitter(),
-        "Loop",
     )
     .expect("an infinite loop still compiles");
 

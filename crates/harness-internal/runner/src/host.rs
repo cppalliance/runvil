@@ -33,17 +33,18 @@ impl Host {
     /// factory that would refuse a run is refused at that run's first step
     /// instead.
     ///
-    /// The parse events go to `tracing` at debug level; no run exists yet
-    /// to record them.
+    /// The parse's outcome goes to `tracing` at debug level, as one line;
+    /// no run exists yet to record it.
     ///
     /// # Errors
     /// Returns the finder's or the parser's failure unchanged, and
     /// `RequirementsUnmet` whose message and prose list each declared
     /// Pack this Host cannot serve with the reason.
     pub fn parse(&self, name: &str) -> Result<Prompt, Error> {
-        let (parsed, events) = Prompt::parse(&*self.prompts, name);
-        for event in &events {
-            tracing::debug!(prompt = name, ?event, "prompt parse event");
+        let parsed = Prompt::parse(&*self.prompts, name);
+        match &parsed {
+            Ok(_) => tracing::debug!(prompt = name, "prompt parsed"),
+            Err(error) => tracing::debug!(prompt = name, %error, "prompt failed to parse"),
         }
         let prompt = parsed?;
         let refusals = self.packs.refusals(&prompt);

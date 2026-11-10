@@ -9,13 +9,11 @@ use crate::test_support::scenario::{Trace, test_model};
 
 use super::*;
 
-/// The run's observations as section and detail pairs, from its start on:
-/// the parse events before it are left out.
+/// The run's observations as section and detail pairs.
 fn run_events(trace: &Trace) -> Vec<(String, String)> {
     trace
         .records()
         .into_iter()
-        .skip_while(|record| record.detail != detail::RUN_STARTED.to_string())
         .map(|record| (record.section, record.detail))
         .collect()
 }

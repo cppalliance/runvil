@@ -69,7 +69,7 @@ fn provenance_seq_is_strictly_increasing_within_one_task_across_a_fanout() {
     let out = trace.text();
     assert_eq!(out.len(), 3, "three one-letter answers: {out}");
 
-    let events = trace.run_events();
+    let events = trace.events();
     let grouped = seqs_by_task(events);
     assert_eq!(
         grouped.keys().cloned().collect::<Vec<_>>(),
@@ -134,7 +134,7 @@ fn a_call_child_reports_under_its_callers_task() {
     let trace = scheduler_scenario(md).run();
     assert_eq!(trace.text(), "hello");
 
-    let events = trace.run_events();
+    let events = trace.events();
     let grouped = seqs_by_task(events);
     assert_eq!(
         grouped.keys().cloned().collect::<Vec<_>>(),

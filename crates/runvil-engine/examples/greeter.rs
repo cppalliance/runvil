@@ -65,20 +65,15 @@ pub fn answer(effect: Effect) -> EffectAnswer {
 ///
 /// # Panics
 ///
-/// Panics when the log does not open with the parse events, or when the
+/// Panics when the log does not open with the run's start, or when the
 /// run was canceled.
 pub fn greet() -> Result<String, Box<dyn Error>> {
-    // 1. Parse the greeter, and start the log with its parse events before
-    //    checking the result.
-    let (parsed, parse_events) = Prompt::parse(&|_: &str| Ok(GREETER.to_owned()), "greeter.md");
-    let mut log: Vec<Event> = parse_events.clone();
-    let prompt = parsed?;
+    // 1. Parse the greeter. A prompt that fails to parse never runs.
+    let prompt = Prompt::parse(&|_: &str| Ok(GREETER.to_owned()), "greeter.md")?;
 
-    // 2. Build the params: run events number on from the parse events. A
-    //    live caller draws the seed's 32 bytes from a CSPRNG; the example
-    //    fixes them.
-    let ctx = RunParams::new(RunSeed::from_bytes([7; 32]), Timestamp::UNIX_EPOCH)
-        .with_provenance_start(u32::try_from(parse_events.len())?);
+    // 2. Build the params. A live caller draws the seed's 32 bytes from a
+    //    CSPRNG; the example fixes them.
+    let ctx = RunParams::new(RunSeed::from_bytes([7; 32]), Timestamp::UNIX_EPOCH);
 
     // 3. Offer the shout tool and give the canned model the `default`
     //    role. The run's first step checks them against the prompt.
@@ -106,6 +101,7 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
     // 5. Step until Done, logging each step's events and answering each
     //    effect exactly once: an effect the step withdraws is dropped
     //    instead of performed.
+    let mut log: Vec<Event> = Vec::new();
     let result = loop {
         match run.step() {
             Step::Pending {
@@ -131,9 +127,9 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
     };
 
     // 6. The tool's output is the run's final text, and the log opens with
-    //    the parse events. A run that ends with an error reports its
+    //    the run's start. A run that ends with an error reports its
     //    located message.
-    assert!(log.starts_with(&parse_events));
+    assert!(matches!(log.first(), Some(Event::RunStarted { .. })));
     assert!(!cancel.is_canceled());
     result
         .map_err(|error| format!("the greeter did not finish: {}", error.located_message()).into())

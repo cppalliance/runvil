@@ -197,9 +197,7 @@ impl From<&Frontmatter> for ContractResponse {
 /// Parses the posted prompt text and answers the contract DTO, or a
 /// `422` envelope when the text is not a valid prompt.
 async fn contract(Json(body): Json<ContractRequest>) -> Response {
-    // The contract needs the tree alone; the parse-time events are not
-    // this route's to log.
-    match Prompt::parse(&|_: &str| Ok(body.text.clone()), &body.name).0 {
+    match Prompt::parse(&|_: &str| Ok(body.text.clone()), &body.name) {
         Ok(prompt) => (
             StatusCode::OK,
             Json(ContractResponse::from(prompt.frontmatter())),

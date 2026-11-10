@@ -352,7 +352,7 @@ pub fn runvil::Harness::new(host: alloc::sync::Arc<runvil::Host>, prompt: runvil
 pub fn runvil::Host::parse(&self, name: &str) -> core::result::Result<runvil::Prompt, runvil::Error>
 pub fn runvil::Prompt::file(&self) -> &str
 pub fn runvil::Prompt::frontmatter(&self) -> &runvil::prompt::Frontmatter
-pub fn runvil::Prompt::parse(finder: &dyn runvil::PromptFinder, name: &str) -> (core::result::Result<runvil::Prompt, runvil::Error>, alloc::vec::Vec<runvil::event::Event>)
+pub fn runvil::Prompt::parse(finder: &dyn runvil::PromptFinder, name: &str) -> core::result::Result<runvil::Prompt, runvil::Error>
 pub fn runvil::Prompt::title(&self) -> &str
 pub fn runvil::PromptFinder::find(&self, name: &str) -> core::result::Result<alloc::string::String, runvil::Error>
 pub fn runvil::RunControl::cancel(&self)
@@ -821,15 +821,6 @@ pub runvil::event::Event::LuaChunkStarted::section: alloc::string::String
 pub runvil::event::Event::LuaChunkSucceeded { .. }
 pub runvil::event::Event::LuaChunkSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::LuaChunkSucceeded::section: alloc::string::String
-pub runvil::event::Event::LuaCompilationFailed { .. }
-pub runvil::event::Event::LuaCompilationFailed::provenance: runvil::ids::Provenance
-pub runvil::event::Event::LuaCompilationFailed::section: alloc::string::String
-pub runvil::event::Event::LuaCompilationStarted { .. }
-pub runvil::event::Event::LuaCompilationStarted::provenance: runvil::ids::Provenance
-pub runvil::event::Event::LuaCompilationStarted::section: alloc::string::String
-pub runvil::event::Event::LuaCompilationSucceeded { .. }
-pub runvil::event::Event::LuaCompilationSucceeded::provenance: runvil::ids::Provenance
-pub runvil::event::Event::LuaCompilationSucceeded::section: alloc::string::String
 pub runvil::event::Event::LuaLibraryLoadFailed { .. }
 pub runvil::event::Event::LuaLibraryLoadFailed::library: alloc::string::String
 pub runvil::event::Event::LuaLibraryLoadFailed::provenance: runvil::ids::Provenance
@@ -862,15 +853,6 @@ pub runvil::event::Event::ModelTurnFailed::section: alloc::string::String
 pub runvil::event::Event::ModelTurnTruncated { .. }
 pub runvil::event::Event::ModelTurnTruncated::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ModelTurnTruncated::section: alloc::string::String
-pub runvil::event::Event::ParseFailed { .. }
-pub runvil::event::Event::ParseFailed::provenance: runvil::ids::Provenance
-pub runvil::event::Event::ParseFailed::section: alloc::string::String
-pub runvil::event::Event::ParseStarted { .. }
-pub runvil::event::Event::ParseStarted::provenance: runvil::ids::Provenance
-pub runvil::event::Event::ParseStarted::section: alloc::string::String
-pub runvil::event::Event::ParseSucceeded { .. }
-pub runvil::event::Event::ParseSucceeded::provenance: runvil::ids::Provenance
-pub runvil::event::Event::ParseSucceeded::section: alloc::string::String
 pub runvil::event::Event::Request { .. }
 pub runvil::event::Event::Request::body: serde_json::value::Value
 pub runvil::event::Event::Request::provenance: runvil::ids::Provenance

@@ -35,8 +35,7 @@ type Edit = Box<dyn Fn(RunParams) -> RunParams>;
 const TEST_SEED: RunSeed = RunSeed::from_bytes([7; 32]);
 
 /// One test's setup. Every scenario gives the `default` role [`canned`]
-/// unless it names a model or a role map, and numbers run events on from
-/// the parse events.
+/// unless it names a model or a role map.
 #[derive(Default)]
 pub(crate) struct Scenario {
     args: String,
@@ -117,16 +116,13 @@ impl Scenario {
 
     /// Parses `source` and builds its params.
     pub(crate) fn build(&self, source: &str) -> TestResult<Built> {
-        let (parsed, events) = Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt");
-        let prompt = parsed?;
+        let prompt = Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt")?;
         let roles = match (&self.roles, &self.model) {
             (Some(roles), _) => roles.clone(),
             (None, Some(model)) => BTreeMap::from([(ModelRole::Default, model.clone())]),
             (None, None) => BTreeMap::from([(ModelRole::Default, canned()?)]),
         };
-        let mut ctx = RunParams::new(TEST_SEED, self.started_at)
-            .with_provenance_start(u32::try_from(events.len())?)
-            .with_models(roles);
+        let mut ctx = RunParams::new(TEST_SEED, self.started_at).with_models(roles);
         if let Some(tool) = &self.tool {
             let info = tool_info(tool.id, json!({ "type": "object" }))?;
             ctx = ctx.with_tools(ToolCatalog::new([info])?);
@@ -134,20 +130,12 @@ impl Scenario {
         if let Some(edit) = &self.params {
             ctx = edit(ctx);
         }
-        Ok(Built {
-            prompt,
-            ctx,
-            events,
-        })
+        Ok(Built { prompt, ctx })
     }
 
     /// Builds `source`'s params and creates its run, not yet stepped.
     pub(crate) fn start(self, source: &str) -> TestResult<Driver> {
-        let Built {
-            prompt,
-            ctx,
-            events,
-        } = self.build(source)?;
+        let Built { prompt, ctx } = self.build(source)?;
         Ok(Driver {
             run: Run::new(Arc::new(prompt), &self.args, ctx),
             replies: self.replies.into(),
@@ -155,7 +143,7 @@ impl Scenario {
             hold: self.hold,
             reverse: self.reverse,
             held: Vec::new(),
-            events,
+            events: Vec::new(),
             effects: Vec::new(),
             result: None,
         })
@@ -169,8 +157,6 @@ impl Scenario {
 pub(crate) struct Built {
     pub(crate) prompt: Prompt,
     pub(crate) ctx: RunParams,
-    /// The parse events.
-    pub(crate) events: Vec<Event>,
 }
 
 /// A started run, stepped by hand for a test that acts mid-run.
@@ -346,7 +332,7 @@ impl Driver {
 pub(crate) struct Trace {
     /// The run's final text, or the error that ended it.
     pub(crate) result: Result<String, Error>,
-    /// The parse events, then the run's events, in report order.
+    /// The run's events, in report order.
     pub(crate) events: Vec<Event>,
     /// Every effect the run issued, in the order the driver answered them.
     pub(crate) effects: Vec<Logged>,

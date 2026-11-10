@@ -312,10 +312,6 @@ fn the_scheduler_reports_the_whole_trace_of_a_bound_round_an_adhoc_round_and_a_r
     // The first round renders the tool list under the validation pair; the
     // later rounds reuse it.
     let expected = vec![
-        "Prompt: Parse started",
-        "Only: Lua compilation started",
-        "Only: Lua compilation succeeded",
-        "Prompt: Parse succeeded",
         "Loop: Run started",
         "Only: Section started",
         "Only: Lua chunk started",

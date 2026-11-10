@@ -22,8 +22,6 @@ fn chunk(source: &str) -> runvil_lua::LuaProgram {
         "prompt",
         "chunk",
         NonZeroU32::new(1).expect("compile source line is non-zero"),
-        &null_emitter(),
-        "Section",
     )
     .expect("test Lua must compile")
 }

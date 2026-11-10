@@ -112,8 +112,6 @@ fn the_lua_crates_failures_end_a_run_with_their_own_code_and_text() {
         "prompt",
         "section `S` prologue",
         NonZeroU32::new(7).expect("7 is non-zero"),
-        &emitter,
-        "S",
     )
     .expect_err("the block must not compile");
     let tool = runvil_types::tools::make_tool_error(ErrorCode::ToolBackend, "the backend refused");
@@ -186,7 +184,6 @@ fn a_parsed_prompts_located_message_ends_with_its_name_and_position() {
         "\n# T\n\n## S\n\np\n",
     );
     let refused = Prompt::parse(&|_: &str| Ok(frontmatter.to_owned()), "prompt")
-        .0
         .expect_err("a Pack id with spaces must be rejected");
     assert_eq!(
         failed(&refused),
@@ -198,7 +195,6 @@ fn a_parsed_prompts_located_message_ends_with_its_name_and_position() {
     );
     let duplicate = "---\nname: dup\ndescription: d\n---\n\n# T\n\n## S\n\np\n\n## S\n\nq\n";
     let refused = Prompt::parse(&|_: &str| Ok(duplicate.to_owned()), "prompt")
-        .0
         .expect_err("duplicate sibling sections must be rejected");
     assert_eq!(
         failed(&refused),
@@ -213,7 +209,6 @@ fn a_parsed_prompts_located_message_ends_with_its_name_and_position() {
 fn a_refused_uses_list_ends_with_its_line_and_never_names_the_pack_as_the_prompt() {
     let source = "---\nname: x\ndescription: d\nuses: [web, web]\n---\n\n# T\n";
     let refused = Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt")
-        .0
         .expect_err("a Pack id declared twice must be refused");
     assert_eq!(
         refused.facts.get(&ErrorFact::Name),

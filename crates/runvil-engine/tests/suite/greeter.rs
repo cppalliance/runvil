@@ -25,7 +25,7 @@ const REPLY: &str = "
 #[test]
 fn the_smallest_greeter_parses_and_its_title_is_the_h1_text() {
     let source = note("'hello'");
-    let (parsed, _events) = Prompt::parse(&|_: &str| Ok(source.clone()), "prompt");
+    let parsed = Prompt::parse(&|_: &str| Ok(source.clone()), "prompt");
     assert!(parsed.is_ok_and(|prompt| prompt.title() == "Greeter"));
 }
 
@@ -85,7 +85,7 @@ fn a_cancel_from_another_thread_ends_the_run_canceled_once_held_effects_drop() -
 }
 
 #[test]
-fn the_complete_greeter_returns_hi_there_and_its_log_opens_with_the_parse_events() -> TestResult {
+fn the_complete_greeter_returns_hi_there_and_its_log_opens_with_the_runs_start() -> TestResult {
     assert_eq!(example::greet()?, "HI THERE");
     Ok(())
 }

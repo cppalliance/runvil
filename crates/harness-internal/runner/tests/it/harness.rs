@@ -1,7 +1,7 @@
 //! The per-run Harness: `run` begins the run's record, resolves the run's
 //! model through the setup's broker, prepares the parsed prompt, drives
-//! the run as one future, and reads the declared output; the record holds
-//! the run's own events and no parse event; the `ui()` snapshot serves the
+//! the run as one future, and reads the declared output; the record opens
+//! with the run's own start, numbered from zero; the `ui()` snapshot serves the
 //! setup's selection and first workspace root; a run that fails after it
 //! starts is a recorded failed run, never an error of `run`; a Vfs effect
 //! is answered inline as it is issued; and one run completes under a
@@ -252,7 +252,7 @@ async fn a_staged_input_and_a_declared_output_round_trip_beside_the_recorded_res
 }
 
 #[tokio::test]
-async fn a_runs_record_starts_with_its_own_events_and_holds_no_parse_event() {
+async fn a_runs_record_starts_with_its_own_start_and_counts_from_zero() {
     let recorder = Arc::new(MemoryRecorder::new());
     let report = plain_harness(&recorder, ScriptedBroker::replying(), WRITES_TWICE)
         .run()
@@ -270,17 +270,7 @@ async fn a_runs_record_starts_with_its_own_events_and_holds_no_parse_event() {
     assert_eq!(
         (first.task_id.as_str(), first.task_seq),
         ("0", 0),
-        "the root task counts from zero, with no parse events before it"
-    );
-    let parse_events: Vec<&Value> = records
-        .iter()
-        .filter(|record| record.kind == RecordKind::Event)
-        .map(|record| &record.payload["kind"])
-        .filter(|kind| kind.as_str().is_some_and(|kind| kind.starts_with("parse_")))
-        .collect();
-    assert!(
-        parse_events.is_empty(),
-        "the record holds no parse event: {parse_events:?}"
+        "the root task counts from zero"
     );
 }
 

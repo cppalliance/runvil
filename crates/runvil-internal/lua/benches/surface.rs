@@ -73,8 +73,6 @@ fn message_building(c: &mut Criterion) {
         "prompt",
         "bench",
         NonZeroU32::MIN,
-        &emitter(),
-        SECTION,
     )
     .expect("the builder chunk compiles");
     let emitter = emitter();

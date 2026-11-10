@@ -31,9 +31,6 @@ macro_rules! lifecycle_pairs {
 }
 
 lifecycle_pairs! {
-    ParseStarted,
-    ParseSucceeded,
-    ParseFailed,
     RunStarted,
     RunSucceeded,
     RunFailed,
@@ -44,9 +41,6 @@ lifecycle_pairs! {
     ModelTurnTruncated,
     ToolCallSucceeded,
     ToolCallFailed,
-    LuaCompilationStarted,
-    LuaCompilationSucceeded,
-    LuaCompilationFailed,
     LuaChunkStarted,
     LuaChunkSucceeded,
     LuaChunkFailed,

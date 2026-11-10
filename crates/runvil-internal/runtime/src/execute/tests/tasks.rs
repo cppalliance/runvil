@@ -28,8 +28,7 @@ impl Observer for TaskRecorder {
 }
 
 impl TaskRecorder {
-    /// A recorder holding what `trace`'s events report, parse events
-    /// first.
+    /// A recorder holding what `trace`'s events report, in order.
     pub(super) fn replayed(trace: &Trace) -> TaskRecorder {
         let recorder = TaskRecorder::default();
         trace.replay(&recorder);

@@ -45,9 +45,6 @@ fn round_trips(event: &Event) {
 /// to `None` also needs a sample in `payload_samples`.
 fn lifecycle_of(event: &Event) -> Option<Lifecycle> {
     match event {
-        Event::ParseStarted { .. } => Some(lifecycle::PARSE_STARTED),
-        Event::ParseSucceeded { .. } => Some(lifecycle::PARSE_SUCCEEDED),
-        Event::ParseFailed { .. } => Some(lifecycle::PARSE_FAILED),
         Event::RunStarted { .. } => Some(lifecycle::RUN_STARTED),
         Event::RunSucceeded { .. } => Some(lifecycle::RUN_SUCCEEDED),
         Event::RunFailed { .. } => Some(lifecycle::RUN_FAILED),
@@ -58,9 +55,6 @@ fn lifecycle_of(event: &Event) -> Option<Lifecycle> {
         Event::ModelTurnTruncated { .. } => Some(lifecycle::MODEL_TURN_TRUNCATED),
         Event::ToolCallSucceeded { .. } => Some(lifecycle::TOOL_CALL_SUCCEEDED),
         Event::ToolCallFailed { .. } => Some(lifecycle::TOOL_CALL_FAILED),
-        Event::LuaCompilationStarted { .. } => Some(lifecycle::LUA_COMPILATION_STARTED),
-        Event::LuaCompilationSucceeded { .. } => Some(lifecycle::LUA_COMPILATION_SUCCEEDED),
-        Event::LuaCompilationFailed { .. } => Some(lifecycle::LUA_COMPILATION_FAILED),
         Event::LuaChunkStarted { .. } => Some(lifecycle::LUA_CHUNK_STARTED),
         Event::LuaChunkSucceeded { .. } => Some(lifecycle::LUA_CHUNK_SUCCEEDED),
         Event::LuaChunkFailed { .. } => Some(lifecycle::LUA_CHUNK_FAILED),

@@ -1,5 +1,5 @@
 //! Section fence tests: exact `lua` fences around section prose and their
-//! compilation reports.
+//! compile failures.
 
 use super::*;
 use runvil_lua::LuaProgram;
@@ -259,62 +259,29 @@ fn lines_inside_another_fence_body_are_never_inspected() {
 }
 
 #[test]
-fn malformed_section_phases_report_locations_and_safe_boundaries() {
-    for (phase, content, expected_location, expected_details) in [
+fn malformed_section_phases_report_locations() {
+    for (phase, content, expected_location) in [
         (
             "prologue",
             "```lua\nprivate_payload =\n```\n\nProse.",
             "section `Private section` prologue",
-            vec![
-                detail::PARSE_STARTED,
-                detail::LUA_COMPILATION_STARTED,
-                detail::LUA_COMPILATION_FAILED,
-                detail::PARSE_FAILED,
-            ],
         ),
         (
             "epilog",
             "Prose.\n\n```lua\nprivate_payload =\n```",
             "section `Private section` epilog",
-            vec![
-                detail::PARSE_STARTED,
-                detail::LUA_COMPILATION_STARTED,
-                detail::LUA_COMPILATION_FAILED,
-                detail::PARSE_FAILED,
-            ],
         ),
     ] {
         let src = PromptSource::new()
             .prose("Private section", content)
             .build();
-        let (outcome, events) = parse_text(&src);
-        let recorder = Recorder(events);
-        let Err(error) = outcome else {
-            panic!("malformed {phase} unexpectedly parsed");
-        };
-        assert_eq!(error.code, ErrorCode::LuaCompile, "{error:?}");
+        let error = parse_err(&src);
+        assert_eq!(error.code, ErrorCode::LuaCompile, "{phase}: {error:?}");
         assert!(
             error.message.starts_with(&format!(
                 "lua compilation error at {expected_location} (line "
             )),
             "{error:?}"
-        );
-
-        let observations = recorder.observations();
-        assert_eq!(
-            observations
-                .iter()
-                .map(|(_, detail)| detail.clone())
-                .collect::<Vec<_>>(),
-            expected_details
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<_>>()
-        );
-        assert!(
-            observations
-                .iter()
-                .all(|(_, detail)| !detail.contains("private_payload"))
         );
     }
 }
@@ -345,27 +312,6 @@ fn backtick_lines_that_cannot_close_a_lua_fence_leave_it_unclosed() {
             "{src:?}"
         );
     }
-}
-
-#[test]
-fn successful_section_compilation_reports_fixed_ordered_boundaries() {
-    let body = "```lua\nvar.secret = 1\n```\n\nProse.\n\n```lua\nreturn reply\n```";
-    let src = PromptSource::new().prose("S", body).build();
-    let (prompt, events) = parse_text(&src);
-    prompt.expect("section programs must compile");
-    let recorder = Recorder(events);
-
-    assert_eq!(
-        recorder.observations(),
-        vec![
-            ("Prompt".into(), detail::PARSE_STARTED.to_string()),
-            ("S".into(), detail::LUA_COMPILATION_STARTED.to_string()),
-            ("S".into(), detail::LUA_COMPILATION_SUCCEEDED.to_string()),
-            ("S".into(), detail::LUA_COMPILATION_STARTED.to_string()),
-            ("S".into(), detail::LUA_COMPILATION_SUCCEEDED.to_string()),
-            ("Prompt".into(), detail::PARSE_SUCCEEDED.to_string()),
-        ]
-    );
 }
 
 #[test]

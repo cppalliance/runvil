@@ -166,7 +166,7 @@ fn trimmed(text: &str) -> String {
     reason = "a test may call it only to assert that the source parses"
 )]
 pub fn parse_ok(src: &str) -> Prompt {
-    match Prompt::parse(&|_: &str| Ok(src.to_owned()), "prompt").0 {
+    match Prompt::parse(&|_: &str| Ok(src.to_owned()), "prompt") {
         Ok(prompt) => prompt,
         Err(error) => panic!("expected a parse, got {error:?}\n{}", excerpt(src)),
     }
@@ -180,7 +180,7 @@ pub fn parse_ok(src: &str) -> Prompt {
 #[track_caller]
 #[must_use]
 pub fn parse_err(src: &str) -> Error {
-    match Prompt::parse(&|_: &str| Ok(src.to_owned()), "prompt").0 {
+    match Prompt::parse(&|_: &str| Ok(src.to_owned()), "prompt") {
         Ok(prompt) => panic!(
             "expected an error, parsed `{}`\n{}",
             prompt.title,

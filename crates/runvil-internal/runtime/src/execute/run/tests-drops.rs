@@ -43,7 +43,6 @@ fn bound_run(body: &str, cancel: &CancelHandle) -> Run {
 fn bound_sections(sections: &str, cancel: &CancelHandle) -> Run {
     let source = format!("---\nname: t\ndescription: d\nrunvil: 0\n---\n\n# Run\n\n{sections}");
     let prompt = Prompt::parse(&|_: &str| Ok(source.clone()), "prompt")
-        .0
         .expect("the drop test prompt parses");
     let model = test_model_with("test-model", 4096, ThinkingMode::Never);
     let echo = ToolInfo::new(

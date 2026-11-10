@@ -36,11 +36,6 @@ fn every_event_round_trips_as_a_json_line_and_no_two_share_a_provenance() -> Tes
 
     let keys: HashSet<_> = trace.events.iter().map(Event::provenance).collect();
     assert_eq!(keys.len(), trace.events.len());
-    let quiet = Scenario::default()
-        .args("world")
-        .params(|ctx| ctx.with_provenance_start(0))
-        .run(&source)?;
-    assert_eq!(quiet.text()?, "hello world");
     Ok(())
 }
 

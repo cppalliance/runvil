@@ -204,13 +204,6 @@ fn resume_with(vm: &SectionVm, thread: &Thread, answer: Answer) -> MultiValue {
 /// compiled.
 #[track_caller]
 fn compile_block(source: &str) -> LuaProgram {
-    LuaProgram::compile(
-        source,
-        "prompt",
-        "section `Test` prologue",
-        NonZeroU32::MIN,
-        &null_emitter(),
-        "Test",
-    )
-    .expect("the driver block compiles")
+    LuaProgram::compile(source, "prompt", "section `Test` prologue", NonZeroU32::MIN)
+        .expect("the driver block compiles")
 }

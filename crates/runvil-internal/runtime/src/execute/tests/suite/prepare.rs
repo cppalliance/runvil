@@ -109,9 +109,9 @@ fn refusal(scenario: Scenario) -> String {
     let error = trace.error();
     assert_eq!(error.code, ErrorCode::RequirementsUnmet, "{error}");
     assert!(
-        trace.run_events().is_empty(),
+        trace.events().is_empty(),
         "a refused run reports no run events: {:?}",
-        trace.run_events()
+        trace.events()
     );
     assert!(trace.effects().is_empty(), "a refused run issues nothing");
     error.to_string()

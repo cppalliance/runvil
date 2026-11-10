@@ -32,7 +32,6 @@ fn spawned(index: u32) -> TaskId {
 fn run_with_idle_cap(sections: &[(&str, &str)], cap: usize) -> Run {
     let source = prompt("", sections);
     let parsed = Prompt::parse(&|_: &str| Ok(source.clone()), "prompt")
-        .0
         .expect("the reply test prompt parses");
     let limits = RunLimits {
         max_idle_tasks: NonZeroUsize::new(cap).expect("the cap is non-zero"),

@@ -50,7 +50,6 @@ fn arrived(line: &str, text: &str) -> String {
 fn steered_run(front: &str, sections: &[(&str, &str)], cancel: &CancelHandle) -> Run {
     let source = prompt(front, sections);
     let parsed = Prompt::parse(&|_: &str| Ok(source.clone()), "prompt")
-        .0
         .expect("the steering test prompt parses");
     let model = test_model_with("test-model", 4096, ThinkingMode::Never);
     let echo = ToolInfo::new(

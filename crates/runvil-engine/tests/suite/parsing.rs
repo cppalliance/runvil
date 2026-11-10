@@ -44,7 +44,7 @@ fn invalid_prompt_files_report_public_error_contracts() -> TestResult {
     for (stem, code, message_fragment) in INVALID_FIXTURES {
         let name = format!("invalid/{stem}.md");
         let source = fs::read_to_string(dir.join(format!("{stem}.md")))?;
-        let Err(error) = Prompt::parse(&|_: &str| Ok(source.clone()), &name).0 else {
+        let Err(error) = Prompt::parse(&|_: &str| Ok(source.clone()), &name) else {
             return Err(format!("fixture {name} unexpectedly parsed").into());
         };
         assert_eq!(

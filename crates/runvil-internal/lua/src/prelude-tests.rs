@@ -9,8 +9,7 @@ use runvil_types::packs::{PackId, Prelude};
 use serde_json::json;
 
 use super::install_preludes;
-use crate::test_vm::{BuiltVm, TEST_SECTION, TestVm};
-use crate::tests::recording::null_emitter;
+use crate::test_vm::{BuiltVm, TestVm};
 use crate::tests::refusal_line;
 use crate::{Argv, CoroStep, LuaProgram, Request, SectionVm, YieldParse, install_ui};
 

@@ -72,9 +72,7 @@ const LOOP_PROMPT: &str = "---\nname: bench_loop\ndescription: d\nrunvil: 0\n---
 
 /// Parses the loop prompt once for the whole benchmark.
 fn parse_loop_prompt() -> Prompt {
-    Prompt::parse(&|_: &str| Ok(LOOP_PROMPT.to_owned()), "prompt")
-        .0
-        .expect("the bench prompt parses")
+    Prompt::parse(&|_: &str| Ok(LOOP_PROMPT.to_owned()), "prompt").expect("the bench prompt parses")
 }
 
 /// Runs `prompt` on a `context`-token window, on the serial driver: every

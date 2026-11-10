@@ -33,7 +33,7 @@ const SEED: RunSeed = RunSeed::from_bytes([7; 32]);
 fn lost_run() -> Run {
     let source = "---\nname: lost\ndescription: d\nrunvil: 0\n---\n\n# Lost\n\n## Only\n\n\
         ```lua\nreturn tools.call('tests/runner/wait')\n```\n";
-    let (prompt, _parse_events) = Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt");
+    let prompt = Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt");
     let wait = ToolInfo::new(
         ToolId::parse("tests/runner/wait").expect("the wait tool id is valid"),
         "Wait until the test answers.",

@@ -3,10 +3,7 @@
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use runvil_types::emitter::{Emitter, EventSink};
 use runvil_types::error::{Error, ErrorCode};
-use runvil_types::event::Event;
-use runvil_types::event_lifecycle;
 
 use crate::frontmatter::SplitSource;
 use crate::sections::{self, Heading, SectionWalker};
@@ -15,22 +12,13 @@ use crate::{
 };
 
 impl Prompt {
-    /// Finds the prompt `name` through `finder` and parses it, returning
-    /// the events reported while parsing. A find failure is the parse
-    /// result. `name` names the prompt in failures and in
-    /// [`Prompt::file`].
-    ///
-    /// Every event is reported under task `0` because parsing happens
-    /// before any run starts. The events come in this order:
-    /// `ParseStarted`, then a `LuaCompilationStarted` event and a
-    /// `LuaCompilationSucceeded` or `LuaCompilationFailed` event for each
-    /// Lua block the parser compiles, then `ParseSucceeded` or
-    /// `ParseFailed`. A find failure reports only `ParseStarted` and
-    /// `ParseFailed`. The events exist only for the caller to log.
+    /// Finds the prompt `name` through `finder` and parses it. A find
+    /// failure is the parse result. `name` names the prompt in failures
+    /// and in [`Prompt::file`].
     ///
     /// # Errors
-    /// On failure, the first element of the pair is the error `finder`
-    /// returned, unchanged, or an [`Error`] whose code is:
+    /// Returns the error `finder` returned, unchanged, or an [`Error`]
+    /// whose code is:
     ///
     /// - `FrontmatterInvalid` when the `---` delimiters are missing, the
     ///   frontmatter fails to decode, a `uses:` entry is neither a Pack id
@@ -70,40 +58,21 @@ impl Prompt {
     /// `Internal` failure is located at the Rust source position of the
     /// fault. A failure found past the frontmatter, other than an
     /// `Internal` one, has the prompt's frontmatter name as its `Name` fact.
-    pub fn parse(
-        finder: &dyn PromptFinder,
-        name: &str,
-    ) -> (std::result::Result<Prompt, Error>, Vec<Event>) {
-        let sink = EventSink::default();
-        let emitter = Emitter::root(sink.clone(), false);
-        emitter.report("Prompt", event_lifecycle::PARSE_STARTED);
-        let result = finder
+    pub fn parse(finder: &dyn PromptFinder, name: &str) -> std::result::Result<Prompt, Error> {
+        finder
             .find(name)
-            .and_then(|source| Self::parse_source(&source, name, &emitter));
-        emitter.report(
-            "Prompt",
-            if result.is_ok() {
-                event_lifecycle::PARSE_SUCCEEDED
-            } else {
-                event_lifecycle::PARSE_FAILED
-            },
-        );
-        (result, sink.take())
+            .and_then(|source| Self::parse_source(&source, name))
     }
 
     /// Parses `input`, the source of the prompt `file`, and adds the
     /// prompt's context to a failure.
-    fn parse_source(
-        input: &str,
-        file: &str,
-        emitter: &Emitter,
-    ) -> std::result::Result<Prompt, Error> {
+    fn parse_source(input: &str, file: &str) -> std::result::Result<Prompt, Error> {
         // Everything past the frontmatter postdates the prompt's name, so a
         // failure from there on names it.
         let (name, result) = match Self::parse_frontmatter(input) {
             Ok((frontmatter, split)) => (
                 Some(frontmatter.name().to_owned()),
-                Self::parse_body(frontmatter, split, file, emitter),
+                Self::parse_body(frontmatter, split, file),
             ),
             Err(error) => (None, Err(error)),
         };
@@ -122,12 +91,7 @@ impl Prompt {
         Ok((frontmatter, split))
     }
 
-    fn parse_body(
-        frontmatter: Frontmatter,
-        split: SplitSource,
-        file: &str,
-        emitter: &Emitter,
-    ) -> Result<Prompt> {
+    fn parse_body(frontmatter: Frontmatter, split: SplitSource, file: &str) -> Result<Prompt> {
         let frontmatter_lines = split.frontmatter_lines;
         let shared: Arc<str> = Arc::from(split.body);
         let body: &str = &shared;
@@ -186,12 +150,10 @@ impl Prompt {
             .skip(*h1_index + 1)
             .filter(|h| h.level >= 2)
             .collect();
-        let mut walker =
-            SectionWalker::new(&shared, &section_headings, frontmatter_lines, file, emitter);
+        let mut walker = SectionWalker::new(&shared, &section_headings, frontmatter_lines, file);
         let mut h1_blocks = walker.compile_blocks(
             fence::split_section_blocks(h1_content, &title, h1_content_abs_line)?,
             h1_content_abs_line,
-            &title,
             |_| format!("H1 `{title}` lua"),
         )?;
         if matches!(

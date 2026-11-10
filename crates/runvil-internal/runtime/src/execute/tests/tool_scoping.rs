@@ -128,8 +128,6 @@ fn a_section_offer_by_id_scopes_the_tool_and_dispatches_it() {
         "prompt",
         "prologue",
         NonZeroU32::new(1).expect("compile source line is non-zero"),
-        &null_emitter(),
-        "Only",
     )
     .expect("the offer chunk must compile");
     vm.run_chunk(&offer, &null_emitter(), "Only")

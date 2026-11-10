@@ -117,8 +117,8 @@ impl Rig {
         self.driving.release(which);
     }
 
-    /// The parse events, then every event the run reported so far, for a
-    /// test that steps until an event appears.
+    /// Every event the run reported so far, for a test that steps until an
+    /// event appears.
     pub(crate) fn events(&self) -> &[Event] {
         self.driving.events()
     }

@@ -3,9 +3,7 @@
 use std::num::NonZeroU32;
 
 use mlua::{Function, Lua, LuaOptions, StdLib};
-use runvil_types::emitter::Emitter;
 use runvil_types::error::ErrorCode;
-use runvil_types::event_lifecycle;
 
 use crate::chunk_line::{PROMPT_CHUNK_PREFIX, compile_line, map_chunk_line_to_absolute};
 use crate::error::{
@@ -55,7 +53,7 @@ fn compile_chunk(lua: &Lua, source: &str, chunk_name: &str) -> mlua::Result<Vec<
 /// in a model-facing message. [`location`](Self::location) and
 /// [`source_line`](Self::source_line) are safe positional metadata (a display
 /// name and a line number) and hold no source text. The crate itself never logs the
-/// retained source; compilation observations contain only fixed strings.
+/// retained source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LuaProgram {
     source: String,
@@ -87,9 +85,7 @@ impl LuaProgram {
     /// on the same line, and the name never reaches the length at which Lua
     /// cuts it. The chunk compiles behind a statement on its first line
     /// that keeps a main-chunk tail call from dropping the author's frame;
-    /// [`source`](Self::source) is the source as given. Compilation reports
-    /// contain only fixed strings and never include `source` or `location`;
-    /// each is stamped with the emitter's coordinates.
+    /// [`source`](Self::source) is the source as given.
     ///
     /// # Errors
     /// Returns a `LuaCompile` failure when `source` is not syntactically
@@ -104,14 +100,10 @@ impl LuaProgram {
         file: &str,
         location: &str,
         source_line: NonZeroU32,
-        emitter: &Emitter,
-        section: &str,
     ) -> Result<Self> {
-        emitter.report(section, event_lifecycle::LUA_COMPILATION_STARTED);
-
         let chunk_name = format!("{PROMPT_CHUNK_PREFIX}{source_line}");
         let guarded = format!("{FRAME_GUARD}{source}");
-        let compiled = compiler()
+        let bytecode = compiler()
             .map_err(|error| error::make_internal_error(error.to_string()))
             .and_then(|lua| {
                 compile_chunk(&lua, &guarded, &chunk_name).map_err(|error| {
@@ -127,16 +119,7 @@ impl LuaProgram {
                         failure_text(&diagnostic),
                     )
                 })
-            });
-        let bytecode = match compiled {
-            Ok(bytecode) => bytecode,
-            Err(error) => {
-                emitter.report(section, event_lifecycle::LUA_COMPILATION_FAILED);
-                return Err(error);
-            }
-        };
-
-        emitter.report(section, event_lifecycle::LUA_COMPILATION_SUCCEEDED);
+            })?;
         Ok(Self {
             source: source.to_owned(),
             bytecode,
@@ -146,15 +129,15 @@ impl LuaProgram {
         })
     }
 
-    /// Compiles one of the crate's embedded Lua chunks without observations.
+    /// Compiles one of the crate's embedded Lua chunks.
     ///
-    /// Internal chunks are crate source, not author prompt source, so the
-    /// compilation is bookkeeping. `chunk_name` serves as both the chunk
-    /// name and the display location; an `@`-prefixed name renders as a
-    /// file path in errors, which the line mapper never rewrites. Every
-    /// embedded chunk is included with `include_str!`, so chunk line 1 is
-    /// file line 1, and compiles once in a `LazyLock`; a compile failure is
-    /// a crate bug that each install clones.
+    /// Internal chunks are crate source, not author prompt source.
+    /// `chunk_name` serves as both the chunk name and the display
+    /// location; an `@`-prefixed name renders as a file path in errors,
+    /// which the line mapper never rewrites. Every embedded chunk is
+    /// included with `include_str!`, so chunk line 1 is file line 1, and
+    /// compiles once in a `LazyLock`; a compile failure is a crate bug
+    /// that each install clones.
     ///
     /// # Errors
     /// Returns a `LuaRuntime` failure if the temporary compiler VM cannot be
@@ -272,7 +255,6 @@ mod tests {
     use std::num::NonZeroU32;
 
     use mlua::Lua;
-    use runvil_types::emitter::{Emitter, EventSink};
     use runvil_types::error::{ErrorCode, ErrorFact, SourceLoc};
     use serde_json::Value;
 
@@ -298,9 +280,7 @@ mod tests {
     /// `source` compiled as the block of [`REGION`] in [`FILE`] that starts on
     /// `start`.
     fn compiled(source: &str, start: u32) -> LuaProgram {
-        let emitter = Emitter::root(EventSink::default(), false);
-        LuaProgram::compile(source, FILE, REGION, line(start), &emitter, "S")
-            .expect("the block compiles")
+        LuaProgram::compile(source, FILE, REGION, line(start)).expect("the block compiles")
     }
 
     /// The failure running `program` in `lua` raises.
@@ -336,16 +316,8 @@ mod tests {
 
     #[test]
     fn a_compile_failure_is_located_on_its_diagnostics_line_with_author_prose() {
-        let emitter = Emitter::root(EventSink::default(), false);
-        let error = LuaProgram::compile(
-            "local a = 1\nlocal b =",
-            FILE,
-            REGION,
-            line(11),
-            &emitter,
-            "S",
-        )
-        .expect_err("the block must not compile");
+        let error = LuaProgram::compile("local a = 1\nlocal b =", FILE, REGION, line(11))
+            .expect_err("the block must not compile");
         let diagnostic = "[string \"line 11\"]:2: unexpected symbol near <eof>";
         assert_eq!(error.code, ErrorCode::LuaCompile);
         assert_eq!(

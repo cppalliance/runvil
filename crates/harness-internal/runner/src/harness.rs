@@ -153,8 +153,7 @@ impl Harness {
     /// carries beside the run's id: the final text, or the error that
     /// ended the run, where a cancel is the error whose code is
     /// `canceled`. The record begins before anything else, so a run that
-    /// ends before it starts is recorded too, and it holds the run's own
-    /// records only, never the prompt's parse. A cancel raised before
+    /// ends before it starts is recorded too. A cancel raised before
     /// calling `run`, or while the broker lists its models, ends the run
     /// canceled. A model list the broker fails to fetch ends it with the
     /// broker's failure, and a list that omits the selected model with a

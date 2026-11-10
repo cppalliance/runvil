@@ -165,10 +165,7 @@ fn an_unsupported_version_is_reported_before_an_unmet_requirement() {
         error.located_message(),
         "unsupported runvil version: 7 (this build supports major 0) (at prompt:4)"
     );
-    assert!(
-        trace.run_events().is_empty(),
-        "nothing ran, nothing reported"
-    );
+    assert!(trace.events().is_empty(), "nothing ran, nothing reported");
 }
 
 /// `scenario`, with its run's cancel flag set before the run is built.
@@ -193,9 +190,9 @@ fn a_refusal_after_the_runs_cancel_fired_ends_the_run_canceled_with_no_run_event
             trace.result()
         );
         assert!(
-            trace.run_events().is_empty(),
+            trace.events().is_empty(),
             "{refused_for}: a run that never started reports no run events: {:?}",
-            trace.run_events()
+            trace.events()
         );
     }
 }
@@ -206,8 +203,8 @@ fn a_run_that_passes_its_start_checks_after_a_cancel_starts_and_ends_canceled() 
     let trace = canceled_before_it_starts(under_model(DECLARES_STRONG, model)).run();
     assert!(trace.error().is_canceled(), "got {:?}", trace.result());
     assert!(
-        matches!(trace.run_events().first(), Some(Event::RunStarted { .. })),
+        matches!(trace.events().first(), Some(Event::RunStarted { .. })),
         "the run started before it saw the cancel: {:?}",
-        trace.run_events()
+        trace.events()
     );
 }

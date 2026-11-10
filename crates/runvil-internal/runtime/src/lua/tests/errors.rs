@@ -17,7 +17,6 @@ use runvil_types::error::{ErrorCode, place};
 
 use crate::lua::{CoroStep, LuaBlockResult};
 use crate::model::ModelSet;
-use crate::test_support::recording::null_emitter;
 
 use super::{TEST_FILE, compile_block, scheduler_vm, start, test_models};
 
@@ -264,8 +263,6 @@ fn an_uncaught_lua_kind_shim_raise_keeps_the_mapped_runtime_error() {
         "prompt",
         "section `Test` prologue",
         NonZeroU32::new(40).expect("40 is non-zero"),
-        &null_emitter(),
-        "Test",
     )
     .expect("the driver block compiles");
     match vm.start_block_coro(&program) {
@@ -394,8 +391,6 @@ fn a_traceback_through_a_shim_shows_unmapped_impl_frames() {
         "prompt",
         "section `Test` prologue",
         NonZeroU32::new(40).expect("40 is non-zero"),
-        &null_emitter(),
-        "Test",
     )
     .expect("the driver program compiles");
     let function = program.load(vm.lua()).expect("the driver program loads");

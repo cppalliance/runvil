@@ -29,9 +29,7 @@ const LIBRARY_TREE: &str = concat!(
 );
 
 fn library_tree() -> Prompt {
-    Prompt::parse(&|_: &str| Ok(LIBRARY_TREE.to_owned()), "prompt")
-        .0
-        .expect("the tree parses")
+    Prompt::parse(&|_: &str| Ok(LIBRARY_TREE.to_owned()), "prompt").expect("the tree parses")
 }
 
 /// The section at `index` of the slice under `ancestors`, from the top

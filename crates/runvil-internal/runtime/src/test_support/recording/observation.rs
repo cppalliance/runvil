@@ -32,9 +32,6 @@ pub(crate) mod detail {
     }
 
     constants! {
-        PARSE_STARTED => ParseStarted,
-        PARSE_SUCCEEDED => ParseSucceeded,
-        PARSE_FAILED => ParseFailed,
         RUN_STARTED => RunStarted,
         RUN_SUCCEEDED => RunSucceeded,
         RUN_FAILED => RunFailed,
@@ -45,9 +42,6 @@ pub(crate) mod detail {
         MODEL_TURN_TRUNCATED => ModelTurnTruncated,
         TOOL_CALL_SUCCEEDED => ToolCallSucceeded,
         TOOL_CALL_FAILED => ToolCallFailed,
-        LUA_COMPILATION_STARTED => LuaCompilationStarted,
-        LUA_COMPILATION_SUCCEEDED => LuaCompilationSucceeded,
-        LUA_COMPILATION_FAILED => LuaCompilationFailed,
         LUA_CHUNK_STARTED => LuaChunkStarted,
         LUA_CHUNK_SUCCEEDED => LuaChunkSucceeded,
         LUA_CHUNK_FAILED => LuaChunkFailed,
@@ -87,12 +81,6 @@ pub(crate) mod detail {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub(crate) enum Observation {
-    /// Prompt parsing began.
-    ParseStarted,
-    /// Prompt parsing and parse-time compilation completed successfully.
-    ParseSucceeded,
-    /// Prompt parsing or parse-time compilation returned an error.
-    ParseFailed,
     /// A run passed its version gate and began.
     RunStarted,
     /// A run returned a value.
@@ -113,12 +101,6 @@ pub(crate) enum Observation {
     ToolCallSucceeded,
     /// A tool dispatch returned an error.
     ToolCallFailed,
-    /// Lua source compilation began.
-    LuaCompilationStarted,
-    /// Lua source compilation completed successfully.
-    LuaCompilationSucceeded,
-    /// Lua source compilation returned an error.
-    LuaCompilationFailed,
     /// A section VM began loading a library section.
     LuaLibraryLoadStarted {
         /// The library section's heading with its markers.
@@ -233,9 +215,6 @@ impl Observation {
     #[must_use]
     pub(crate) fn label(&self) -> Option<&'static str> {
         let label = match self {
-            Observation::ParseStarted => "Parse started",
-            Observation::ParseSucceeded => "Parse succeeded",
-            Observation::ParseFailed => "Parse failed",
             Observation::RunStarted => "Run started",
             Observation::RunSucceeded => "Run succeeded",
             Observation::RunFailed => "Run failed",
@@ -246,9 +225,6 @@ impl Observation {
             Observation::ModelTurnTruncated => "Model turn truncated",
             Observation::ToolCallSucceeded => "Tool call succeeded",
             Observation::ToolCallFailed => "Tool call failed",
-            Observation::LuaCompilationStarted => "Lua compilation started",
-            Observation::LuaCompilationSucceeded => "Lua compilation succeeded",
-            Observation::LuaCompilationFailed => "Lua compilation failed",
             Observation::LuaLibraryLoadStarted { .. } => "Lua library load started",
             Observation::LuaLibraryLoadSucceeded { .. } => "Lua library load succeeded",
             Observation::LuaLibraryLoadFailed { .. } => "Lua library load failed",

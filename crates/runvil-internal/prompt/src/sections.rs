@@ -4,7 +4,6 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
-use runvil_types::emitter::Emitter;
 use runvil_types::error::{Error, ErrorCode};
 
 use crate::fence::{self, LuaRole, RawBlock};
@@ -110,8 +109,6 @@ pub(crate) struct SectionWalker<'a> {
     frontmatter_lines: u32,
     /// The file the prompt came from, which a block's compile failure names.
     file: &'a str,
-    /// Receives each Lua block's compile events.
-    emitter: &'a Emitter,
     /// Index in `headings` of the next heading to build.
     pos: usize,
 }
@@ -123,14 +120,12 @@ impl<'a> SectionWalker<'a> {
         headings: &'a [Heading<'a>],
         frontmatter_lines: u32,
         file: &'a str,
-        emitter: &'a Emitter,
     ) -> Self {
         Self {
             shared,
             headings,
             frontmatter_lines,
             file,
-            emitter,
             pos: 0,
         }
     }
@@ -275,7 +270,7 @@ impl<'a> SectionWalker<'a> {
     ) -> Result<Vec<Block>> {
         let content_abs_line = line_add(self.frontmatter_lines, heading.content_body_line)?;
         let raw_blocks = fence::split_section_blocks(heading.content, name, content_abs_line)?;
-        self.compile_blocks(raw_blocks, content_abs_line, name, |role| {
+        self.compile_blocks(raw_blocks, content_abs_line, |role| {
             fence::lua_block_location(location, role)
         })
     }
@@ -296,7 +291,6 @@ impl<'a> SectionWalker<'a> {
         &self,
         raw_blocks: Vec<RawBlock<'_>>,
         content_abs_line: u32,
-        name: &str,
         location: impl Fn(&LuaRole) -> String,
     ) -> Result<Vec<Block>> {
         let mut blocks = Vec::with_capacity(raw_blocks.len());
@@ -317,8 +311,6 @@ impl<'a> SectionWalker<'a> {
                         self.file,
                         &location(&role),
                         nz_source_line(abs_line)?,
-                        self.emitter,
-                        name,
                     )
                     .map_err(|cause| error::make_lua_error(&cause))?;
                     blocks.push(Block::Lua(program));

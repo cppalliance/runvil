@@ -330,7 +330,7 @@ pub fn runvil_engine::Error::with_cause(self, cause: &dyn core::error::Error + '
 pub fn runvil_engine::ErrorCode::from_tag(tag: &str) -> core::option::Option<runvil_engine::ErrorCode>
 pub fn runvil_engine::Prompt::file(&self) -> &str
 pub fn runvil_engine::Prompt::frontmatter(&self) -> &runvil_engine::prompt::Frontmatter
-pub fn runvil_engine::Prompt::parse(finder: &dyn runvil_engine::PromptFinder, name: &str) -> (core::result::Result<runvil_engine::Prompt, runvil_engine::Error>, alloc::vec::Vec<runvil_engine::event::Event>)
+pub fn runvil_engine::Prompt::parse(finder: &dyn runvil_engine::PromptFinder, name: &str) -> core::result::Result<runvil_engine::Prompt, runvil_engine::Error>
 pub fn runvil_engine::Prompt::title(&self) -> &str
 pub fn runvil_engine::PromptFinder::find(&self, name: &str) -> core::result::Result<alloc::string::String, runvil_engine::Error>
 pub fn runvil_engine::Run::deliver(&mut self, text: alloc::string::String) -> alloc::vec::Vec<runvil_engine::event::Event>
@@ -343,7 +343,6 @@ pub fn runvil_engine::RunParams::with_limits(self, limits: runvil_engine::RunLim
 pub fn runvil_engine::RunParams::with_models(self, models: alloc::collections::btree::map::BTreeMap<runvil_engine::model::ModelRole, runvil_engine::model::ModelInfo>) -> runvil_engine::RunParams
 pub fn runvil_engine::RunParams::with_packs(self, roster: impl core::iter::traits::collect::IntoIterator<Item = (runvil_engine::packs::PackId, runvil_engine::packs::RosterEntry)>) -> runvil_engine::RunParams
 pub fn runvil_engine::RunParams::with_preludes(self, preludes: alloc::vec::Vec<runvil_engine::packs::Prelude>) -> runvil_engine::RunParams
-pub fn runvil_engine::RunParams::with_provenance_start(self, start: u32) -> runvil_engine::RunParams
 pub fn runvil_engine::RunParams::with_report_debug(self, report: bool) -> runvil_engine::RunParams
 pub fn runvil_engine::RunParams::with_tools(self, tools: runvil_engine::ToolCatalog) -> runvil_engine::RunParams
 pub fn runvil_engine::RunParams::with_ui(self, snapshot: serde_json::value::Value) -> runvil_engine::RunParams
@@ -814,15 +813,6 @@ pub runvil_engine::event::Event::LuaChunkStarted::section: alloc::string::String
 pub runvil_engine::event::Event::LuaChunkSucceeded { .. }
 pub runvil_engine::event::Event::LuaChunkSucceeded::provenance: runvil_engine::ids::Provenance
 pub runvil_engine::event::Event::LuaChunkSucceeded::section: alloc::string::String
-pub runvil_engine::event::Event::LuaCompilationFailed { .. }
-pub runvil_engine::event::Event::LuaCompilationFailed::provenance: runvil_engine::ids::Provenance
-pub runvil_engine::event::Event::LuaCompilationFailed::section: alloc::string::String
-pub runvil_engine::event::Event::LuaCompilationStarted { .. }
-pub runvil_engine::event::Event::LuaCompilationStarted::provenance: runvil_engine::ids::Provenance
-pub runvil_engine::event::Event::LuaCompilationStarted::section: alloc::string::String
-pub runvil_engine::event::Event::LuaCompilationSucceeded { .. }
-pub runvil_engine::event::Event::LuaCompilationSucceeded::provenance: runvil_engine::ids::Provenance
-pub runvil_engine::event::Event::LuaCompilationSucceeded::section: alloc::string::String
 pub runvil_engine::event::Event::LuaLibraryLoadFailed { .. }
 pub runvil_engine::event::Event::LuaLibraryLoadFailed::library: alloc::string::String
 pub runvil_engine::event::Event::LuaLibraryLoadFailed::provenance: runvil_engine::ids::Provenance
@@ -855,15 +845,6 @@ pub runvil_engine::event::Event::ModelTurnFailed::section: alloc::string::String
 pub runvil_engine::event::Event::ModelTurnTruncated { .. }
 pub runvil_engine::event::Event::ModelTurnTruncated::provenance: runvil_engine::ids::Provenance
 pub runvil_engine::event::Event::ModelTurnTruncated::section: alloc::string::String
-pub runvil_engine::event::Event::ParseFailed { .. }
-pub runvil_engine::event::Event::ParseFailed::provenance: runvil_engine::ids::Provenance
-pub runvil_engine::event::Event::ParseFailed::section: alloc::string::String
-pub runvil_engine::event::Event::ParseStarted { .. }
-pub runvil_engine::event::Event::ParseStarted::provenance: runvil_engine::ids::Provenance
-pub runvil_engine::event::Event::ParseStarted::section: alloc::string::String
-pub runvil_engine::event::Event::ParseSucceeded { .. }
-pub runvil_engine::event::Event::ParseSucceeded::provenance: runvil_engine::ids::Provenance
-pub runvil_engine::event::Event::ParseSucceeded::section: alloc::string::String
 pub runvil_engine::event::Event::Request { .. }
 pub runvil_engine::event::Event::Request::body: serde_json::value::Value
 pub runvil_engine::event::Event::Request::provenance: runvil_engine::ids::Provenance

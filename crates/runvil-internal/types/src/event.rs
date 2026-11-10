@@ -143,13 +143,7 @@ events! {
     /// JSON object tagged by `kind`, the variant name in `snake_case`, with
     /// the coordinates and the payload fields beside it.
     pub enum Event {
-        // Lifecycle: parse and run.
-        /// Prompt parsing began.
-        ParseStarted {},
-        /// Prompt parsing and parse-time compilation completed successfully.
-        ParseSucceeded {},
-        /// Prompt parsing or parse-time compilation returned an error.
-        ParseFailed {},
+        // Lifecycle: the run and its sections.
         /// A run passed its start checks and began.
         RunStarted {},
         /// A run returned a value.
@@ -184,12 +178,6 @@ events! {
         /// A tool dispatch returned an error.
         ToolCallFailed {},
         // Lifecycle: the section VM.
-        /// Lua source compilation began.
-        LuaCompilationStarted {},
-        /// Lua source compilation completed successfully.
-        LuaCompilationSucceeded {},
-        /// Lua source compilation returned an error.
-        LuaCompilationFailed {},
         /// A section VM began loading a library section into the reporting
         /// section's environment.
         LuaLibraryLoadStarted {

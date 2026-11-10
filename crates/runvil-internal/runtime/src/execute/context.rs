@@ -144,7 +144,6 @@ impl ChainState {
         let RunParams {
             seed,
             started_at,
-            provenance_start,
             report_debug,
             cancel,
             limits,
@@ -160,10 +159,7 @@ impl ChainState {
         requirements.check_packs(&prompt, &tools, packs.as_ref());
         let refusal = requirements.refusal(&prompt);
         let tool_set = Arc::new(run_tool_set(&prompt, tools, packs.unwrap_or_default()));
-        // The root task's event sequence starts at the params'
-        // `provenance_start`: past any parse events the caller put in the
-        // stream ahead of the run, or at zero.
-        let events = EventSink::seeded(provenance_start);
+        let events = EventSink::default();
         // The root chain - the main walk - is task `0`.
         let emitter = Arc::new(Emitter::new(
             events.clone(),
@@ -538,9 +534,7 @@ mod tests {
             "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n",
             "# Title\n\n## Only\n\ndone\n",
         );
-        Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt")
-            .0
-            .expect("the test prompt parses")
+        Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt").expect("the test prompt parses")
     }
 
     fn test_state(prompt: &Prompt) -> ChainState {
@@ -661,24 +655,6 @@ mod tests {
         assert!(Arc::ptr_eq(&ctx.shared, &arm.shared));
         assert_eq!(arm.emitter().task(), &task);
         assert_eq!(ctx.emitter().task(), &TaskId::from(ChainId::root()));
-    }
-
-    #[test]
-    fn the_root_task_sequence_starts_where_the_params_say() {
-        let ctx = state_over(
-            &test_prompt(),
-            RunParams::new(TEST_SEED, runvil_types::timestamp::Timestamp::UNIX_EPOCH)
-                .with_provenance_start(5),
-        );
-        ctx.emitter()
-            .report("Only", runvil_types::event_lifecycle::SECTION_STARTED);
-        let events = ctx.take_events();
-        assert_eq!(events[0].provenance().task, TaskId::from(ChainId::root()));
-        assert_eq!(
-            events[0].provenance().seq,
-            5,
-            "the root task's first stamp continues past the caller's parse events"
-        );
     }
 
     #[test]

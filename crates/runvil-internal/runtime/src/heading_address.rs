@@ -517,7 +517,6 @@ mod tests {
 
     fn tree() -> crate::prompt::Prompt {
         crate::prompt::Prompt::parse(&|_: &str| Ok(TREE.to_owned()), "prompt")
-            .0
             .expect("the tree parses")
     }
 

@@ -13,8 +13,6 @@ fn at(source: &str, location: &str, line: u32) -> LuaProgram {
         "prompt",
         location,
         NonZeroU32::new(line).expect("prompt lines start at 1"),
-        &null_emitter(),
-        TEST_SECTION,
     )
     .expect("test Lua must compile")
 }

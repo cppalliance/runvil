@@ -57,9 +57,6 @@ macro_rules! lifecycle_kinds {
 lifecycle_kinds! {
     TOOL_CALL_SUCCEEDED => "tool_call_succeeded",
     TOOL_CALL_FAILED => "tool_call_failed",
-    LUA_COMPILATION_STARTED => "lua_compilation_started",
-    LUA_COMPILATION_SUCCEEDED => "lua_compilation_succeeded",
-    LUA_COMPILATION_FAILED => "lua_compilation_failed",
     LUA_CHUNK_STARTED => "lua_chunk_started",
     LUA_CHUNK_SUCCEEDED => "lua_chunk_succeeded",
     LUA_CHUNK_FAILED => "lua_chunk_failed",

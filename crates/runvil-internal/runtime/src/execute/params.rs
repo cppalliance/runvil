@@ -40,8 +40,6 @@ pub struct RunParams {
     /// When the run began, as the caller stamped it: rendered as `sys.when`
     /// in every section, the H1 pass included.
     pub(super) started_at: Timestamp,
-    /// Where the root task's provenance sequence starts; set by `with_provenance_start`.
-    pub(super) provenance_start: u32,
     /// Whether the run reports raw model-round bodies as events; set by `with_report_debug`.
     pub(super) report_debug: bool,
     /// The run's cancel flag, minted by `new` and replaced by `with_cancel`.
@@ -82,7 +80,6 @@ impl RunParams {
         RunParams {
             seed,
             started_at,
-            provenance_start: 0,
             report_debug: false,
             cancel: CancelHandle::new(),
             limits: RunLimits::default(),
@@ -151,20 +148,6 @@ impl RunParams {
     #[must_use]
     pub fn with_ui(mut self, snapshot: serde_json::Value) -> RunParams {
         self.ui = Some(snapshot);
-        self
-    }
-
-    /// Sets where the root task's provenance sequence starts.
-    ///
-    /// The default, 0, fits a run recorded on its own. When the caller
-    /// records the prompt's parse events ahead of the run in one stream, it
-    /// passes their count. `Prompt::parse` stamps those events under task
-    /// `0`, counting from zero, so this start moves the run's root counter
-    /// past them and every `(task, seq)` in the stream stays unique.
-    /// Spawned tasks count from zero.
-    #[must_use]
-    pub fn with_provenance_start(mut self, start: u32) -> RunParams {
-        self.provenance_start = start;
         self
     }
 
@@ -274,7 +257,6 @@ impl fmt::Debug for RunParams {
         let mut state = f.debug_struct("RunParams");
         state
             .field("started_at", &self.started_at)
-            .field("provenance_start", &self.provenance_start)
             .field("report_debug", &self.report_debug)
             .field("cancel", &self.cancel)
             .field("limits", &self.limits)

@@ -25,11 +25,11 @@ pub(super) fn task(id: &str) -> TaskId {
     id.parse().expect("a task id parses")
 }
 
-/// The `(section, detail)` sequence the run itself reported, as the suites'
-/// observer sees it: the parse events ahead of it are left out.
+/// The `(section, detail)` sequence the run reported, as the suites'
+/// observer sees it.
 pub(super) fn sequence(trace: &Trace) -> Vec<(String, String)> {
     trace
-        .run_records()
+        .records()
         .into_iter()
         .map(|record| (record.section, record.detail))
         .collect()
@@ -61,9 +61,7 @@ pub(super) fn parse(md: &str) -> Prompt {
     } else {
         md.replacen("---\n\n", "---\n\n# Test prompt\n\n", 1)
     };
-    Prompt::parse(&|_: &str| Ok(source.clone()), "prompt")
-        .0
-        .unwrap()
+    Prompt::parse(&|_: &str| Ok(source.clone()), "prompt").unwrap()
 }
 
 /// An [`Observer`] that keeps every observation it is handed, in order, so a test

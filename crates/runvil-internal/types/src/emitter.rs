@@ -16,10 +16,9 @@
 //! the run's leaf tasks interleave.
 //!
 //! The emitter is the one reporting seam every Engine crate takes: the
-//! parser reports parse-time compilation through it, the section VM its
-//! chunk boundaries, the tool-dispatch body its results, the scheduler
-//! everything else. It sits in this crate so those crates can name it
-//! without depending on the runtime.
+//! section VM reports its chunk boundaries through it, the tool-dispatch
+//! body its results, the scheduler everything else. It sits in this crate
+//! so those crates can name it without depending on the runtime.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -74,21 +73,6 @@ impl EventBuffer {
 pub struct EventSink(Arc<Mutex<EventBuffer>>);
 
 impl EventSink {
-    /// A buffer whose root task (`0`) counts from `start` instead of zero.
-    ///
-    /// A prompt's parse reports under task `0` through its own sink before
-    /// any run exists, so a caller that keeps the parse events and the run's
-    /// events in one sequence seeds the run's buffer with the parse's event count:
-    /// the run's first root-task stamp continues the parse's sequence, and
-    /// `(task, seq)` stays unique across the two. Every other task still
-    /// counts from zero.
-    #[must_use]
-    pub fn seeded(start: u32) -> Self {
-        let mut buffer = EventBuffer::default();
-        buffer.seqs.insert(TaskId::from(ChainId::root()), start);
-        Self(Arc::new(Mutex::new(buffer)))
-    }
-
     /// Pushes one event built from `task`'s next provenance. The lock is
     /// held only for the allocation and the push; `build` runs under it,
     /// so it must not touch the sink.
@@ -153,8 +137,7 @@ impl Emitter {
         Self { sink, task, debug }
     }
 
-    /// The root task's emitter over `sink`: the main walk is task `0`,
-    /// and so is a prompt's parse, which happens before any run exists.
+    /// The root task's emitter over `sink`: the main walk is task `0`.
     #[must_use]
     pub fn root(sink: EventSink, debug: bool) -> Self {
         Self::new(sink, TaskId::from(ChainId::root()), debug)
@@ -419,29 +402,6 @@ mod tests {
     }
 
     #[test]
-    fn a_seeded_sink_continues_the_root_sequence_and_leaves_other_tasks_at_zero() {
-        let sink = EventSink::seeded(3);
-        let walk = emitter(&sink, root());
-        let arm = walk.for_task("0.0".parse().expect("a task id parses"));
-        walk.report("A", lifecycle::SECTION_STARTED);
-        let stamp = walk.stamp_effect();
-        arm.report("W", lifecycle::SECTION_STARTED);
-
-        let events = sink.take();
-        assert_eq!(
-            events[0].provenance().seq,
-            3,
-            "the root task's first stamp continues from the seed"
-        );
-        assert_eq!(stamp.seq, 4, "an effect stamp advances the seeded counter");
-        assert_eq!(
-            events[1].provenance().seq,
-            0,
-            "a spawned task's sequence is unaffected by the seed"
-        );
-    }
-
-    #[test]
     fn a_lifecycle_report_becomes_the_matching_event_with_its_coordinates() {
         let sink = EventSink::default();
         let walk = emitter(&sink, root());
@@ -604,7 +564,7 @@ mod tests {
         let emitter = Emitter::root(sink.clone(), true);
         assert!(emitter.captures_debug());
         assert_eq!(emitter.task(), &root());
-        emitter.report("Prompt", lifecycle::PARSE_STARTED);
+        emitter.report("Main", lifecycle::RUN_STARTED);
         let events = sink.take();
         assert_eq!(events[0].provenance().task, root());
     }

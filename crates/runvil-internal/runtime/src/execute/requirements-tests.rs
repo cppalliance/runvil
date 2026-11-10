@@ -40,7 +40,6 @@ fn prompt(front: &str) -> Prompt {
          # Run\n\n## Only\n\n```lua\nreturn 'done'\n```\n"
     );
     Prompt::parse(&|_: &str| Ok(source.clone()), "prompt")
-        .0
         .expect("the requirements test prompt parses")
 }
 

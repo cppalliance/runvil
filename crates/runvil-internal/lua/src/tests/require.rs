@@ -35,8 +35,6 @@ fn library(identity: &str, heading: &str, sources: &[&str]) -> Library {
                     "prompt",
                     &format!("library {heading}"),
                     NonZeroU32::new(100).expect("100 is non-zero"),
-                    &null_emitter(),
-                    TEST_SECTION,
                 )
                 .expect("library Lua must compile"),
                 prose: String::new(),

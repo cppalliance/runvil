@@ -62,7 +62,7 @@ fn the_returned_event_stream_matches_the_former_observer_sequence() {
     for (name, md) in stream_fixtures() {
         let trace = Scenario::new(md).run();
 
-        let streamed: Vec<(String, String)> = trace.run_events().iter().map(event_trace).collect();
+        let streamed: Vec<(String, String)> = trace.events().iter().map(event_trace).collect();
         let observed: Vec<(String, String)> = sequence(&trace)
             .into_iter()
             .map(|(section, detail)| (section, observer_kind(&detail)))
@@ -164,7 +164,7 @@ fn a_run_refused_by_the_version_gate_reports_nothing() {
         "the version gate fails the run, got {:?}",
         trace.result()
     );
-    let records = trace.run_records();
+    let records = trace.records();
     assert!(
         records.is_empty(),
         "the gate must report nothing: {records:?}"
@@ -286,7 +286,7 @@ fn a_one_byte_limit_fails_value_injection_with_teardown_observations() {
 }
 
 #[test]
-fn the_records_span_parse_and_the_complete_runtime_lifecycle() {
+fn the_records_span_the_complete_runtime_lifecycle() {
     let gateway = ScriptedChat::new(vec![text("aliased final")]);
     let (tool, called) = scoped_tool("echo", "Echo a test value.");
     let source = "---\nname: lifecycle\ndescription: Correlated lifecycle fixture\nrunvil: 0\nuses:\n  - tools\n---\n\n\
@@ -315,7 +315,6 @@ fn the_records_span_parse_and_the_complete_runtime_lifecycle() {
         .map(|record| record.detail.clone())
         .collect::<Vec<_>>();
     for expected in [
-        detail::PARSE_STARTED,
         detail::RUN_STARTED,
         detail::SECTION_STARTED,
         detail::LUA_CHUNK_STARTED,

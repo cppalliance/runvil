@@ -18,7 +18,7 @@ const CONTRACT: &str = "
 #[test]
 fn the_frontmatter_lists_every_declaration_with_arguments_sorted_by_name() -> TestResult {
     let source = prompt(CONTRACT, &[("Greet", "return 'done'")]);
-    let parsed = Prompt::parse(&|_: &str| Ok(source.clone()), "prompt").0?;
+    let parsed = Prompt::parse(&|_: &str| Ok(source.clone()), "prompt")?;
     let frontmatter = parsed.frontmatter();
     assert_eq!(frontmatter.name(), "greeter");
     assert_eq!(
@@ -66,7 +66,7 @@ fn the_frontmatter_lists_every_declaration_with_arguments_sorted_by_name() -> Te
     );
 
     let misspelled = source.replace("uses:", "use:");
-    let parsed = Prompt::parse(&|_: &str| Ok(misspelled.clone()), "prompt").0;
+    let parsed = Prompt::parse(&|_: &str| Ok(misspelled.clone()), "prompt");
     assert_eq!(
         parsed.err().map(|error| error.code),
         Some(ErrorCode::FrontmatterInvalid)
@@ -77,7 +77,7 @@ fn the_frontmatter_lists_every_declaration_with_arguments_sorted_by_name() -> Te
 #[test]
 fn the_prompt_is_named_by_the_name_its_finder_was_asked_for() -> TestResult {
     let source = prompt(CONTRACT, &[("Greet", "return 'done'")]);
-    let parsed = Prompt::parse(&|_: &str| Ok(source.clone()), "greeter.md").0?;
+    let parsed = Prompt::parse(&|_: &str| Ok(source.clone()), "greeter.md")?;
     assert_eq!(parsed.file(), "greeter.md");
     Ok(())
 }

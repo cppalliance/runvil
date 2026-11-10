@@ -14,8 +14,6 @@ fn lua_program_retains_source_and_round_trips_bytecode() {
         "prompt",
         "section Gather prologue",
         NonZeroU32::new(1).expect("compile source line is non-zero"),
-        &null_emitter(),
-        "Gather",
     )
     .expect("valid Lua must compile");
     assert_eq!(program.source(), source);
@@ -39,8 +37,6 @@ fn runtime_assert_failure_reports_chunk_name_and_line() {
         "prompt",
         location,
         NonZeroU32::new(1).expect("compile source line is non-zero"),
-        &null_emitter(),
-        "Web Search",
     )
     .expect("valid Lua must compile");
     let lua = Lua::new();
@@ -244,8 +240,6 @@ fn runtime_error_maps_to_absolute_prompt_line() {
         "prompt",
         location,
         source_line,
-        &null_emitter(),
-        "Web Search",
     )
     .expect("valid Lua must compile");
 
@@ -278,8 +272,6 @@ fn a_location_longer_than_lua_keeps_in_a_chunk_name_still_maps() {
         "prompt",
         location,
         NonZeroU32::new(40).expect("40 is non-zero"),
-        &null_emitter(),
-        "Shared Research Helper Functions",
     )
     .expect("valid Lua must compile");
     let lua = Lua::new();
@@ -334,8 +326,6 @@ fn malformed_lua_reports_its_region_and_the_diagnostic() {
         "prompt",
         location,
         NonZeroU32::new(1).expect("compile source line is non-zero"),
-        &null_emitter(),
-        "Gather",
     )
     .expect_err("malformed Lua must not compile");
 
@@ -352,59 +342,4 @@ fn malformed_lua_reports_its_region_and_the_diagnostic() {
         error.to_string().contains(location),
         "the displayed error must identify its source region"
     );
-}
-
-#[test]
-fn lua_compilation_reports_are_ordered_exact_and_payload_free() {
-    let recorder = Recorder::default();
-    let source = "return 'private source payload'";
-    let location = "private/location";
-    LuaProgram::compile(
-        source,
-        "prompt",
-        location,
-        NonZeroU32::new(1).expect("compile source line is non-zero"),
-        recorder.emitter(),
-        "Gather",
-    )
-    .expect("valid Lua must compile");
-    assert_eq!(
-        recorder.observations(),
-        vec![
-            (
-                "Gather".to_owned(),
-                boundary::LUA_COMPILATION_STARTED.clone(),
-            ),
-            (
-                "Gather".to_owned(),
-                boundary::LUA_COMPILATION_SUCCEEDED.clone(),
-            ),
-        ]
-    );
-    assert_identity_only(&recorder);
-
-    let recorder = Recorder::default();
-    LuaProgram::compile(
-        "local private =",
-        "prompt",
-        location,
-        NonZeroU32::new(1).expect("compile source line is non-zero"),
-        recorder.emitter(),
-        "Gather",
-    )
-    .expect_err("malformed Lua must fail");
-    assert_eq!(
-        recorder.observations(),
-        vec![
-            (
-                "Gather".to_owned(),
-                boundary::LUA_COMPILATION_STARTED.clone(),
-            ),
-            (
-                "Gather".to_owned(),
-                boundary::LUA_COMPILATION_FAILED.clone(),
-            ),
-        ]
-    );
-    assert_identity_only(&recorder);
 }

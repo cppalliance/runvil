@@ -2,7 +2,6 @@
 
 use runvil_lua::LuaProgram;
 use runvil_types::error::{Error, ErrorCode, ErrorFact};
-use runvil_types::event::Event;
 
 use super::*;
 use crate::test_support::{
@@ -116,47 +115,6 @@ fn parsed_prompt_value_types_are_equatable() {
     assert_ne!(a, c, "differing section headings must parse unequal");
 }
 
-/// Parses `src` as the prompt `prompt`, through a finder that returns it.
-fn parse_text(src: &str) -> (std::result::Result<Prompt, Error>, Vec<Event>) {
-    Prompt::parse(&|_: &str| Ok(src.to_owned()), "prompt")
-}
-
-/// The parse-time events read back as `(section, kind)`.
-struct Recorder(Vec<Event>);
-
-/// The `kind` labels the parse reports.
-mod detail {
-    pub(super) const PARSE_STARTED: &str = "parse_started";
-    pub(super) const PARSE_SUCCEEDED: &str = "parse_succeeded";
-    pub(super) const PARSE_FAILED: &str = "parse_failed";
-    pub(super) const LUA_COMPILATION_STARTED: &str = "lua_compilation_started";
-    pub(super) const LUA_COMPILATION_SUCCEEDED: &str = "lua_compilation_succeeded";
-    pub(super) const LUA_COMPILATION_FAILED: &str = "lua_compilation_failed";
-}
-
-/// The `kind` label of one of the events a parse reports.
-fn kind(event: &Event) -> String {
-    match event {
-        Event::ParseStarted { .. } => detail::PARSE_STARTED,
-        Event::ParseSucceeded { .. } => detail::PARSE_SUCCEEDED,
-        Event::ParseFailed { .. } => detail::PARSE_FAILED,
-        Event::LuaCompilationStarted { .. } => detail::LUA_COMPILATION_STARTED,
-        Event::LuaCompilationSucceeded { .. } => detail::LUA_COMPILATION_SUCCEEDED,
-        Event::LuaCompilationFailed { .. } => detail::LUA_COMPILATION_FAILED,
-        other => panic!("a parse reports no {other:?}"),
-    }
-    .to_owned()
-}
-
-impl Recorder {
-    fn observations(&self) -> Vec<(String, String)> {
-        self.0
-            .iter()
-            .map(|event| (event.section().to_owned(), kind(event)))
-            .collect()
-    }
-}
-
 #[test]
 fn parses_multi_section_with_all_features() {
     let src = PromptSource::new()
@@ -222,9 +180,7 @@ fn parse_finds_the_source_by_name_and_names_the_prompt_by_it() {
             .push(name.to_owned());
         Ok(src.clone())
     };
-    let prompt = Prompt::parse(&finder, "research.md")
-        .0
-        .expect("the minimal prompt parses");
+    let prompt = Prompt::parse(&finder, "research.md").expect("the minimal prompt parses");
     assert_eq!(prompt.file(), "research.md");
     assert_eq!(
         *asked.lock().expect("the finder's log is not poisoned"),
@@ -234,28 +190,20 @@ fn parse_finds_the_source_by_name_and_names_the_prompt_by_it() {
 }
 
 #[test]
-fn a_finder_error_comes_back_unchanged_after_parse_failed() {
+fn a_finder_error_comes_back_unchanged() {
     let refusal = Error::new(
         ErrorCode::NotFound,
         "no prompt named missing.md",
         "The prompt named missing.md does not exist.",
     );
-    let (result, events) = Prompt::parse(&|_: &str| Err(refusal.clone()), "missing.md");
+    let result = Prompt::parse(&|_: &str| Err(refusal.clone()), "missing.md");
     assert_eq!(result.expect_err("a finder error fails the parse"), refusal);
-    assert_eq!(
-        Recorder(events).observations(),
-        vec![
-            ("Prompt".into(), detail::PARSE_STARTED.to_string()),
-            ("Prompt".into(), detail::PARSE_FAILED.to_string()),
-        ]
-    );
 }
 
 #[test]
 fn a_found_source_that_fails_to_parse_is_located_in_the_named_prompt() {
     let src = "---\nname: p\ndescription: d\n---\n\n# T\n\n## S\n\n```lua\nreturn 1\n";
     let error = Prompt::parse(&|_: &str| Ok(src.to_owned()), "research.md")
-        .0
         .expect_err("an unclosed fence fails");
     assert_eq!(error.code, ErrorCode::FenceInvalid, "{error:?}");
     let Some((file, ..)) = location(&error) else {

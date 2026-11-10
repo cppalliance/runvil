@@ -236,8 +236,6 @@ fn program(source: &str) -> LuaProgram {
         "prompt",
         "test program",
         NonZeroU32::new(1).expect("compile source line is non-zero"),
-        &null_emitter(),
-        "Test",
     )
     .expect("test Lua must compile")
 }

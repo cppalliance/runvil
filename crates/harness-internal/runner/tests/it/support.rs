@@ -89,7 +89,7 @@ pub(crate) fn host_over(packs: Packs, timer: impl Timer + 'static) -> Arc<Host> 
 
 /// `source` parsed as the prompt named `prompt`.
 pub(crate) fn parsed(source: &str) -> Prompt {
-    let (prompt, _parse_events) = Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt");
+    let prompt = Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt");
     prompt.expect("the suite's prompt parses")
 }
 
@@ -119,7 +119,7 @@ fn prompt(sections: &[(&str, &str)]) -> Arc<Prompt> {
     for (name, lua) in sections {
         write!(source, "\n## {name}\n\n```lua\n{lua}\n```\n").expect("a String takes any write");
     }
-    let (prompt, _parse_events) = Prompt::parse(&|_: &str| Ok(source.clone()), "prompt");
+    let prompt = Prompt::parse(&|_: &str| Ok(source.clone()), "prompt");
     Arc::new(prompt.expect("the fixture prompt parses"))
 }
 

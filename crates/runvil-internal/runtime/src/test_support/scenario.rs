@@ -417,7 +417,7 @@ impl Scenario {
     /// When the source fails to parse, naming the error.
     #[track_caller]
     pub(crate) fn start(mut self) -> Driving {
-        let (prompt, events, ctx) = self.params_of();
+        let (prompt, ctx) = self.params_of();
         let (signal, signalled) = match self.signal {
             Some(signal) => {
                 let (sender, receiver) = mpsc::channel();
@@ -449,8 +449,7 @@ impl Scenario {
             run,
             result: None,
             answers,
-            parsed: events.len(),
-            events,
+            events: Vec::new(),
             effects: Vec::new(),
             held: Vec::new(),
             store: self.store,
@@ -477,16 +476,14 @@ impl Scenario {
     /// When the source fails to parse, naming the error.
     #[track_caller]
     pub(crate) fn into_run(mut self) -> Run {
-        let (prompt, _, ctx) = self.params_of();
+        let (prompt, ctx) = self.params_of();
         self.prefill.start(Arc::new(prompt), &self.args, ctx)
     }
 
-    /// Parses the source and builds the run's params, beside the parse
-    /// events.
+    /// Parses the source and builds the run's params.
     #[track_caller]
-    fn params_of(&mut self) -> (Prompt, Vec<Event>, RunParams) {
-        let (parsed, events) = Prompt::parse(&|_: &str| Ok(self.source.clone()), "prompt");
-        let prompt = match parsed {
+    fn params_of(&mut self) -> (Prompt, RunParams) {
+        let prompt = match Prompt::parse(&|_: &str| Ok(self.source.clone()), "prompt") {
             Ok(prompt) => prompt,
             Err(error) => panic!("expected the scenario source to parse, got {error}"),
         };
@@ -501,7 +498,7 @@ impl Scenario {
             ctx = ctx.with_tools(catalog);
         }
         let edit = std::mem::replace(&mut self.params, Box::new(|ctx| ctx));
-        (prompt, events, edit(ctx))
+        (prompt, edit(ctx))
     }
 }
 
@@ -539,10 +536,8 @@ pub(crate) struct Driving {
     /// The run's result, once it is done.
     result: Option<Result<String, Error>>,
     answers: Answers,
-    /// The parse events, then every event the run reported, in order.
+    /// Every event the run reported, in order.
     events: Vec<Event>,
-    /// How many of the events the parse reported.
-    parsed: usize,
     effects: Vec<(EffectRecord, AnswerRecord)>,
     /// The effects the scenario holds, unanswered until a test releases
     /// them or the run withdraws them.
@@ -636,8 +631,7 @@ impl Driving {
         self.run.resume(id, answer);
     }
 
-    /// The parse events, then every event the run reported so far, in
-    /// order.
+    /// Every event the run reported so far, in order.
     pub(crate) fn events(&self) -> &[Event] {
         &self.events
     }
@@ -707,7 +701,6 @@ impl Driving {
         let trace = Trace {
             result,
             events: self.events,
-            parsed: self.parsed,
             effects: self.effects,
             store: self.store,
             turns: self.run.turns_for_test(),
@@ -720,10 +713,8 @@ impl Driving {
 /// issued paired with its answer, its store, and its turn count.
 pub(crate) struct Trace {
     result: Result<String, Error>,
-    /// The parse events, then every event the run reported, in order.
+    /// Every event the run reported, in order.
     events: Vec<Event>,
-    /// How many of the events the parse reported.
-    parsed: usize,
     effects: Vec<(EffectRecord, AnswerRecord)>,
     store: TestStore,
     turns: u32,
@@ -759,15 +750,9 @@ impl Trace {
         }
     }
 
-    /// The parse events, then every event the run reported, in order.
+    /// Every event the run reported, in order.
     pub(crate) fn events(&self) -> &[Event] {
         &self.events
-    }
-
-    /// Every event the run reported, in order, without the parse events
-    /// ahead of them.
-    pub(crate) fn run_events(&self) -> &[Event] {
-        &self.events[self.parsed..]
     }
 
     /// Every effect the run issued, beside its answer, in the order the
@@ -778,20 +763,14 @@ impl Trace {
         &self.effects
     }
 
-    /// Replays the events onto `observer`, parse events first.
+    /// Replays the events onto `observer`, in order.
     pub(crate) fn replay(&self, observer: &dyn Observer) {
         forward(self.events.clone(), observer);
     }
 
-    /// The events as the suites' observer sees them, parse events first.
+    /// The events as the suites' observer sees them, in order.
     pub(crate) fn records(&self) -> Vec<Record> {
         records_of(&self.events)
-    }
-
-    /// The run's own events as the suites' observer sees them, without the
-    /// parse events: what an observer on the run alone would have seen.
-    pub(crate) fn run_records(&self) -> Vec<Record> {
-        records_of(self.run_events())
     }
 
     /// The debug pair of every model turn the run reported, request before

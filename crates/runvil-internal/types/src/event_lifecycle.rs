@@ -38,9 +38,6 @@ macro_rules! lifecycle_constants {
 }
 
 lifecycle_constants! {
-    PARSE_STARTED => ParseStarted,
-    PARSE_SUCCEEDED => ParseSucceeded,
-    PARSE_FAILED => ParseFailed,
     RUN_STARTED => RunStarted,
     RUN_SUCCEEDED => RunSucceeded,
     RUN_FAILED => RunFailed,
@@ -51,9 +48,6 @@ lifecycle_constants! {
     MODEL_TURN_TRUNCATED => ModelTurnTruncated,
     TOOL_CALL_SUCCEEDED => ToolCallSucceeded,
     TOOL_CALL_FAILED => ToolCallFailed,
-    LUA_COMPILATION_STARTED => LuaCompilationStarted,
-    LUA_COMPILATION_SUCCEEDED => LuaCompilationSucceeded,
-    LUA_COMPILATION_FAILED => LuaCompilationFailed,
     LUA_CHUNK_STARTED => LuaChunkStarted,
     LUA_CHUNK_SUCCEEDED => LuaChunkSucceeded,
     LUA_CHUNK_FAILED => LuaChunkFailed,

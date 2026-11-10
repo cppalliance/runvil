@@ -172,7 +172,6 @@ fn a_finder_failure_comes_back_as_given() {
 fn a_parse_failure_comes_back_as_given_before_any_uses_check() {
     let source = declaring("uses:\n  - acme/gone\n").replace("# Research\n", "");
     let expected = Prompt::parse(&|_: &str| Ok(source.clone()), "research.md")
-        .0
         .expect_err("a prompt with no H1 fails to parse");
     let host = host(&[("research.md", source)]);
     let error = host

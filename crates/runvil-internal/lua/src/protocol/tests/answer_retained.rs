@@ -5,8 +5,7 @@
 use runvil_types::error::SourceLoc;
 
 use super::*;
-use crate::test_vm::{TEST_SECTION, TestVm};
-use crate::tests::recording::null_emitter;
+use crate::test_vm::TestVm;
 use crate::{CoroStep, LuaProgram};
 
 /// The typed error every case answers the block's `models.infer` with.
@@ -37,15 +36,8 @@ fn answered(
     std::result::Result<CoroStep, runvil_types::error::Error>,
 ) {
     let vm = TestVm::new().shims().build();
-    let program = LuaProgram::compile(
-        source,
-        "prompt",
-        "test program",
-        NonZeroU32::MIN,
-        &null_emitter(),
-        TEST_SECTION,
-    )
-    .expect("the block compiles");
+    let program = LuaProgram::compile(source, "prompt", "test program", NonZeroU32::MIN)
+        .expect("the block compiles");
     let CoroStep::Yielded(thread, _values) =
         vm.start_block_coro(&program).expect("the block suspends")
     else {

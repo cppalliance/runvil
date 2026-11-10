@@ -17,15 +17,15 @@ fn declaring(front: &str) -> String {
 
 /// The located refusal notice of `scenario`'s run of `source`, after
 /// checking that its first step failed it as `RequirementsUnmet`,
-/// reporting nothing after the parse events and issuing no effect.
+/// reporting no event and issuing no effect.
 pub(super) fn refusal(scenario: Scenario, source: &str) -> TestResult<String> {
     let trace = scenario.run(source)?;
     let error = trace.error()?;
     let message = error.located_message();
     assert_eq!(error.code, ErrorCode::RequirementsUnmet, "{message}");
     assert!(
-        matches!(trace.events.last(), Some(Event::ParseSucceeded { .. })),
-        "a refused run reports no run events: {:?}",
+        trace.events.is_empty(),
+        "a refused run reports no events: {:?}",
         trace.events
     );
     assert!(trace.effects.is_empty(), "a refused run issues nothing");

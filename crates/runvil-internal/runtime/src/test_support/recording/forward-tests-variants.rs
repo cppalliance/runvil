@@ -53,9 +53,6 @@ macro_rules! unit_events {
 )]
 fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
     let mut events = unit_events![
-        ParseStarted,
-        ParseSucceeded,
-        ParseFailed,
         RunStarted,
         RunSucceeded,
         RunFailed,
@@ -66,9 +63,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ModelTurnTruncated,
         ToolCallSucceeded,
         ToolCallFailed,
-        LuaCompilationStarted,
-        LuaCompilationSucceeded,
-        LuaCompilationFailed,
         LuaChunkStarted,
         LuaChunkSucceeded,
         LuaChunkFailed,
