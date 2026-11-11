@@ -1061,7 +1061,7 @@ pub runvil::plugin::PackInfo::description: &'static str
 pub runvil::plugin::PackInfo::fqn: &'static str
 pub runvil::plugin::PackInfo::prelude: core::option::Option<&'static str>
 pub runvil::plugin::PackOrigin::Builtin
-pub runvil::plugin::PackOrigin::Linked
+pub runvil::plugin::PackOrigin::Plugin
 pub runvil::plugin::RenderContext::entry: &'a str
 pub runvil::plugin::RenderContext::model: &'a runvil::model::ModelInfo
 pub runvil::prompt::ArgType::Boolean

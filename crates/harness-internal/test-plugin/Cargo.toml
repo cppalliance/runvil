@@ -15,13 +15,16 @@ crate-type = ["cdylib", "rlib"]
 # and this fixture proves it.
 
 # Only the end-to-end tests in `tests/it` use these: the loader to insert
-# the built library, the Plugin contract crate for `PackRegistry::new`, and
+# the built library, the Plugin contract crate for `PackRegistry::new`,
 # `libloading` to open the library the loader already holds and read its
-# counters.
+# counters, and the Harness facade with tokio to run a prompt that calls
+# the fixture's tools.
 [dev-dependencies]
 harness-plugin-loader.workspace = true
 libloading.workspace = true
+runvil.workspace = true
 runvil-plugin.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "time"] }
 
 # `RTLD_NOLOAD`, so the end-to-end tests can ask whether a library is still
 # loaded without loading it.

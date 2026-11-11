@@ -53,8 +53,11 @@ pub enum PackOrigin {
     /// has none yet, and `runvil/user`, which marks a prompt that needs a
     /// human.
     Builtin,
-    /// Inserted by a linked Plugin with [`PackRegistry::insert`].
-    Linked,
+    /// Inserted by a Plugin with [`PackRegistry::insert`] or
+    /// [`PackRegistry::insert_unavailable`]: by a linked Plugin's
+    /// `install`, or by the Harness for a Plugin's C entry point, linked
+    /// or from a dynamic library.
+    Plugin,
 }
 
 impl Default for PackRegistry {
@@ -84,7 +87,7 @@ impl PackRegistry {
         PackRegistry::default()
     }
 
-    /// Adds the Pack `info` names as a linked Pack, made by `factory`.
+    /// Adds the Pack `info` names as a Plugin's Pack, made by `factory`.
     ///
     /// The Pack id is the FQN's second segment, so `runvil/web` is `web`,
     /// and the registry may hold Packs of different vendors with the same
@@ -113,7 +116,7 @@ impl PackRegistry {
         self.add(info, Ok(Arc::new(factory)))
     }
 
-    /// Adds the Pack `info` names as a linked Pack that is unavailable for
+    /// Adds the Pack `info` names as a Plugin's Pack that is unavailable for
     /// `reason`, such as bad config or a missing Host-wide service.
     /// `Host::parse` refuses a prompt that declares it, naming `reason`.
     ///
@@ -124,7 +127,7 @@ impl PackRegistry {
         self.add(info, Err(reason))
     }
 
-    /// Adds `info` as a linked Pack with `factory`, or refuses it as
+    /// Adds `info` as a Plugin's Pack with `factory`, or refuses it as
     /// [`insert`](PackRegistry::insert) documents.
     fn add(
         &mut self,
@@ -167,7 +170,7 @@ impl PackRegistry {
             info.fqn,
             Registered {
                 info,
-                origin: PackOrigin::Linked,
+                origin: PackOrigin::Plugin,
                 id,
                 factory,
             },

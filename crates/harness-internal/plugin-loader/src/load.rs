@@ -9,7 +9,8 @@ use std::path::{Path, PathBuf};
 use runvil_plugin::{Error, ErrorCode, ErrorFact};
 use runvil_plugin_sys::PluginEntry;
 
-use crate::host::{LoadCtx, send_unload};
+use crate::host::send_unload;
+use crate::session::Session;
 
 #[cfg(test)]
 #[path = "load-tests.rs"]
@@ -134,24 +135,37 @@ pub(crate) fn open_entry(path: &Path) -> Result<(libloading::Library, PluginEntr
 }
 
 /// A live Plugin instance: the entry point, the pointer RV_PLUGIN_LOAD set,
-/// and the `ctx` that load was handed. Dropping it sends RV_PLUGIN_UNLOAD
-/// once, and fields drop after `Drop::drop`, so the `ctx` is freed only
-/// after RV_PLUGIN_UNLOAD returns.
+/// and the session that load's `ctx` points at. Dropping it sends
+/// RV_PLUGIN_UNLOAD once, and fields drop after `Drop::drop`, so the `ctx`
+/// is freed only after RV_PLUGIN_UNLOAD returns. So while a Plugin is
+/// loaded, its load's `ctx` is the address of no other call's.
 pub(crate) struct Instance {
     entry: PluginEntry,
     plugin: *mut c_void,
-    _ctx: LoadCtx,
+    _ctx: Box<Session>,
 }
 
 impl Instance {
     /// Takes ownership of the instance `plugin` that a successful
-    /// RV_PLUGIN_LOAD through `entry` set, and of the `ctx` it was handed.
-    pub(crate) fn new(entry: PluginEntry, plugin: *mut c_void, ctx: LoadCtx) -> Instance {
+    /// RV_PLUGIN_LOAD through `entry` set, and of the session its `ctx`
+    /// points at.
+    pub(crate) fn new(entry: PluginEntry, plugin: *mut c_void, ctx: Box<Session>) -> Instance {
         Instance {
             entry,
             plugin,
             _ctx: ctx,
         }
+    }
+
+    /// The entry point every later call goes through.
+    pub(crate) fn entry(&self) -> PluginEntry {
+        self.entry
+    }
+
+    /// The pointer RV_PLUGIN_LOAD set, which every later call passes back
+    /// and the loader never reads through.
+    pub(crate) fn plugin(&self) -> *mut c_void {
+        self.plugin
     }
 }
 
@@ -165,12 +179,13 @@ impl Drop for Instance {
 }
 
 // SAFETY: the `# Threads and lifetime` section of `runvil-plugin-sys` lets
-// RV_PLUGIN_UNLOAD come on any thread, the loader never reads `plugin`, and
-// after its load returned the loader only frees the `ctx`, which any thread
-// may do.
+// every verb but RV_PLUGIN_LOAD come on any thread, the loader never reads
+// through `plugin`, and after its load returned the loader only frees the
+// `ctx`, which any thread may do.
 unsafe impl Send for Instance {}
-// SAFETY: `Instance` has no method that takes `&self`, so sharing it
-// between threads exposes nothing.
+// SAFETY: the same section lets calls that name one Plugin instance run at
+// the same time, and `&self` only hands out the entry point and the
+// pointer those calls pass back.
 unsafe impl Sync for Instance {}
 
 /// What a loaded Plugin owns: its instance and, for a library Plugin, its
@@ -178,7 +193,7 @@ unsafe impl Sync for Instance {}
 /// RV_PLUGIN_UNLOAD before the library closes, with no hand-written `Drop`
 /// for this struct. A linked Plugin has no library.
 pub(crate) struct Loaded {
-    _instance: Instance,
+    instance: Instance,
     _library: Option<libloading::Library>,
 }
 
@@ -187,15 +202,21 @@ impl Loaded {
     /// any.
     pub(crate) fn new(instance: Instance, library: Option<libloading::Library>) -> Loaded {
         Loaded {
-            _instance: instance,
+            instance,
             _library: library,
         }
     }
+
+    /// The live instance.
+    pub(crate) fn instance(&self) -> &Instance {
+        &self.instance
+    }
 }
 
-/// Why one Plugin did not load: a `PluginLoadFailed` error with `message`
-/// and the `Reason` fact `reason`, one of `open`, `missing_entry`,
-/// `refused`, `misuse`, `status`, `undescribed`, or `duplicate`.
+/// Why one Plugin did not load, or one of its Packs did not go into the
+/// registry: a `PluginLoadFailed` error with `message` and the `Reason`
+/// fact `reason`, one of `open`, `missing_entry`, `refused`, `misuse`,
+/// `status`, `undescribed`, `duplicate`, or `pack`.
 pub(crate) fn make_load_error(reason: &str, message: String) -> Error {
     let code = ErrorCode::PluginLoadFailed;
     let mut error = Error::new(code, message, code.prose());

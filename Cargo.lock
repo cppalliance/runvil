@@ -2271,6 +2271,7 @@ dependencies = [
  "libloading 0.8.9",
  "runvil-plugin",
  "runvil-plugin-sys",
+ "serde_json",
 ]
 
 [[package]]
@@ -2294,7 +2295,9 @@ dependencies = [
  "harness-plugin-loader",
  "libc",
  "libloading 0.8.9",
+ "runvil",
  "runvil-plugin",
+ "tokio",
 ]
 
 [[package]]
@@ -4082,7 +4085,7 @@ dependencies = [
 [[package]]
 name = "plugin-std"
 version = "0.1.0"
-source = "git+https://github.com/cppalliance/runvil-plugin-std?rev=b8dc5b6a5ef420e7eca323fecf784462fa21f2f5#b8dc5b6a5ef420e7eca323fecf784462fa21f2f5"
+source = "git+https://github.com/cppalliance/runvil-plugin-std?rev=51bdca32c55d9e4849da81d451af20a1eba1a4ae#51bdca32c55d9e4849da81d451af20a1eba1a4ae"
 dependencies = [
  "runvil-plugin-sdk",
 ]
@@ -4828,16 +4831,16 @@ dependencies = [
 
 [[package]]
 name = "runvil-plugin-sdk"
-version = "0.2.0"
-source = "git+https://github.com/cppalliance/runvil-plugin-api?rev=63a2403761b925b1f52bcf361c97b4fb04c04d74#63a2403761b925b1f52bcf361c97b4fb04c04d74"
+version = "0.3.0"
+source = "git+https://github.com/cppalliance/runvil-plugin-api?rev=d9b56776ac8978222a6099a998dd25359a2e8a9f#d9b56776ac8978222a6099a998dd25359a2e8a9f"
 dependencies = [
  "runvil-plugin-sys",
 ]
 
 [[package]]
 name = "runvil-plugin-sys"
-version = "0.2.0"
-source = "git+https://github.com/cppalliance/runvil-plugin-api?rev=63a2403761b925b1f52bcf361c97b4fb04c04d74#63a2403761b925b1f52bcf361c97b4fb04c04d74"
+version = "0.3.0"
+source = "git+https://github.com/cppalliance/runvil-plugin-api?rev=d9b56776ac8978222a6099a998dd25359a2e8a9f#d9b56776ac8978222a6099a998dd25359a2e8a9f"
 
 [[package]]
 name = "runvil-prompt"

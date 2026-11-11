@@ -12,8 +12,16 @@ libloading.workspace = true
 # The Pack registry the inserts take, `PackId`, which validates a Plugin's
 # name, and the universal error a failed load is.
 runvil-plugin.workspace = true
-# The C contract every entry point follows, version 0.2, as Rust types.
+# The C contract every entry point follows, version 0.3, as Rust types.
 runvil-plugin-sys.workspace = true
+# A tool's parameters arrive as JSON text and its arguments leave as JSON
+# text, because the C contract carries no JSON type.
+serde_json.workspace = true
+
+[dev-dependencies]
+# `testing::TestCall`, which lends the unit tests the context a tool call
+# borrows.
+runvil-plugin = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

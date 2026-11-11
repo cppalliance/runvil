@@ -8,10 +8,17 @@ use std::sync::atomic::Ordering;
 use crate::fakes::*;
 use crate::host::HOST;
 
-/// What a name that is not one Pack id segment is reported as.
+/// What a name that is not one name segment is reported as.
 macro_rules! bad_name {
     () => {
-        "the name is not one Pack id segment, such as `acme-url`"
+        "the name is not one name segment, such as `acme-url`"
+    };
+}
+
+/// What a Pack name that is not a vendor and a Pack id is reported as.
+macro_rules! bad_pack_name {
+    () => {
+        "the Pack's name is not a vendor and a Pack id joined by `/`, such as `acme/url`"
     };
 }
 
@@ -458,10 +465,162 @@ fn the_load_call_carries_the_contract_fields() {
 }
 
 #[test]
-fn the_table_reports_version_0_2_in_16_bytes() {
+fn the_table_reports_version_0_3_in_16_bytes() {
     assert_eq!(HOST.api_major, 0);
-    assert_eq!(HOST.api_minor, 2);
+    assert_eq!(HOST.api_minor, 3);
     assert_eq!(HOST.reserved, 0);
     assert_eq!(HOST.size, 16);
     assert_eq!(usize::try_from(HOST.size), Ok(size_of::<RvHost>()));
+}
+
+/// Defines a test whose fake load describes itself, runs `$misuse`, an
+/// `insert_pack` call that must answer RV_ERR_MISUSE, and then returns
+/// RV_OK. The load must fail with `$detail`, and a failed load is never
+/// unloaded.
+macro_rules! pack_misuse_test {
+    ($test:ident, $detail:expr, |$call:ident| $misuse:expr) => {
+        misuse_test!($test, $detail, |$call| {
+            describe($call, "acme-url", "1.0.0");
+            $misuse
+        });
+    };
+}
+
+pack_misuse_test!(
+    a_pack_name_without_a_vendor_is_misuse,
+    bad_pack_name!(),
+    |call| insert_pack(call, "url", "")
+);
+
+pack_misuse_test!(
+    a_pack_name_with_three_segments_is_misuse,
+    bad_pack_name!(),
+    |call| insert_pack(call, "acme/url/extra", "")
+);
+
+pack_misuse_test!(
+    a_pack_name_with_an_empty_segment_is_misuse,
+    bad_pack_name!(),
+    |call| insert_pack(call, "acme/", "")
+);
+
+pack_misuse_test!(
+    a_pack_name_with_an_uppercase_letter_is_misuse,
+    bad_pack_name!(),
+    |call| insert_pack(call, "acme/Url", "")
+);
+
+pack_misuse_test!(
+    a_pack_name_with_a_segment_over_64_bytes_is_misuse,
+    bad_pack_name!(),
+    |call| insert_pack(call, &format!("acme/{}", "a".repeat(65)), "")
+);
+
+pack_misuse_test!(
+    a_pack_name_over_129_bytes_is_misuse,
+    "the Pack's name is longer than 129 bytes",
+    |call| insert_pack(call, &"a".repeat(130), "")
+);
+
+pack_misuse_test!(
+    a_pack_name_that_is_not_utf8_is_misuse,
+    "the Pack's name is not UTF-8",
+    |call| insert_pack_info(call, &pack_info(rv_str_bytes(&[0xff, 0xfe]), rv_str("")))
+);
+
+pack_misuse_test!(
+    a_pack_inserted_twice_is_misuse,
+    "two Packs of one Plugin share a name",
+    |call| {
+        insert_pack(call, "acme/url", "");
+        insert_pack(call, "acme/url", "again")
+    }
+);
+
+pack_misuse_test!(
+    a_pack_description_over_1024_bytes_is_misuse,
+    "the Pack's description is longer than 1024 bytes",
+    |call| insert_pack(call, "acme/url", &"d".repeat(1025))
+);
+
+pack_misuse_test!(
+    a_pack_description_with_a_control_character_is_misuse,
+    "the Pack's description has a control character",
+    |call| insert_pack(call, "acme/url", "two\nlines")
+);
+
+pack_misuse_test!(
+    a_short_pack_info_size_is_misuse,
+    "the info's size is shorter than RvPackInfo",
+    |call| insert_pack_info(
+        call,
+        &RvPackInfo {
+            size: 8,
+            ..pack_info(rv_str("acme/url"), rv_str(""))
+        }
+    )
+);
+
+pack_misuse_test!(
+    a_nonzero_reserved_field_in_a_pack_info_is_misuse,
+    "the info's reserved field is not zero",
+    |call| insert_pack_info(
+        call,
+        &RvPackInfo {
+            reserved: 1,
+            ..pack_info(rv_str("acme/url"), rv_str(""))
+        }
+    )
+);
+
+pack_misuse_test!(
+    a_null_pack_info_is_misuse,
+    "insert_pack was handed a NULL info",
+    |call| {
+        // SAFETY: the loader's function accepts a NULL info and answers
+        // misuse; the call's `ctx` is the open load's.
+        unsafe { crate::host::insert_pack(ctx(call), ptr::null()) }
+    }
+);
+
+pack_misuse_test!(
+    a_pack_function_called_during_a_load_is_misuse,
+    "a Pack function was called outside RV_PACK_NEW",
+    |call| {
+        let tool = tool_info("fetch");
+        // SAFETY: the loader's function reads through `ctx` only when it
+        // is the open call's, and answers misuse for a call of another
+        // verb before it reads `tool`.
+        unsafe { crate::pack::add_tool(ctx(call), &raw const tool) }
+    }
+);
+
+pack_misuse_test!(
+    finish_called_during_a_load_is_misuse,
+    "finish was called outside RV_TOOL_CALL",
+    |call| {
+        let result = result(RV_RESULT_TRUSTED, rv_str("done"));
+        // SAFETY: as in the test above.
+        unsafe { crate::call::finish(ctx(call), &raw const result) }
+    }
+);
+
+#[test]
+fn a_pack_name_and_a_description_at_their_bounds_are_accepted() {
+    fake!(plug, |call| {
+        describe(call, "acme-url", "1.0.0");
+        insert_pack(
+            call,
+            &format!("{}/{}", "v".repeat(64), "p".repeat(64)),
+            &"d".repeat(1024),
+        )
+    });
+    let mut packs = runvil_plugin::PackRegistry::new();
+    let _plugin = crate::plugin::insert_plugin(&mut packs, plug::entry).expect("the Plugin loads");
+    let fqn = format!("{}/{}", "v".repeat(64), "p".repeat(64));
+    let description = packs
+        .list()
+        .find(|(info, _)| info.fqn == fqn)
+        .map(|(info, _)| info.description);
+    assert_eq!(description, Some("d".repeat(1024).as_str()));
 }

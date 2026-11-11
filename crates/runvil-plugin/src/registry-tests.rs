@@ -67,10 +67,10 @@ fn a_new_registry_holds_the_builtins_and_lists_every_pack_in_fqn_order() {
     assert_eq!(
         listed,
         [
-            ("acme/alpha", PackOrigin::Linked),
+            ("acme/alpha", PackOrigin::Plugin),
             (SUBAGENTS, PackOrigin::Builtin),
             (USER, PackOrigin::Builtin),
-            ("tests/zeta", PackOrigin::Linked),
+            ("tests/zeta", PackOrigin::Plugin),
         ]
     );
     for (info, origin) in packs.list() {
@@ -219,7 +219,7 @@ fn the_registrys_debug_output_shows_each_fqn_origin_and_pack_id() {
     let mut packs = PackRegistry::new();
     packs.insert(fixture("acme/mcp"), builtin).unwrap();
     let shown = format!("{packs:?}");
-    for part in ["acme/mcp", "Linked", SUBAGENTS, USER, "Builtin"] {
+    for part in ["acme/mcp", "Plugin", SUBAGENTS, USER, "Builtin"] {
         assert!(shown.contains(part), "{part} is shown: {shown}");
     }
     for id in [name("mcp"), name("subagents"), name("user")] {

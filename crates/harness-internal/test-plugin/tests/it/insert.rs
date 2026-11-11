@@ -153,6 +153,37 @@ fn a_second_copy_with_the_same_plugin_name_fails_as_a_duplicate() {
 }
 
 #[test]
+fn a_pack_the_registry_already_holds_is_reported_and_its_plugin_still_loads() {
+    let first_dir = scratch("a_pack_the_registry_already_holds_first");
+    let second_dir = scratch("a_pack_the_registry_already_holds_second");
+    copy_fixture(&first_dir, "plugin");
+    let second_file = copy_fixture(&second_dir, "plugin");
+    let mut packs = PackRegistry::new();
+    let first = insert_plugin_dir(&mut packs, &first_dir).expect("the directory reads");
+    assert!(first.failures().is_empty(), "{:?}", first.failures());
+
+    let second = insert_plugin_dir(&mut packs, &second_dir).expect("the directory reads");
+    assert_eq!(second.plugins().len(), 1, "the second Plugin did load");
+    let [failure] = second.failures() else {
+        panic!("its Pack is refused, got {:?}", second.failures());
+    };
+    assert_eq!(fact(failure, ErrorFact::Reason), Some("pack"));
+    assert_eq!(fact(failure, ErrorFact::Name), Some("fixture/test"));
+    assert_eq!(
+        fact(failure, ErrorFact::Path),
+        Some(library_path(&second_file).as_str())
+    );
+    assert_eq!(
+        failure.message,
+        "the Pack fixture/test of the Plugin test-plugin was not inserted: Pack `fixture/test` \
+         is already in the registry"
+    );
+    drop((first, second, packs));
+    remove(&first_dir);
+    remove(&second_dir);
+}
+
+#[test]
 fn a_missing_directory_returns_an_io_error() {
     let dir = scratch("a_missing_directory_returns_an_io_error");
     let error = insert_plugin_dir(&mut PackRegistry::new(), &dir.join("missing"))

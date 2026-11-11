@@ -24,8 +24,9 @@
 //! point that follows the C contract in the `runvil-plugin-sys` crate: a
 //! dynamic library exports it as `runvil_plugin`, or a Plugin crate links
 //! it in under a name of its own.
-//! The Harness loads these entry points when a Host inserts them; they
-//! insert no Packs yet.
+//! The Harness loads these entry points when a Host inserts them, and
+//! inserts each Pack they offer with a factory that reaches the Pack
+//! through its entry point.
 //! Every registry holds two built-in Packs: `runvil/subagents`, which
 //! reserves its id for the Engine's subagent tools, and `runvil/user`,
 //! which a prompt that needs a human declares and which the Harness
