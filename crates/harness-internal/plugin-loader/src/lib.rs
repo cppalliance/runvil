@@ -8,7 +8,7 @@
 //! ## Invariants
 //!
 //! - May depend on: `runvil-plugin` among workspace crates, and
-//!   `runvil-plugin-sys`, the C contract at version 0.3, from its own
+//!   `runvil-plugin-sys`, the C contract at version 0.4, from its own
 //!   repository.
 //! - Every entry point gets the same calls, whether it came from a library
 //!   or was linked in. The only difference is that a library is opened
@@ -30,6 +30,10 @@
 //!   when it fails or its future is dropped, and no other call does.
 //! - The functions in a call's arguments struct answer only that call's
 //!   `ctx`, on its thread, while it runs.
+//! - A step's file functions read through the `Access` of the step's tool
+//!   call and nothing else, so the run's mode and policy apply to every
+//!   read. What a file function hands back is freed by the step's next
+//!   file function, or when the step returns.
 //! - Each `RV_PLUGIN_LOAD` gets its own `ctx`, a loader-owned allocation
 //!   freed when a rejected load returns or after its Plugin's
 //!   `RV_PLUGIN_UNLOAD` returns. The `ctx` of every other call is freed
@@ -48,6 +52,7 @@
 mod call;
 #[cfg(test)]
 mod fakes;
+mod file;
 mod host;
 mod load;
 mod pack;

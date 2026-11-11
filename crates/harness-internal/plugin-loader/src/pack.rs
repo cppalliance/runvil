@@ -155,7 +155,7 @@ impl Pack for EntryPack {
         cx: ToolContext<'a>,
         args: Value,
     ) -> BoxFuture<'a, Result<ToolOutput, Error>> {
-        Box::pin(Steps::new(self, cx.tool().name(), &args))
+        Box::pin(Steps::new(self, cx.tool().name(), &args, cx.access()))
     }
 }
 

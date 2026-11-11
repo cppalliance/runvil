@@ -97,20 +97,30 @@ fn an_instance_holds_the_tools_the_plugin_added_under_the_pack_id() {
     );
 }
 
+pack_fake!(
+    dropped,
+    {},
+    new: |call| {
+        set_pack_run(call, instance(PACK_TAG));
+        add_tool(call, "fetch")
+    },
+    step: |_call| RV_ERR_UNSUPPORTED
+);
+
 #[test]
 fn dropping_an_instance_sends_one_delete_with_the_pointer_it_set_and_then_the_unload() {
-    let pack = made(good::entry);
-    assert_eq!(good::DELETES.load(Ordering::SeqCst), 0);
+    let pack = made(dropped::entry);
+    assert_eq!(dropped::DELETES.load(Ordering::SeqCst), 0);
     assert_eq!(
-        good::UNLOADS.load(Ordering::SeqCst),
+        dropped::UNLOADS.load(Ordering::SeqCst),
         0,
         "the instance keeps its Plugin loaded"
     );
     drop(pack);
-    assert_eq!(good::DELETES.load(Ordering::SeqCst), 1);
-    assert_eq!(good::DELETED.load(Ordering::SeqCst), instance(PACK_TAG));
+    assert_eq!(dropped::DELETES.load(Ordering::SeqCst), 1);
+    assert_eq!(dropped::DELETED.load(Ordering::SeqCst), instance(PACK_TAG));
     assert_eq!(
-        *good::ORDER.lock().expect("the lock holds"),
+        *dropped::ORDER.lock().expect("the lock holds"),
         [RV_PACK_DELETE, RV_PLUGIN_UNLOAD],
         "the Plugin unloads only after its last Pack instance is deleted"
     );

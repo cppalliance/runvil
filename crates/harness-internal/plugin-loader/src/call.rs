@@ -1,7 +1,7 @@
 //! One tool call of a Pack instance that a Plugin's entry point made: the
 //! future that sends RV_TOOL_CALL once each time it is polled, the
-//! function an `RvToolCallArgs` carries, and the sender of
-//! RV_TOOL_CANCEL.
+//! function an `RvToolCallArgs` carries to end the call, and the sender
+//! of RV_TOOL_CANCEL.
 
 use std::ffi::c_void;
 use std::future::Future;
@@ -9,7 +9,7 @@ use std::pin::Pin;
 use std::ptr;
 use std::task::{Context, Poll};
 
-use runvil_plugin::{Error, ErrorCode, ToolOutput, make_tool_error};
+use runvil_plugin::{Access, Error, ErrorCode, ToolOutput, make_tool_error};
 use runvil_plugin_sys::{
     RV_OK, RV_PENDING, RV_RESULT_BACKEND, RV_RESULT_INVALID_ARGUMENTS, RV_RESULT_OTHER,
     RV_RESULT_TRANSPORT, RV_RESULT_TRUSTED, RV_RESULT_UNTRUSTED, RV_TOOL_CALL, RV_TOOL_CANCEL,
@@ -17,9 +17,10 @@ use runvil_plugin_sys::{
 };
 use serde_json::Value;
 
+use crate::file::{file_list, file_read, file_stat};
 use crate::pack::EntryPack;
 use crate::session::{
-    self, Field, Session, Shape, TOOL_CALL, Verb, answer, field, rv_str, shape, size_field,
+    self, Field, Session, Shape, TOOL_CALL, answer, field, rv_str, shape, size_field,
 };
 
 #[cfg(test)]
@@ -39,6 +40,8 @@ const TEXT: Field = field!("the result's text", 16_777_216);
 /// every one of its calls has ended.
 pub(crate) struct Steps<'a> {
     pack: &'a EntryPack,
+    /// The call's files, which each step's file functions read.
+    access: &'a Access,
     /// The tool's name within its Pack.
     tool: String,
     /// The JSON text of the call's arguments.
@@ -55,15 +58,27 @@ pub(crate) struct Steps<'a> {
 
 // SAFETY: the `# Threads and lifetime` section of `runvil-plugin-sys` lets
 // the steps of one tool call, and its RV_TOOL_CANCEL, come on different
-// threads, and the loader never reads through `state`.
+// threads, and the loader never reads through `state`. Every other field
+// is `Send`, which the assertion below checks for the two borrows.
 unsafe impl Send for Steps<'_> {}
 
+const _: () = {
+    const fn is_send<T: Send>() {}
+    is_send::<(&EntryPack, &Access)>();
+};
+
 impl<'a> Steps<'a> {
-    /// A call of the tool named `tool` on `pack` with `arguments`. Nothing
-    /// is sent until the first poll.
-    pub(crate) fn new(pack: &'a EntryPack, tool: &str, arguments: &Value) -> Steps<'a> {
+    /// A call of the tool named `tool` on `pack` with `arguments`, over
+    /// the files `access` reaches. Nothing is sent until the first poll.
+    pub(crate) fn new(
+        pack: &'a EntryPack,
+        tool: &str,
+        arguments: &Value,
+        access: &'a Access,
+    ) -> Steps<'a> {
         Steps {
             pack,
+            access,
             tool: tool.to_owned(),
             arguments: arguments.to_string(),
             state: ptr::null_mut(),
@@ -84,7 +99,7 @@ impl<'a> Steps<'a> {
     /// has ended.
     fn step(&mut self) -> Option<Result<ToolOutput, Error>> {
         let mut call = self.new_call(RV_TOOL_CALL);
-        let (status, mut session) = session::open(Verb::ToolCall, |ctx| {
+        let (status, mut session) = session::open_step(self.access, |ctx| {
             let args = RvToolCallArgs {
                 size: size_field::<RvToolCallArgs>(),
                 reserved: 0,
@@ -92,6 +107,9 @@ impl<'a> Steps<'a> {
                 tool: rv_str(&self.tool),
                 arguments: rv_str(&self.arguments),
                 finish,
+                file_stat,
+                file_list,
+                file_read,
             };
             call.args = (&raw const args).cast();
             // SAFETY: `call` carries this call's own pointers and a live

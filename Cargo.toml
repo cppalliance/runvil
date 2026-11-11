@@ -28,18 +28,18 @@ bytes = "1"
 runvil-engine = { path = "crates/runvil-engine" }
 runvil-runtime = { path = "crates/runvil-internal/runtime" }
 runvil-plugin = { path = "crates/runvil-plugin" }
-# The C Plugin contract, version 0.3, from its own repository, pinned by
+# The C Plugin contract, version 0.4, from its own repository, pinned by
 # commit. `version` beside `git` keeps cargo-deny's wildcard check quiet.
-runvil-plugin-sys = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-plugin-api", rev = "d9b56776ac8978222a6099a998dd25359a2e8a9f" }
+runvil-plugin-sys = { version = "0.4.0", git = "https://github.com/cppalliance/runvil-plugin-api", rev = "04574e32cf901437db40797aa4efcda90489b711" }
 # The safe layer over that contract, at the same commit. Only the library
 # Plugin crate under `crates/workshop/` names it, for `export_plugin!`.
-runvil-plugin-sdk = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-plugin-api", rev = "d9b56776ac8978222a6099a998dd25359a2e8a9f" }
+runvil-plugin-sdk = { version = "0.4.0", git = "https://github.com/cppalliance/runvil-plugin-api", rev = "04574e32cf901437db40797aa4efcda90489b711" }
 # The std Plugin, from its own repository, pinned by commit, which must be
 # built against the contract commit above. default-features off drops its
 # own export of `runvil_plugin`, which `workshop-plugin-std` makes instead.
 # The key is `std-plugin` because the workspace still holds a crate named
 # `plugin-std`.
-std-plugin = { package = "plugin-std", version = "0.1.0", git = "https://github.com/cppalliance/runvil-plugin-std", rev = "51bdca32c55d9e4849da81d451af20a1eba1a4ae", default-features = false }
+std-plugin = { package = "plugin-std", version = "0.1.0", git = "https://github.com/cppalliance/runvil-plugin-std", rev = "6d1e49e31853269210e420cdc0594bedda83f6fc", default-features = false }
 runvil-types = { path = "crates/runvil-internal/types" }
 workshop-gateway-discovery = { path = "crates/workshop/gateway-discovery" }
 shared-error-source = { path = "crates/shared-error-source" }

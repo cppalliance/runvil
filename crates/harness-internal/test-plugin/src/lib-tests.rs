@@ -118,6 +118,153 @@ unsafe extern "C" fn finish(ctx: *mut c_void, result: *const RvToolResult) -> Rv
     RV_OK
 }
 
+/// The one file the test Host serves, and its text.
+const FILE: &str = "/notes/a.md";
+const FILE_TEXT: &str = "hello";
+/// The one directory the test Host serves, which holds `a.md`, the
+/// directory `sub`, and the link `link`.
+const DIRECTORY: &str = "/notes";
+/// A path the test Host answers with a status no file function returns.
+const BROKEN: &str = "/broken";
+/// The kind every failure of the test Host carries.
+const NOT_FOUND: RvFileErrorKind = 1;
+
+/// The entries the test Host lists for [`DIRECTORY`].
+const ENTRIES: [RvDirEntry; 3] = [
+    RvDirEntry {
+        name: RvStr {
+            ptr: "a.md".as_ptr().cast(),
+            len: 4,
+        },
+        stat: RvStat {
+            file_type: RV_FILE_TYPE_FILE,
+            reserved: 0,
+            len: 5,
+        },
+    },
+    RvDirEntry {
+        name: RvStr {
+            ptr: "sub".as_ptr().cast(),
+            len: 3,
+        },
+        stat: RvStat {
+            file_type: RV_FILE_TYPE_DIRECTORY,
+            reserved: 0,
+            len: 0,
+        },
+    },
+    RvDirEntry {
+        name: RvStr {
+            ptr: "link".as_ptr().cast(),
+            len: 4,
+        },
+        stat: RvStat {
+            file_type: RV_FILE_TYPE_SYMLINK,
+            reserved: 0,
+            len: 0,
+        },
+    },
+];
+
+/// Fills `error` with a failure that says `path` was not found, and
+/// answers `RV_ERR_FILE`, or the odd status 77 for [`BROKEN`].
+fn fail(path: &str, error: *mut RvFileError) -> RvStatus {
+    if path == BROKEN {
+        return 77;
+    }
+    let failure = RvFileError {
+        kind: NOT_FOUND,
+        reserved: 0,
+        text: rv_str("nothing is there"),
+    };
+    // SAFETY: the entry point under test passes a live `RvFileError`.
+    unsafe { error.write(failure) };
+    RV_ERR_FILE
+}
+
+/// The step arguments' `file_stat`: knows [`FILE`] and [`DIRECTORY`].
+unsafe extern "C" fn file_stat(
+    ctx: *mut c_void,
+    path: RvStr,
+    stat: *mut RvStat,
+    error: *mut RvFileError,
+) -> RvStatus {
+    assert_eq!(ctx, test_ctx(), "file_stat is handed the step's own ctx");
+    let path = copy(path);
+    let found = match path.as_str() {
+        FILE => ENTRIES[0].stat,
+        DIRECTORY => ENTRIES[1].stat,
+        "/link" => ENTRIES[2].stat,
+        "/pipe" => RvStat {
+            file_type: 0,
+            reserved: 0,
+            len: 0,
+        },
+        _ => return fail(&path, error),
+    };
+    // SAFETY: the entry point under test passes a live `RvStat`.
+    unsafe { stat.write(found) };
+    RV_OK
+}
+
+/// The step arguments' `file_list`: lists [`DIRECTORY`], and the root as
+/// an empty directory.
+unsafe extern "C" fn file_list(
+    ctx: *mut c_void,
+    path: RvStr,
+    entries: *mut RvDirEntries,
+    error: *mut RvFileError,
+) -> RvStatus {
+    assert_eq!(ctx, test_ctx(), "file_list is handed the step's own ctx");
+    let path = copy(path);
+    // A borrow of a constant is promoted to a static, so the entries
+    // outlive this function, as the contract requires.
+    let all: &'static [RvDirEntry] = &ENTRIES;
+    let listed = match path.as_str() {
+        DIRECTORY => RvDirEntries {
+            ptr: all.as_ptr(),
+            len: all.len(),
+        },
+        "/" => RvDirEntries {
+            ptr: ptr::null(),
+            len: 0,
+        },
+        _ => return fail(&path, error),
+    };
+    // SAFETY: the entry point under test passes a live `RvDirEntries`.
+    unsafe { entries.write(listed) };
+    RV_OK
+}
+
+/// The step arguments' `file_read`: reads [`FILE`], and records the range
+/// it was asked for.
+unsafe extern "C" fn file_read(
+    ctx: *mut c_void,
+    path: RvStr,
+    offset: u64,
+    len: u64,
+    bytes: *mut RvBytes,
+    error: *mut RvFileError,
+) -> RvStatus {
+    assert_eq!(ctx, test_ctx(), "file_read is handed the step's own ctx");
+    assert_eq!(
+        (offset, len),
+        (0, u64::MAX),
+        "the tool reads the whole file"
+    );
+    let path = copy(path);
+    if path != FILE {
+        return fail(&path, error);
+    }
+    let read = RvBytes {
+        ptr: FILE_TEXT.as_ptr(),
+        len: FILE_TEXT.len(),
+    };
+    // SAFETY: the entry point under test passes a live `RvBytes`.
+    unsafe { bytes.write(read) };
+    RV_OK
+}
+
 /// A table that reports `size` and version `api_major`.`api_minor`.
 fn host_with(size: u32, api_major: u32, api_minor: u32) -> RvHost {
     RvHost {
@@ -130,7 +277,7 @@ fn host_with(size: u32, api_major: u32, api_minor: u32) -> RvHost {
 
 /// A table the way the loader builds it.
 fn host() -> RvHost {
-    host_with(size_of_u32::<RvHost>(), 0, 3)
+    host_with(size_of_u32::<RvHost>(), 0, 4)
 }
 
 /// The `ctx` the tests hand the Plugin. The Plugin never reads through it,
@@ -178,6 +325,9 @@ fn step_args(size: u32, tool: &str, arguments: &str) -> RvToolCallArgs {
         tool: rv_str(tool),
         arguments: rv_str(arguments),
         finish,
+        file_stat,
+        file_list,
+        file_read,
     }
 }
 
@@ -325,6 +475,32 @@ fn the_infos_and_the_result_keep_the_layout_the_contract_pins() {
 
 #[test]
 #[cfg(target_pointer_width = "64")]
+fn what_a_file_function_hands_back_keeps_the_layout_the_contract_pins() {
+    assert_eq!(size_of::<RvBytes>(), 16);
+    assert_eq!(offset_of!(RvBytes, ptr), 0);
+    assert_eq!(offset_of!(RvBytes, len), 8);
+
+    assert_eq!(size_of::<RvStat>(), 16);
+    assert_eq!(offset_of!(RvStat, file_type), 0);
+    assert_eq!(offset_of!(RvStat, reserved), 4);
+    assert_eq!(offset_of!(RvStat, len), 8);
+
+    assert_eq!(size_of::<RvDirEntry>(), 32);
+    assert_eq!(offset_of!(RvDirEntry, name), 0);
+    assert_eq!(offset_of!(RvDirEntry, stat), 16);
+
+    assert_eq!(size_of::<RvDirEntries>(), 16);
+    assert_eq!(offset_of!(RvDirEntries, ptr), 0);
+    assert_eq!(offset_of!(RvDirEntries, len), 8);
+
+    assert_eq!(size_of::<RvFileError>(), 24);
+    assert_eq!(offset_of!(RvFileError, kind), 0);
+    assert_eq!(offset_of!(RvFileError, reserved), 4);
+    assert_eq!(offset_of!(RvFileError, text), 8);
+}
+
+#[test]
+#[cfg(target_pointer_width = "64")]
 fn the_host_table_keeps_the_layout_the_contract_pins() {
     assert_eq!(size_of::<RvHost>(), 16);
     assert_eq!(offset_of!(RvHost, size), 0);
@@ -352,13 +528,16 @@ fn the_arguments_structs_keep_the_layout_the_contract_pins() {
     assert_eq!(offset_of!(RvPackNewArgs, refuse), 32);
     assert_eq!(offset_of!(RvPackNewArgs, add_tool), 40);
 
-    assert_eq!(size_of::<RvToolCallArgs>(), 56);
+    assert_eq!(size_of::<RvToolCallArgs>(), 80);
     assert_eq!(offset_of!(RvToolCallArgs, size), 0);
     assert_eq!(offset_of!(RvToolCallArgs, reserved), 4);
     assert_eq!(offset_of!(RvToolCallArgs, ctx), 8);
     assert_eq!(offset_of!(RvToolCallArgs, tool), 16);
     assert_eq!(offset_of!(RvToolCallArgs, arguments), 32);
     assert_eq!(offset_of!(RvToolCallArgs, finish), 48);
+    assert_eq!(offset_of!(RvToolCallArgs, file_stat), 56);
+    assert_eq!(offset_of!(RvToolCallArgs, file_list), 64);
+    assert_eq!(offset_of!(RvToolCallArgs, file_read), 72);
 }
 
 #[test]
@@ -381,8 +560,12 @@ fn the_status_codes_and_the_result_kinds_keep_their_numbers() {
     assert_eq!(RV_ERR_REFUSED, 5);
     assert_eq!(RV_ERR_UNSUPPORTED, 6);
     assert_eq!(RV_PENDING, 7);
+    assert_eq!(RV_ERR_FILE, 8);
     assert_eq!(RV_RESULT_TRUSTED, 1);
     assert_eq!(RV_RESULT_OTHER, 5);
+    assert_eq!(RV_FILE_TYPE_FILE, 1);
+    assert_eq!(RV_FILE_TYPE_DIRECTORY, 2);
+    assert_eq!(RV_FILE_TYPE_SYMLINK, 3);
 }
 
 #[test]
@@ -394,7 +577,7 @@ fn the_verbs_and_the_version_keep_their_numbers() {
     assert_eq!(RV_TOOL_CALL, 5);
     assert_eq!(RV_TOOL_CANCEL, 6);
     assert_eq!(RV_API_MAJOR, 0);
-    assert_eq!(RV_API_MINOR, 3);
+    assert_eq!(RV_API_MINOR, 4);
 }
 
 #[test]
@@ -481,11 +664,19 @@ fn a_host_reporting_version_0_2_is_unsupported_and_leaves_no_instance() {
 }
 
 #[test]
-fn a_table_that_is_too_short_or_not_version_0_3_is_unsupported_and_leaves_no_instance() {
+fn a_table_that_is_too_short_or_not_version_0_4_is_unsupported_and_leaves_no_instance() {
     let full = size_of_u32::<RvHost>();
-    let short = [0, 4, 8, 12, full - 1].map(|size| (size, 0, 3));
-    let versions = [(1, 3), (2, 3), (u32::MAX, 3), (0, 0), (0, 4), (0, u32::MAX)]
-        .map(|(major, minor)| (full, major, minor));
+    let short = [0, 4, 8, 12, full - 1].map(|size| (size, 0, 4));
+    let versions = [
+        (1, 4),
+        (2, 4),
+        (u32::MAX, 4),
+        (0, 0),
+        (0, 3),
+        (0, 5),
+        (0, u32::MAX),
+    ]
+    .map(|(major, minor)| (full, major, minor));
     for (size, api_major, api_minor) in short.into_iter().chain(versions) {
         let (status, call) = send_load_with(&host_with(size, api_major, api_minor));
         assert_eq!(
@@ -503,7 +694,7 @@ fn a_table_that_is_too_short_or_not_version_0_3_is_unsupported_and_leaves_no_ins
 
 #[test]
 fn a_table_longer_than_the_one_the_fixture_knows_still_loads() {
-    let host = host_with(size_of_u32::<RvHost>() + 32, 0, 3);
+    let host = host_with(size_of_u32::<RvHost>() + 32, 0, 4);
     let mut call = loaded(&host);
     assert!(!call.plugin.is_null());
     assert_eq!(unload(&mut call), RV_OK);
@@ -535,7 +726,7 @@ fn short_load_arguments_are_unsupported_and_leave_no_instance() {
 }
 
 #[test]
-fn a_host_that_is_not_0_3_is_rejected_before_null_args_are_noticed() {
+fn a_host_that_is_not_0_4_is_rejected_before_null_args_are_noticed() {
     let (status, _call) = send_verb(
         RV_PLUGIN_LOAD,
         &host_with(size_of_u32::<RvHost>(), 0, 2),
@@ -583,7 +774,7 @@ fn an_insert_pack_that_fails_fails_the_load_with_its_status_and_no_instance() {
 }
 
 #[test]
-fn a_pack_instance_adds_its_three_tools_and_is_deleted_once() {
+fn a_pack_instance_adds_its_six_tools_and_is_deleted_once() {
     let host = host();
     let mut call = loaded(&host);
     assert_eq!(new_pack(&mut call), RV_OK);
@@ -599,6 +790,9 @@ fn a_pack_instance_adds_its_three_tools_and_is_deleted_once() {
                 ("hello", "", NO_PARAMETERS),
                 ("steps", "", NO_PARAMETERS),
                 ("never", "", NO_PARAMETERS),
+                ("stat", "", PATH_PARAMETERS),
+                ("list", "", PATH_PARAMETERS),
+                ("read", "", PATH_PARAMETERS),
             ]
         );
     });
@@ -713,6 +907,99 @@ fn a_tool_the_pack_does_not_have_fails_the_call() {
     );
     assert_eq!(delete_pack(&mut call), RV_OK);
     assert_eq!(unload(&mut call), RV_OK);
+}
+
+/// Runs one step of the file tool `tool` on `path`, and returns the text
+/// it finished with, which must be a trusted result.
+fn file_tool(tool: &str, path: &str) -> String {
+    let host = host();
+    let mut call = loaded(&host);
+    assert_eq!(new_pack(&mut call), RV_OK);
+    let arguments = format!(r#"{{"path":"{path}"}}"#);
+    assert_eq!(step(&mut call, tool, &arguments), RV_OK, "{tool} {path}");
+    assert!(call.tool_call.is_null(), "a file tool keeps no state");
+    assert_eq!(delete_pack(&mut call), RV_OK);
+    assert_eq!(unload(&mut call), RV_OK);
+    let mut finished = finished();
+    assert_eq!(finished.len(), 1, "{tool} {path} finishes once");
+    let (kind, text) = finished.remove(0);
+    assert_eq!(kind, RV_RESULT_TRUSTED, "{tool} {path}");
+    text
+}
+
+#[test]
+fn the_stat_tool_words_what_file_stat_filled() {
+    assert_eq!(file_tool("stat", FILE), "file 5");
+}
+
+#[test]
+fn the_stat_tool_names_a_directory_a_link_and_anything_else() {
+    for (path, said) in [
+        (DIRECTORY, "directory"),
+        ("/link", "symlink"),
+        ("/pipe", "other"),
+    ] {
+        FINISHED.with_borrow_mut(Vec::clear);
+        assert_eq!(file_tool("stat", path), said, "{path}");
+    }
+}
+
+#[test]
+fn the_list_tool_joins_the_names_and_marks_each_directory() {
+    assert_eq!(file_tool("list", DIRECTORY), "a.md,sub/,link");
+}
+
+#[test]
+fn the_list_tool_answers_nothing_for_an_empty_directory() {
+    assert_eq!(file_tool("list", "/"), "");
+}
+
+#[test]
+fn the_read_tool_answers_the_text_of_the_whole_file() {
+    assert_eq!(file_tool("read", FILE), FILE_TEXT);
+}
+
+#[test]
+fn a_file_function_that_fails_ends_the_call_with_a_text_that_says_so() {
+    for tool in ["stat", "list", "read"] {
+        FINISHED.with_borrow_mut(Vec::clear);
+        assert_eq!(
+            file_tool(tool, "/absent"),
+            "failed (1): nothing is there",
+            "{tool}"
+        );
+    }
+}
+
+#[test]
+fn a_file_function_that_returns_another_status_is_named_with_it() {
+    assert_eq!(
+        file_tool("stat", BROKEN),
+        "the file function returned status 77"
+    );
+}
+
+#[test]
+fn a_file_tool_without_a_path_asks_for_the_empty_path() {
+    let host = host();
+    let mut call = loaded(&host);
+    assert_eq!(new_pack(&mut call), RV_OK);
+    assert_eq!(step(&mut call, "stat", "{}"), RV_OK);
+    assert_eq!(
+        finished(),
+        [(RV_RESULT_TRUSTED, "failed (1): nothing is there".to_owned())]
+    );
+    assert_eq!(delete_pack(&mut call), RV_OK);
+    assert_eq!(unload(&mut call), RV_OK);
+}
+
+#[test]
+fn the_path_is_the_text_between_the_quotes_after_its_key() {
+    assert_eq!(path_of(r#"{"path":"/notes/a.md"}"#), "/notes/a.md");
+    assert_eq!(path_of(r#"{"limit":3,"path":"a b"}"#), "a b");
+    assert_eq!(path_of(r#"{"path":""}"#), "");
+    assert_eq!(path_of("{}"), "");
+    assert_eq!(path_of(r#"{"path":"unclosed"#), "");
 }
 
 #[test]

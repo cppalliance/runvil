@@ -465,9 +465,9 @@ fn the_load_call_carries_the_contract_fields() {
 }
 
 #[test]
-fn the_table_reports_version_0_3_in_16_bytes() {
+fn the_table_reports_version_0_4_in_16_bytes() {
     assert_eq!(HOST.api_major, 0);
-    assert_eq!(HOST.api_minor, 3);
+    assert_eq!(HOST.api_minor, 4);
     assert_eq!(HOST.reserved, 0);
     assert_eq!(HOST.size, 16);
     assert_eq!(usize::try_from(HOST.size), Ok(size_of::<RvHost>()));
@@ -597,7 +597,7 @@ pack_misuse_test!(
 
 pack_misuse_test!(
     finish_called_during_a_load_is_misuse,
-    "finish was called outside RV_TOOL_CALL",
+    "a tool call function was called outside RV_TOOL_CALL",
     |call| {
         let result = result(RV_RESULT_TRUSTED, rv_str("done"));
         // SAFETY: as in the test above.

@@ -15,6 +15,7 @@ use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };
+use runvil::vfs::{Origin, VfsRef};
 use runvil::{BoxFuture, Error, ErrorCode, Harness, Host, RunSetup};
 use runvil_plugin::PackRegistry;
 
@@ -87,8 +88,16 @@ fn host_over(dir: &Path, source: String) -> (Arc<Host>, PluginReport) {
 
 /// A Harness for one run of the Host's prompt.
 fn harness(host: &Arc<Host>) -> Harness {
+    harness_over(host, VfsRef::default())
+}
+
+/// A Harness for one run of the Host's prompt over the files in `vfs`.
+fn harness_over(host: &Arc<Host>, vfs: VfsRef) -> Harness {
     let prompt = host.parse(PROMPT).expect("the prompt parses");
-    let setup = RunSetup::new(Arc::new(MemoryRecorder::new()), Arc::new(Offline));
+    let setup = RunSetup {
+        vfs,
+        ..RunSetup::new(Arc::new(MemoryRecorder::new()), Arc::new(Offline))
+    };
     Harness::new(Arc::clone(host), prompt, setup)
 }
 
@@ -131,6 +140,61 @@ async fn a_prompt_calls_a_one_step_tool_and_a_three_step_tool_of_the_library() {
         (counter(&library, "unloads"), counter(&library, "live")),
         (1, 0)
     );
+    drop(library);
+    remove(&dir);
+}
+
+#[tokio::test]
+async fn a_prompt_reads_the_files_of_its_run_through_the_librarys_file_tools() {
+    let dir = scratch("a_prompt_reads_the_files_of_its_run");
+    let file =
+        std::path::absolute(copy_fixture(&dir, "plugin")).expect("the working directory is known");
+    let lua = "local function tool(name, path)\n\
+               \x20 return tools.call('test/' .. name, { path = path })\n\
+               end\n\
+               return table.concat({\n\
+               \x20 tool('stat', '/notes/a.md'), tool('stat', '/notes'),\n\
+               \x20 tool('list', '/notes'), tool('read', 'notes/a.md'),\n\
+               \x20 tool('read', '/absent'), tool('list', '/notes/a.md'),\n\
+               \x20 tool('read', '/notes'),\n\
+               }, '|')";
+    let (host, report) = host_over(&dir, prompt(lua));
+    let library = already_loaded(&file).expect("the loader holds the library open");
+
+    let vfs = VfsRef::default();
+    let seed = vfs
+        .acquire(Origin::new("fixture seed"))
+        .expect("a fresh memory filesystem acquires");
+    seed.write("/notes/a.md", b"hello")
+        .expect("a seeded file is written");
+    seed.write("/notes/sub/b.md", b"")
+        .expect("a seeded file is written");
+    drop(seed);
+
+    let report_of_run = harness_over(&host, vfs)
+        .run()
+        .await
+        .expect("the recorder takes the run");
+    assert_eq!(
+        report_of_run.result,
+        Ok([
+            "file 5",
+            "directory",
+            "a.md,sub/",
+            "hello",
+            "failed (1): not found: /absent",
+            "failed (2): not a directory: /notes/a.md",
+            "failed (3): is a directory: /notes",
+        ]
+        .join("|"))
+    );
+    assert_eq!(
+        (counter(&library, "packs"), counter(&library, "calls")),
+        (0, 0)
+    );
+
+    drop((host, report));
+    assert_eq!(counter(&library, "live"), 0);
     drop(library);
     remove(&dir);
 }

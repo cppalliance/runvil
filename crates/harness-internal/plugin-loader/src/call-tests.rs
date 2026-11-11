@@ -201,16 +201,26 @@ fn a_call_that_was_never_polled_sends_nothing() {
     assert_eq!(unsent::CANCELS.load(Ordering::SeqCst), 0);
 }
 
+pack_fake!(
+    stateless,
+    {},
+    new: |call| {
+        set_pack_run(call, instance(PACK_TAG));
+        add_tool(call, "slow")
+    },
+    step: |_call| RV_PENDING
+);
+
 #[test]
 fn a_pending_call_that_set_no_state_is_canceled_with_null() {
-    let pack = made(unsent::entry);
+    let pack = made(stateless::entry);
     let call = test_call("slow");
     let mut future = Box::pin(pack.call(call.context(), json!({})));
     let mut cx = Context::from_waker(Waker::noop());
     assert!(future.as_mut().poll(&mut cx).is_pending());
     drop(future);
-    assert_eq!(unsent::CANCELS.load(Ordering::SeqCst), 1);
-    assert!(unsent::CANCELED.load(Ordering::SeqCst).is_null());
+    assert_eq!(stateless::CANCELS.load(Ordering::SeqCst), 1);
+    assert!(stateless::CANCELED.load(Ordering::SeqCst).is_null());
 }
 
 /// Defines a test whose fake step runs `$step`, which returns the step's
@@ -304,7 +314,7 @@ failed_call_test!(
 
 failed_call_test!(
     a_finish_through_another_ctx_is_misuse,
-    misuse_reason!("finish was handed a ctx other than the open RV_TOOL_CALL step's"),
+    misuse_reason!("a tool call function was handed a ctx other than the open RV_TOOL_CALL step's"),
     0,
     |call| {
         let done = result(RV_RESULT_TRUSTED, rv_str("done"));

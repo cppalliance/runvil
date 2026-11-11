@@ -4085,7 +4085,7 @@ dependencies = [
 [[package]]
 name = "plugin-std"
 version = "0.1.0"
-source = "git+https://github.com/cppalliance/runvil-plugin-std?rev=51bdca32c55d9e4849da81d451af20a1eba1a4ae#51bdca32c55d9e4849da81d451af20a1eba1a4ae"
+source = "git+https://github.com/cppalliance/runvil-plugin-std?rev=6d1e49e31853269210e420cdc0594bedda83f6fc#6d1e49e31853269210e420cdc0594bedda83f6fc"
 dependencies = [
  "runvil-plugin-sdk",
 ]
@@ -4831,16 +4831,16 @@ dependencies = [
 
 [[package]]
 name = "runvil-plugin-sdk"
-version = "0.3.0"
-source = "git+https://github.com/cppalliance/runvil-plugin-api?rev=d9b56776ac8978222a6099a998dd25359a2e8a9f#d9b56776ac8978222a6099a998dd25359a2e8a9f"
+version = "0.4.0"
+source = "git+https://github.com/cppalliance/runvil-plugin-api?rev=04574e32cf901437db40797aa4efcda90489b711#04574e32cf901437db40797aa4efcda90489b711"
 dependencies = [
  "runvil-plugin-sys",
 ]
 
 [[package]]
 name = "runvil-plugin-sys"
-version = "0.3.0"
-source = "git+https://github.com/cppalliance/runvil-plugin-api?rev=d9b56776ac8978222a6099a998dd25359a2e8a9f#d9b56776ac8978222a6099a998dd25359a2e8a9f"
+version = "0.4.0"
+source = "git+https://github.com/cppalliance/runvil-plugin-api?rev=04574e32cf901437db40797aa4efcda90489b711#04574e32cf901437db40797aa4efcda90489b711"
 
 [[package]]
 name = "runvil-prompt"

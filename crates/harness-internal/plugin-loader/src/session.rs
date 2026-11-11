@@ -5,12 +5,15 @@
 use std::cell::Cell;
 use std::ffi::c_void;
 use std::mem::size_of;
+use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::ptr::{self, NonNull};
 use std::slice;
 
-use runvil_plugin::{Error, ToolOutput};
+use runvil_plugin::{Access, Error, ToolOutput};
 use runvil_plugin_sys::{RV_ERR_MISUSE, RV_ERR_REFUSED, RvStatus, RvStr};
 use serde_json::Value;
+
+use crate::file::Lent;
 
 #[cfg(test)]
 #[path = "session-tests.rs"]
@@ -52,7 +55,27 @@ pub(crate) struct Session {
     pub(crate) tools: Vec<AddedTool>,
     /// The result a step finished its call with.
     pub(crate) result: Option<Result<ToolOutput, Error>>,
+    /// The files a step's file functions read: the access of the step's
+    /// tool call. `open_step` sets it while the step runs, and it is
+    /// `None` in every other call and once the step has returned.
+    access: Option<StepAccess>,
+    /// What a step's last file function handed the Plugin, which stays
+    /// valid until the next one, or until the step returns.
+    lent: Lent,
 }
+
+/// The access of the tool call whose step is open. A pointer, not a
+/// borrow, because a session is a `'static` allocation that its `ctx`
+/// names.
+#[derive(Clone, Copy)]
+struct StepAccess(NonNull<Access>);
+
+// A loaded Plugin owns the session of its load, which never names an
+// access, and a step's session names one only while the step runs. So the
+// pointer gives nobody a view of an `Access` after a panic, and a `Plugin`
+// stays unwind-safe, as it is without this field.
+impl UnwindSafe for StepAccess {}
+impl RefUnwindSafe for StepAccess {}
 
 /// The name and version a Plugin gave `describe_plugin`, copied.
 pub(crate) struct Described {
@@ -86,6 +109,24 @@ pub(crate) fn open(
     verb: Verb,
     send: impl FnOnce(*mut c_void) -> RvStatus,
 ) -> (RvStatus, Box<Session>) {
+    open_over(verb, None, send)
+}
+
+/// Sends one step of a tool call, as [`open`] sends a call, with `access`
+/// as the files its file functions read.
+pub(crate) fn open_step(
+    access: &Access,
+    send: impl FnOnce(*mut c_void) -> RvStatus,
+) -> (RvStatus, Box<Session>) {
+    open_over(Verb::ToolCall, Some(access), send)
+}
+
+/// Sends one call of `verb` over `access`; see [`open`].
+fn open_over(
+    verb: Verb,
+    access: Option<&Access>,
+    send: impl FnOnce(*mut c_void) -> RvStatus,
+) -> (RvStatus, Box<Session>) {
     let session = NonNull::from(Box::leak(Box::new(Session {
         verb,
         misuse: None,
@@ -94,6 +135,8 @@ pub(crate) fn open(
         packs: Vec::new(),
         tools: Vec::new(),
         result: None,
+        access: access.map(|access| StepAccess(NonNull::from(access))),
+        lent: Lent::default(),
     })));
     // A call inside a call, on one thread, keeps the outer session.
     let outer = OPEN.with(|cell| cell.replace(Some(session)));
@@ -104,7 +147,12 @@ pub(crate) fn open(
     OPEN.with(|cell| cell.set(outer));
     // SAFETY: `session` came from `Box::leak` above, and with the call
     // closed no slot holds it, so this is its only owner.
-    (status, unsafe { Box::from_raw(session.as_ptr()) })
+    let mut session = unsafe { Box::from_raw(session.as_ptr()) };
+    // The borrow of `access` ends with this function, so the session must
+    // not name it past here, and what was lent is no longer valid.
+    session.access = None;
+    session.lent = Lent::default();
+    (status, session)
 }
 
 /// Sends a call that has no arguments, with no session open on this
@@ -143,11 +191,11 @@ pub(crate) const PACK_NEW: Family = Family {
     wrong_call: "a Pack function was called outside RV_PACK_NEW",
 };
 
-/// The function in an `RvToolCallArgs`.
+/// The functions in an `RvToolCallArgs`.
 pub(crate) const TOOL_CALL: Family = Family {
     verb: Verb::ToolCall,
-    wrong_ctx: "finish was handed a ctx other than the open RV_TOOL_CALL step's",
-    wrong_call: "finish was called outside RV_TOOL_CALL",
+    wrong_ctx: "a tool call function was handed a ctx other than the open RV_TOOL_CALL step's",
+    wrong_call: "a tool call function was called outside RV_TOOL_CALL",
 };
 
 /// Answers a function of `family`. `f` runs on the session only when this
@@ -188,6 +236,23 @@ pub(crate) fn answer(
         status
     })
     .unwrap_or(RV_ERR_MISUSE)
+}
+
+/// Answers a file function, as [`answer`] answers a function of
+/// [`TOOL_CALL`]. `f` gets the files of the open step and the place that
+/// keeps what the function hands back.
+pub(crate) fn answer_file(
+    ctx: *mut c_void,
+    f: impl FnOnce(&Access, &mut Lent) -> Result<RvStatus, &'static str>,
+) -> RvStatus {
+    answer(ctx, &TOOL_CALL, |session| {
+        // Only `open_step` opens a step, and it always names an access.
+        let StepAccess(access) = session.access.ok_or(TOOL_CALL.wrong_call)?;
+        // SAFETY: `open_step` set the pointer from a reference that
+        // outlives the step and clears it when the step returns, and
+        // `answer` runs this only while that step is open on this thread.
+        f(unsafe { access.as_ref() }, &mut session.lent)
+    })
 }
 
 /// Records the Plugin's refusal of the open call of `family`, validated;
@@ -332,6 +397,44 @@ impl Shape {
         }
         // SAFETY: `size` says the Plugin wrote a whole `T`.
         Ok(unsafe { &*at })
+    }
+}
+
+/// One struct a Plugin hands a function to fill, and what each way of
+/// handing it over wrongly is called.
+pub(crate) struct Out {
+    null: &'static str,
+    misaligned: &'static str,
+}
+
+/// The [`Out`] of the struct the function `$function` fills and calls
+/// its `$what`.
+macro_rules! out {
+    ($function:literal, $what:literal) => {
+        $crate::session::Out::new(
+            concat!($function, " was handed a NULL ", $what, " pointer"),
+            concat!($function, " was handed a misaligned ", $what, " pointer"),
+        )
+    };
+}
+pub(crate) use out;
+
+impl Out {
+    /// An out struct with the name of each breach.
+    pub(crate) const fn new(null: &'static str, misaligned: &'static str) -> Out {
+        Out { null, misaligned }
+    }
+
+    /// `at`, once it is known to be a place a `T` can be written to. It
+    /// reads nothing.
+    pub(crate) fn check<T>(&self, at: *mut T) -> Result<*mut T, &'static str> {
+        if at.is_null() {
+            return Err(self.null);
+        }
+        if !at.is_aligned() {
+            return Err(self.misaligned);
+        }
+        Ok(at)
     }
 }
 

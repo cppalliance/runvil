@@ -1,8 +1,9 @@
 //! `harness-test-plugin` - a library Plugin for the loader's end-to-end
 //! tests: a dynamic library that exports `runvil_plugin` and follows the C
-//! contract. It inserts one Pack, `fixture/test`, whose three tools show a
-//! call that ends in one step, one that takes three, and one that never
-//! ends.
+//! contract. It inserts one Pack, `fixture/test`. Three of its tools show
+//! a call that ends in one step, one that takes three, and one that never
+//! ends, and three more call the step's file functions: `stat`, `list`,
+//! and `read`.
 //!
 //! ## Invariants
 //!
@@ -20,13 +21,16 @@
 //! - The entry point never unwinds: it has no `unwrap`, `expect`, or
 //!   indexing that can panic.
 //! - `RV_PLUGIN_LOAD` loads only when the `RvHost` table reports exactly
-//!   version 0.3, and checks that before it reads `args`.
+//!   version 0.4, and checks that before it reads `args`.
 //! - `RV_PLUGIN_LOAD` describes the Plugin exactly once, as `test-plugin`
 //!   at `0.1.0`, inserts its one Pack, and sets the instance pointer only
 //!   when both succeed. A failing load frees what it made, and so does a
 //!   failing `RV_PACK_NEW`.
 //! - A tool call's state is freed by the step that ends the call or by
 //!   `RV_TOOL_CANCEL`, never by both.
+//! - A file tool copies what a file function hands back before it calls
+//!   anything else, and a file function that fails ends the call with a
+//!   text that says so, not as a failed call.
 #![expect(unsafe_code, reason = "exports a C entry point")]
 
 use std::ffi::{c_char, c_void};
@@ -52,6 +56,8 @@ const RV_ERR_REFUSED: RvStatus = 5;
 const RV_ERR_UNSUPPORTED: RvStatus = 6;
 /// The tool call needs another step.
 const RV_PENDING: RvStatus = 7;
+/// A file function failed, and its `error` says how.
+const RV_ERR_FILE: RvStatus = 8;
 
 /// The operation an `RvCall` asks for.
 type RvVerb = u32;
@@ -75,10 +81,22 @@ const RV_RESULT_TRUSTED: RvResultKind = 1;
 /// The call failed for a reason the other kinds do not name.
 const RV_RESULT_OTHER: RvResultKind = 5;
 
+/// What a path names, in an `RvStat`.
+type RvFileType = u32;
+/// A regular file.
+const RV_FILE_TYPE_FILE: RvFileType = 1;
+/// A directory.
+const RV_FILE_TYPE_DIRECTORY: RvFileType = 2;
+/// A symbolic link.
+const RV_FILE_TYPE_SYMLINK: RvFileType = 3;
+
+/// Why a file function failed, in an `RvFileError`.
+type RvFileErrorKind = u32;
+
 /// The contract's major version, which the `RvHost` table must report.
 const RV_API_MAJOR: u32 = 0;
 /// The contract's minor version, which the `RvHost` table must report.
-const RV_API_MINOR: u32 = 3;
+const RV_API_MINOR: u32 = 4;
 
 /// The name this Plugin gives `describe_plugin`.
 const NAME: &str = "test-plugin";
@@ -88,14 +106,23 @@ const VERSION: &str = "0.1.0";
 const PACK: &str = "fixture/test";
 /// What the Pack says it offers.
 const PACK_DESCRIPTION: &str = "The loader's test fixture";
-/// The parameters of each tool: an object with no properties.
+/// The parameters of a tool that takes none: an object with no properties.
 const NO_PARAMETERS: &str = r#"{"type":"object","properties":{}}"#;
+/// The parameters of a file tool: an object with the one string `path`.
+const PATH_PARAMETERS: &str =
+    r#"{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}"#;
 /// The tool that ends in one step, with `hello ` and its arguments.
 const HELLO: &str = "hello";
 /// The tool that ends in its third step, with `3 steps`.
 const STEPS: &str = "steps";
 /// The tool that never ends.
 const NEVER: &str = "never";
+/// The tool that says what its `path` names.
+const STAT: &str = "stat";
+/// The tool that lists the directory at its `path`.
+const LIST: &str = "list";
+/// The tool that answers the text of the file at its `path`.
+const READ: &str = "read";
 
 /// A UTF-8 string that is not NUL-terminated.
 #[repr(C)]
@@ -105,6 +132,61 @@ struct RvStr {
     ptr: *const c_char,
     /// The length in bytes.
     len: usize,
+}
+
+/// A run of bytes, which `file_read` hands back.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct RvBytes {
+    /// The first byte.
+    ptr: *const u8,
+    /// The length in bytes.
+    len: usize,
+}
+
+/// What a path names, which `file_stat` fills and each `RvDirEntry` holds.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct RvStat {
+    /// One of the `RV_FILE_TYPE_` constants.
+    file_type: RvFileType,
+    /// Zero.
+    reserved: u32,
+    /// The length of a file in bytes.
+    len: u64,
+}
+
+/// One entry of a directory.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct RvDirEntry {
+    /// The entry's name within its directory.
+    name: RvStr,
+    /// What the entry is.
+    stat: RvStat,
+}
+
+/// The entries of a directory, which `file_list` hands back.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct RvDirEntries {
+    /// The first entry.
+    ptr: *const RvDirEntry,
+    /// How many entries there are.
+    len: usize,
+}
+
+/// Why a file function failed, which the function fills when it returns
+/// `RV_ERR_FILE`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+struct RvFileError {
+    /// One of the contract's `RV_FILE_ERROR_` constants.
+    kind: RvFileErrorKind,
+    /// Zero.
+    reserved: u32,
+    /// What went wrong.
+    text: RvStr,
 }
 
 /// What a Plugin tells `describe_plugin` about itself.
@@ -218,8 +300,8 @@ struct RvPackNewArgs {
     add_tool: unsafe extern "C" fn(ctx: *mut c_void, info: *const RvToolInfo) -> RvStatus,
 }
 
-/// The arguments of `RV_TOOL_CALL`: the tool, its arguments, and the
-/// function that ends the call.
+/// The arguments of `RV_TOOL_CALL`: the tool, its arguments, the function
+/// that ends the call, and the file functions.
 #[repr(C)]
 #[derive(Debug)]
 struct RvToolCallArgs {
@@ -235,6 +317,29 @@ struct RvToolCallArgs {
     arguments: RvStr,
     /// Ends the call with its result.
     finish: unsafe extern "C" fn(ctx: *mut c_void, result: *const RvToolResult) -> RvStatus,
+    /// Says what `path` names.
+    file_stat: unsafe extern "C" fn(
+        ctx: *mut c_void,
+        path: RvStr,
+        stat: *mut RvStat,
+        error: *mut RvFileError,
+    ) -> RvStatus,
+    /// Lists the directory at `path`.
+    file_list: unsafe extern "C" fn(
+        ctx: *mut c_void,
+        path: RvStr,
+        entries: *mut RvDirEntries,
+        error: *mut RvFileError,
+    ) -> RvStatus,
+    /// Reads up to `len` bytes of the file at `path` from `offset` on.
+    file_read: unsafe extern "C" fn(
+        ctx: *mut c_void,
+        path: RvStr,
+        offset: u64,
+        len: u64,
+        bytes: *mut RvBytes,
+        error: *mut RvFileError,
+    ) -> RvStatus,
 }
 
 /// One call into the Plugin's entry point.
@@ -433,7 +538,7 @@ unsafe fn args<'a, T>(call: *mut RvCall) -> Result<&'a T, RvStatus> {
     Ok(unsafe { &*args })
 }
 
-/// The fixture's Plugin entry point, speaking contract 0.3.
+/// The fixture's Plugin entry point, speaking contract 0.4.
 ///
 /// # Safety
 /// `call` must point to a valid `RvCall` made as the C contract requires:
@@ -544,7 +649,7 @@ unsafe fn unload(call: *mut RvCall) -> RvStatus {
     RV_OK
 }
 
-/// Handles `RV_PACK_NEW`: makes the Pack instance, adds its three tools
+/// Handles `RV_PACK_NEW`: makes the Pack instance, adds its six tools
 /// through the call's `ctx`, and only then hands the instance to the
 /// loader.
 ///
@@ -562,10 +667,17 @@ unsafe fn pack_new(call: *mut RvCall) -> RvStatus {
         return RV_ERR_MISUSE;
     }
     let pack_run = Box::new(PackRun::new());
-    for (name, description) in [
-        (HELLO, "Answers hello and its arguments in one step."),
-        (STEPS, "Answers in its third step."),
-        (NEVER, "Never answers."),
+    for (name, description, parameters) in [
+        (
+            HELLO,
+            "Answers hello and its arguments in one step.",
+            NO_PARAMETERS,
+        ),
+        (STEPS, "Answers in its third step.", NO_PARAMETERS),
+        (NEVER, "Never answers.", NO_PARAMETERS),
+        (STAT, "Says what a path names.", PATH_PARAMETERS),
+        (LIST, "Lists a directory.", PATH_PARAMETERS),
+        (READ, "Answers the text of a file.", PATH_PARAMETERS),
     ] {
         let info = RvToolInfo {
             size: size_of_u32::<RvToolInfo>(),
@@ -573,7 +685,7 @@ unsafe fn pack_new(call: *mut RvCall) -> RvStatus {
             name: rv_str(name),
             wire_name: rv_str(""),
             description: rv_str(description),
-            parameters: rv_str(NO_PARAMETERS),
+            parameters: rv_str(parameters),
         };
         // SAFETY: `add_tool` and `ctx` are the call's own arguments, and
         // `info` and its strings outlive the call.
@@ -639,6 +751,11 @@ unsafe fn tool_call(call: *mut RvCall) -> RvStatus {
             unsafe { (*call).tool_call = Box::into_raw(state).cast() };
             return RV_PENDING;
         }
+        // SAFETY: `args` is the arguments of this step, which is open on
+        // this thread.
+        STAT | LIST | READ => (RV_RESULT_TRUSTED, unsafe {
+            file_answer(args, tool, path_of(arguments))
+        }),
         other => (
             RV_RESULT_OTHER,
             format!("test-plugin has no tool named {other}"),
@@ -654,6 +771,119 @@ unsafe fn tool_call(call: *mut RvCall) -> RvStatus {
     // SAFETY: `finish` and `ctx` are the step's own arguments, and
     // `result` and its text outlive the call.
     unsafe { (args.finish)(args.ctx, &raw const result) }
+}
+
+/// The value of the string `path` in `arguments`, the JSON text of an
+/// object, or the empty string when it has none. It reads up to the next
+/// `"`, so it serves only a path with no `"` and no `\` in it, which is
+/// all the tests send.
+fn path_of(arguments: &str) -> &str {
+    arguments
+        .split_once(r#""path":""#)
+        .and_then(|(_, rest)| rest.split_once('"'))
+        .map_or("", |(path, _)| path)
+}
+
+/// What the file tool `tool` answers for `path`: what the step's file
+/// function handed back, as text, or `failed (kind): text` when the
+/// function returned `RV_ERR_FILE`.
+///
+/// # Safety
+/// `args` must be the arguments of the step open on this thread.
+unsafe fn file_answer(args: &RvToolCallArgs, tool: &str, path: &str) -> String {
+    let path = rv_str(path);
+    let mut error = RvFileError {
+        kind: 0,
+        reserved: 0,
+        text: rv_str(""),
+    };
+    // SAFETY: in each arm, the file function and `ctx` are the step's
+    // own, `path` outlives the call, and the result and `error` are live
+    // structs of this frame. What a function hands back is copied before
+    // any other file function is called.
+    let (status, answer) = unsafe {
+        match tool {
+            STAT => {
+                let mut stat = RvStat {
+                    file_type: 0,
+                    reserved: 0,
+                    len: 0,
+                };
+                let status = (args.file_stat)(args.ctx, path, &raw mut stat, &raw mut error);
+                (status, stat_text(stat))
+            }
+            LIST => {
+                let mut entries = RvDirEntries {
+                    ptr: std::ptr::null(),
+                    len: 0,
+                };
+                let status = (args.file_list)(args.ctx, path, &raw mut entries, &raw mut error);
+                (status, list_text(lent(entries.ptr, entries.len)))
+            }
+            _ => {
+                let mut bytes = RvBytes {
+                    ptr: std::ptr::null(),
+                    len: 0,
+                };
+                let status =
+                    (args.file_read)(args.ctx, path, 0, u64::MAX, &raw mut bytes, &raw mut error);
+                let read = String::from_utf8_lossy(lent(bytes.ptr, bytes.len)).into_owned();
+                (status, read)
+            }
+        }
+    };
+    match status {
+        RV_OK => answer,
+        // SAFETY: the loader filled `error`, and its text is valid until
+        // the step's next file function.
+        RV_ERR_FILE => format!("failed ({}): {}", error.kind, unsafe { text(error.text) }),
+        other => format!("the file function returned status {other}"),
+    }
+}
+
+/// `stat` as the `stat` tool words it.
+fn stat_text(stat: RvStat) -> String {
+    match stat.file_type {
+        RV_FILE_TYPE_FILE => format!("file {}", stat.len),
+        RV_FILE_TYPE_DIRECTORY => "directory".to_owned(),
+        RV_FILE_TYPE_SYMLINK => "symlink".to_owned(),
+        _ => "other".to_owned(),
+    }
+}
+
+/// `entries` as the `list` tool words them: the names joined by `,`, each
+/// directory with a `/` after its name.
+///
+/// # Safety
+/// The name of each entry must be valid for reads of its length.
+unsafe fn list_text(entries: &[RvDirEntry]) -> String {
+    let mut listed = String::new();
+    for entry in entries {
+        if !listed.is_empty() {
+            listed.push(',');
+        }
+        // SAFETY: the caller guarantees the name.
+        listed.push_str(unsafe { text(entry.name) });
+        if entry.stat.file_type == RV_FILE_TYPE_DIRECTORY {
+            listed.push('/');
+        }
+    }
+    listed
+}
+
+/// The `len` values a file function lent at `ptr`, or none when `ptr` is
+/// NULL, as it is in a result no file function filled.
+///
+/// # Safety
+/// When `ptr` is not NULL and `len` is nonzero, `ptr` must be valid for
+/// reads of `len` values for the lifetime `'a`.
+unsafe fn lent<'a, T>(ptr: *const T, len: usize) -> &'a [T] {
+    if ptr.is_null() || len == 0 {
+        return &[];
+    }
+    // SAFETY: `ptr` is not NULL, and the caller guarantees it is valid
+    // for `len` values.
+    unsafe { std::slice::from_raw_parts(ptr, len) }
 }
 
 /// Handles `RV_TOOL_CANCEL`: frees the state of an abandoned call.

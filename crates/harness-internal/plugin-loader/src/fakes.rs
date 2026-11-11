@@ -14,11 +14,13 @@ use std::task::{Context, Poll, Waker};
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{Error, Pack, PackRegistry, ToolId, ToolOutput};
 pub(crate) use runvil_plugin_sys::{
-    PluginEntry, RV_ERR_MISUSE, RV_ERR_REFUSED, RV_ERR_UNSUPPORTED, RV_OK, RV_PACK_DELETE,
-    RV_PACK_NEW, RV_PENDING, RV_PLUGIN_LOAD, RV_PLUGIN_UNLOAD, RV_RESULT_BACKEND,
-    RV_RESULT_INVALID_ARGUMENTS, RV_RESULT_OTHER, RV_RESULT_TRANSPORT, RV_RESULT_TRUSTED,
-    RV_RESULT_UNTRUSTED, RV_TOOL_CALL, RV_TOOL_CANCEL, RvCall, RvHost, RvLoadArgs, RvPackInfo,
-    RvPackNewArgs, RvPluginInfo, RvResultKind, RvStatus, RvStr, RvToolCallArgs, RvToolInfo,
+    PluginEntry, RV_ERR_MISUSE, RV_ERR_REFUSED, RV_ERR_UNSUPPORTED, RV_FILE_ERROR_IS_A_DIRECTORY,
+    RV_FILE_ERROR_NOT_A_DIRECTORY, RV_FILE_ERROR_NOT_FOUND, RV_FILE_ERROR_OTHER,
+    RV_FILE_TYPE_DIRECTORY, RV_FILE_TYPE_FILE, RV_OK, RV_PACK_DELETE, RV_PACK_NEW, RV_PENDING,
+    RV_PLUGIN_LOAD, RV_PLUGIN_UNLOAD, RV_RESULT_BACKEND, RV_RESULT_INVALID_ARGUMENTS,
+    RV_RESULT_OTHER, RV_RESULT_TRANSPORT, RV_RESULT_TRUSTED, RV_RESULT_UNTRUSTED, RV_TOOL_CALL,
+    RV_TOOL_CANCEL, RvBytes, RvCall, RvDirEntries, RvFileError, RvHost, RvLoadArgs, RvPackInfo,
+    RvPackNewArgs, RvPluginInfo, RvResultKind, RvStat, RvStatus, RvStr, RvToolCallArgs, RvToolInfo,
     RvToolResult, RvVerb,
 };
 use serde_json::Value;
@@ -258,7 +260,7 @@ pub(crate) fn size_u32<T>() -> u32 {
 }
 
 /// Whether `call` carries the fields the contract gives a call that sends
-/// `verb` in version 0.3, and its table says the contract's version. Each
+/// `verb` in version 0.4, and its table says the contract's version. Each
 /// verb carries the Plugin's pointers the contract names for it and no
 /// others, and its own arguments struct, with a `ctx`, or no arguments.
 pub(crate) fn contract_holds(call: *mut RvCall, verb: RvVerb) -> bool {
@@ -294,7 +296,7 @@ pub(crate) fn contract_holds(call: *mut RvCall, verb: RvVerb) -> bool {
         && args_hold
         && table.size == size_u32::<RvHost>()
         && table.api_major == 0
-        && table.api_minor == 3
+        && table.api_minor == 4
         && table.reserved == 0
 }
 
@@ -552,4 +554,154 @@ pub(crate) fn finish_result(call: *mut RvCall, result: &RvToolResult) -> RvStatu
 /// Finishes the call with `kind` and `text`.
 pub(crate) fn finish(call: *mut RvCall, kind: RvResultKind, text: &str) -> RvStatus {
     finish_result(call, &result(kind, rv_str(text)))
+}
+
+/// An `RvStat` whose every field is 9, so a test sees whether a file
+/// function wrote it.
+pub(crate) fn unset_stat() -> RvStat {
+    RvStat {
+        file_type: 9,
+        reserved: 9,
+        len: 9,
+    }
+}
+
+/// An `RvFileError` of kind 9 that says `untouched`, so a test sees
+/// whether a file function wrote it.
+pub(crate) fn unset_error() -> RvFileError {
+    RvFileError {
+        kind: 9,
+        reserved: 9,
+        text: rv_str("untouched"),
+    }
+}
+
+/// An `RvBytes` with no pointer and a length of 9, so a test sees whether
+/// a file function wrote it.
+pub(crate) fn unset_bytes() -> RvBytes {
+    RvBytes {
+        ptr: ptr::null(),
+        len: 9,
+    }
+}
+
+/// An `RvDirEntries` with no pointer and a length of 9, so a test sees
+/// whether a file function wrote it.
+pub(crate) fn unset_entries() -> RvDirEntries {
+    RvDirEntries {
+        ptr: ptr::null(),
+        len: 9,
+    }
+}
+
+/// Calls the step's `file_stat` with `as_ctx`, as a Plugin would or as it
+/// must not.
+pub(crate) fn stat_as(
+    call: *mut RvCall,
+    as_ctx: *mut c_void,
+    path: RvStr,
+    stat: *mut RvStat,
+    error: *mut RvFileError,
+) -> RvStatus {
+    // SAFETY: the function refuses a `ctx` that is not the open step's, a
+    // path it cannot read, and a pointer that is NULL or misaligned,
+    // before it reads or writes through any of them. Every other pointer
+    // a test hands over is a live struct of its own.
+    unsafe { (step_args(call).file_stat)(as_ctx, path, stat, error) }
+}
+
+/// Calls the step's `file_list` with `as_ctx`, as `stat_as` calls
+/// `file_stat`.
+pub(crate) fn list_as(
+    call: *mut RvCall,
+    as_ctx: *mut c_void,
+    path: RvStr,
+    entries: *mut RvDirEntries,
+    error: *mut RvFileError,
+) -> RvStatus {
+    // SAFETY: as in `stat_as`.
+    unsafe { (step_args(call).file_list)(as_ctx, path, entries, error) }
+}
+
+/// Calls the step's `file_read` with `as_ctx`, as `stat_as` calls
+/// `file_stat`.
+pub(crate) fn read_as(
+    call: *mut RvCall,
+    as_ctx: *mut c_void,
+    path: RvStr,
+    range: (u64, u64),
+    bytes: *mut RvBytes,
+    error: *mut RvFileError,
+) -> RvStatus {
+    // SAFETY: as in `stat_as`.
+    unsafe { (step_args(call).file_read)(as_ctx, path, range.0, range.1, bytes, error) }
+}
+
+/// What a file function of a step answered: what it handed back, or the
+/// kind and the text of its failure.
+pub(crate) type Answer<T> = Result<T, (u32, String)>;
+
+/// What the step's `file_stat` says of `path`: the file type and the
+/// length, or the kind and the text of the failure.
+pub(crate) fn stat_of(call: *mut RvCall, path: &str) -> Answer<(u32, u64)> {
+    let (mut stat, mut error) = (unset_stat(), unset_error());
+    let ctx = step_args(call).ctx;
+    match stat_as(call, ctx, rv_str(path), &raw mut stat, &raw mut error) {
+        RV_OK => Ok((stat.file_type, stat.len)),
+        _ => Err((error.kind, text(error.text))),
+    }
+}
+
+/// What the step's `file_list` says of `path`: each entry's name, file
+/// type, and length, or the kind and the text of the failure.
+pub(crate) fn list_of(call: *mut RvCall, path: &str) -> Answer<Vec<(String, u32, u64)>> {
+    let (mut entries, mut error) = (unset_entries(), unset_error());
+    let ctx = step_args(call).ctx;
+    match list_as(call, ctx, rv_str(path), &raw mut entries, &raw mut error) {
+        RV_OK if entries.len == 0 => Ok(Vec::new()),
+        RV_OK => {
+            // SAFETY: the loader keeps the entries and their names valid
+            // until the step's next file function.
+            let listed = unsafe { slice::from_raw_parts(entries.ptr, entries.len) };
+            Ok(listed
+                .iter()
+                .map(|entry| (text(entry.name), entry.stat.file_type, entry.stat.len))
+                .collect())
+        }
+        _ => Err((error.kind, text(error.text))),
+    }
+}
+
+/// What the step's `file_read` hands back for `path` and the range
+/// `offset` and `len`, or the kind and the text of the failure.
+pub(crate) fn read_of(call: *mut RvCall, path: &str, range: (u64, u64)) -> Answer<Vec<u8>> {
+    let (mut bytes, mut error) = (unset_bytes(), unset_error());
+    let ctx = step_args(call).ctx;
+    match read_as(
+        call,
+        ctx,
+        rv_str(path),
+        range,
+        &raw mut bytes,
+        &raw mut error,
+    ) {
+        RV_OK if bytes.len == 0 => Ok(Vec::new()),
+        // SAFETY: the loader keeps the bytes valid until the step's next
+        // file function.
+        RV_OK => Ok(unsafe { slice::from_raw_parts(bytes.ptr, bytes.len) }.to_vec()),
+        _ => Err((error.kind, text(error.text))),
+    }
+}
+
+/// A call of the fake Pack's tool `name` over an in-memory filesystem
+/// that holds each of `files`, a path beside its text.
+pub(crate) fn seeded_call(name: &str, files: &[(&str, &str)]) -> TestCall {
+    let call = test_call(name);
+    for (path, text) in files {
+        call.context()
+            .access()
+            .write(path, text.as_bytes())
+            .expect("a seeded file is written");
+    }
+    call
 }
