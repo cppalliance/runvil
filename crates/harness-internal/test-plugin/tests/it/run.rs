@@ -15,7 +15,7 @@ use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };
-use runvil::vfs::{Origin, VfsRef};
+use runvil::vfs::{MemoryBackend, Op, Origin, Policy, Verdict, VfsPath, VfsRef};
 use runvil::{BoxFuture, Error, ErrorCode, Harness, Host, RunSetup};
 use runvil_plugin::PackRegistry;
 
@@ -185,6 +185,80 @@ async fn a_prompt_reads_the_files_of_its_run_through_the_librarys_file_tools() {
             "failed (1): not found: /absent",
             "failed (2): not a directory: /notes/a.md",
             "failed (3): is a directory: /notes",
+        ]
+        .join("|"))
+    );
+    assert_eq!(
+        (counter(&library, "packs"), counter(&library, "calls")),
+        (0, 0)
+    );
+
+    drop((host, report));
+    assert_eq!(counter(&library, "live"), 0);
+    drop(library);
+    remove(&dir);
+}
+
+/// Denies every read under `/secret`, and panics on every read under
+/// `/broken`. A write passes, so a test can seed both.
+struct Guard;
+
+impl Policy for Guard {
+    fn check(&self, op: Op, path: &VfsPath) -> Verdict {
+        if !matches!(op, Op::Read | Op::List | Op::Stat) {
+            return Verdict::Allow;
+        }
+        let path = path.as_str();
+        if path.starts_with("/secret") {
+            return Verdict::Deny("This run may not read under /secret.".to_owned());
+        }
+        assert!(!path.starts_with("/broken"), "the policy broke on {path}");
+        Verdict::Allow
+    }
+}
+
+#[tokio::test]
+async fn a_read_the_policy_denies_or_panics_on_is_a_file_error_and_the_run_goes_on() {
+    let dir = scratch("a_read_the_policy_denies_or_panics_on");
+    let file =
+        std::path::absolute(copy_fixture(&dir, "plugin")).expect("the working directory is known");
+    let lua = "local function tool(name, path)\n\
+               \x20 return tools.call('test/' .. name, { path = path })\n\
+               end\n\
+               return table.concat({\n\
+               \x20 tool('read', '/secret/key'), tool('stat', '/secret/key'),\n\
+               \x20 tool('list', '/secret'), tool('read', '/broken/a.md'),\n\
+               \x20 tool('read', '/notes/a.md'),\n\
+               }, '|')";
+    let (host, report) = host_over(&dir, prompt(lua));
+    let library = already_loaded(&file).expect("the loader holds the library open");
+
+    let vfs = VfsRef::builder()
+        .store("/", MemoryBackend::new())
+        .policy(Guard)
+        .build();
+    let seed = vfs
+        .acquire(Origin::new("fixture seed"))
+        .expect("a fresh memory filesystem acquires");
+    for path in ["/secret/key", "/broken/a.md", "/notes/a.md"] {
+        seed.write(path, b"hello")
+            .expect("a seeded file is written");
+    }
+    drop(seed);
+
+    let report_of_run = harness_over(&host, vfs)
+        .run()
+        .await
+        .expect("the recorder takes the run");
+    let denied = "failed (4): This run may not read under /secret.";
+    assert_eq!(
+        report_of_run.result,
+        Ok([
+            denied,
+            denied,
+            denied,
+            "failed (0): the file operation panicked",
+            "hello",
         ]
         .join("|"))
     );

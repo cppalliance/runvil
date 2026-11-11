@@ -50,7 +50,8 @@ fn a_host_build_places_the_library_in_the_plugin_directory_beside_workshop() {
     let plugins = environment.target_root.join("debug").join("plugins");
     assert_eq!(
         std::fs::read(plugins.join("plugin_std.dll")).expect("the placed library"),
-        b"plugin"
+        plugin_bytes(None, "debug"),
+        "the library of the host's debug build, and of no other"
     );
     assert_eq!(
         std::fs::read_dir(&plugins).expect("plugins").count(),
@@ -84,7 +85,8 @@ fn a_build_for_a_named_target_places_the_library_under_that_target_and_replaces_
 
     assert_eq!(
         std::fs::read(&placed).expect("the placed library"),
-        b"plugin"
+        plugin_bytes(Some(triple), "release"),
+        "the library of the named target's release build, and of no other"
     );
     assert!(
         !environment

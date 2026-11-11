@@ -14,6 +14,7 @@
 
 use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::time::{Duration, SystemTime};
 
 use axum::http::header;
@@ -46,6 +47,13 @@ pub(crate) const RECV_TIMEOUT: Duration = Duration::from_secs(10);
 /// cannot remove a loaded library, so a copy for each test would be left
 /// behind in the temporary directory.
 pub(crate) fn std_plugin_dir() -> PathBuf {
+    /// The directory, made once for each test process.
+    static DIRECTORY: OnceLock<PathBuf> = OnceLock::new();
+    DIRECTORY.get_or_init(make_std_plugin_dir).clone()
+}
+
+/// Makes the directory [`std_plugin_dir`] returns, with the link in it.
+fn make_std_plugin_dir() -> PathBuf {
     let file = format!("{DLL_PREFIX}plugin_std{DLL_SUFFIX}");
     let exe = std::env::current_exe().expect("the test executable has a path");
     let beside = exe.parent().expect("the test executable has a directory");
@@ -54,11 +62,19 @@ pub(crate) fn std_plugin_dir() -> PathBuf {
     std::fs::create_dir_all(&directory).expect("the Plugin directory is made");
     let link = directory.join(&file);
     if !is_link_to(&link, &built) {
-        // A link an earlier build left names that build's library.
-        let _ = std::fs::remove_file(&link);
-        if let Err(error) = std::fs::hard_link(&built, &link) {
-            // Each test is its own process, and another may have made the
-            // link between the check above and this call.
+        // A link an earlier build left names that build's library. Each
+        // test is its own process, and another may read the directory at
+        // any moment. So the new link is made under a name of this
+        // process, which the loader skips for its extension, and renamed
+        // over the old one: the directory is never without the library.
+        let staged = directory.join(format!("{file}.{}.tmp", std::process::id()));
+        let _ = std::fs::remove_file(&staged);
+        let placed =
+            std::fs::hard_link(&built, &staged).and_then(|()| std::fs::rename(&staged, &link));
+        if let Err(error) = placed {
+            let _ = std::fs::remove_file(&staged);
+            // Another process may have placed the link first, and Windows
+            // does not replace a library that a process has loaded.
             assert!(
                 is_link_to(&link, &built),
                 "cannot link {} to {}: {error}",

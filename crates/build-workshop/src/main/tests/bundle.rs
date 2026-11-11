@@ -293,7 +293,8 @@ fn macos_unsigned_publishes_only_the_dmg_around_the_pinned_gateway() {
     // two bundles, where Workshop looks for it.
     assert_eq!(
         std::fs::read(payload.join("plugins").join("libplugin_std.dylib")).expect("payload Plugin"),
-        b"plugin"
+        plugin_bytes(Some(target), "release"),
+        "the library of the installer's own release build"
     );
     let installer = installer_path(environment, target);
     assert_eq!(

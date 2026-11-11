@@ -4,6 +4,7 @@
 //! [`Lent`], what the last of them handed back.
 
 use std::ffi::c_void;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use runvil_plugin::{Entry, FileType, Stat, VfsError};
 use runvil_plugin_sys::{
@@ -29,8 +30,8 @@ const BYTES: Out = out!("file_read", "bytes");
 const READ_ERROR: Out = out!("file_read", "error");
 
 /// What a step's last file function handed the Plugin. The contract
-/// keeps it valid until the step's next file function, so each one
-/// replaces it, and the step's end frees it.
+/// keeps it valid until the step's next file function or the end of the
+/// step, so each file function replaces it, and the step's end frees it.
 #[derive(Default)]
 pub(crate) struct Lent {
     /// The bytes of a read.
@@ -113,10 +114,15 @@ fn raw_stat(stat: &Stat) -> RvStat {
     }
 }
 
-/// The contract's kind for `error`, and the text a model reads. A policy
-/// denial carries the policy's own reason, an I/O failure the kind of the
-/// failure and the system's description, and every error the contract has
-/// no kind for its sentence without the leading label.
+/// The contract's kind for `error`, and the text a model reads.
+///
+/// A missing path, a path that is not a directory, and a path that is one
+/// keep the error's own sentence. A policy denial carries the policy's
+/// own reason. A conflict names the path and not the two identities that
+/// claimed it, which mean nothing outside the Harness. An I/O failure
+/// carries the kind of the failure and the system's description. Of the
+/// errors the contract has no kind for, a refused path carries the rule
+/// it broke, and every other one its sentence without the leading label.
 fn describe(error: &VfsError) -> (RvFileErrorKind, String) {
     match error {
         VfsError::NotFound { .. } => (RV_FILE_ERROR_NOT_FOUND, error.to_string()),
@@ -125,10 +131,32 @@ fn describe(error: &VfsError) -> (RvFileErrorKind, String) {
         VfsError::PermissionDenied { reason, .. } | VfsError::ApprovalRequired { reason, .. } => {
             (RV_FILE_ERROR_DENIED, reason.clone())
         }
-        VfsError::Conflict { .. } => (RV_FILE_ERROR_CONFLICT, error.to_string()),
+        VfsError::Conflict { path, .. } => (
+            RV_FILE_ERROR_CONFLICT,
+            format!("another tool call of the run changed {path}, or is changing it"),
+        ),
         VfsError::Io { kind, message, .. } => (RV_FILE_ERROR_IO, format!("{kind}: {message}")),
+        // The path is quoted in the sentence and may hold `": "` itself,
+        // so the rule is taken from the error, not cut out of the text.
+        VfsError::InvalidPath { reason, .. } => (RV_FILE_ERROR_OTHER, reason.to_string()),
+        VfsError::NotUtf8 { path, .. } => (
+            RV_FILE_ERROR_OTHER,
+            format!("{path} holds a name or contents that are not UTF-8"),
+        ),
         other => (RV_FILE_ERROR_OTHER, without_label(&other.to_string())),
     }
+}
+
+/// Runs one operation of a tool call's access, and turns a panic inside
+/// it into a failure. The operation runs under a C function the Plugin
+/// called, which a panic must not unwind through, and the policy and the
+/// backend behind an access are the Host's own code.
+fn contained<T>(operation: impl FnOnce() -> Result<T, VfsError>) -> Result<T, VfsError> {
+    catch_unwind(AssertUnwindSafe(operation)).unwrap_or_else(|_| {
+        Err(VfsError::Backend {
+            message: "the file operation panicked".to_owned(),
+        })
+    })
 }
 
 /// `text` without its leading label: the text after the first `": "`, or
@@ -153,7 +181,7 @@ pub(crate) unsafe extern "C" fn file_stat(
         // SAFETY: the contract makes `path` valid for its length during
         // this call.
         let path = unsafe { PATH.read(path) }?;
-        Ok(match access.stat(&path) {
+        Ok(match contained(|| access.stat(&path)) {
             Ok(found) => {
                 *lent = Lent::default();
                 // SAFETY: `stat` is not NULL and is aligned, and the
@@ -181,7 +209,7 @@ pub(crate) unsafe extern "C" fn file_list(
         // SAFETY: the contract makes `path` valid for its length during
         // this call.
         let path = unsafe { PATH.read(path) }?;
-        Ok(match access.list(&path) {
+        Ok(match contained(|| access.list(&path)) {
             Ok(listed) => {
                 let listed = lent.entries(listed);
                 // SAFETY: `entries` is not NULL and is aligned, and the
@@ -214,18 +242,27 @@ pub(crate) unsafe extern "C" fn file_read(
         let path = unsafe { PATH.read(path) }?;
         // No read returns more than memory can hold, and a backend that
         // slices a whole file refuses a length it cannot address.
-        let len = len.min(u64::try_from(usize::MAX).unwrap_or(u64::MAX));
-        Ok(match access.read_range(&path, offset, len) {
-            Ok(read) => {
-                let read = lent.bytes(read);
-                // SAFETY: `bytes` is not NULL and is aligned, and the
-                // contract makes it a struct the Plugin owns.
-                unsafe { bytes.write(read) };
-                RV_OK
-            }
-            // SAFETY: as above, for `error`.
-            Err(failure) => unsafe { fail(lent, error, &failure) },
-        })
+        let len = usize::try_from(len).unwrap_or(usize::MAX);
+        // A real file cannot be positioned past this offset, and no file
+        // is that long, so the read finds the end and returns no bytes.
+        let offset = offset.min(i64::MAX.unsigned_abs());
+        let wanted = u64::try_from(len).unwrap_or(u64::MAX);
+        Ok(
+            match contained(|| access.read_range(&path, offset, wanted)) {
+                Ok(mut read) => {
+                    // The contract promises at most `len` bytes, whatever
+                    // the backend returned.
+                    read.truncate(len);
+                    let read = lent.bytes(read);
+                    // SAFETY: `bytes` is not NULL and is aligned, and the
+                    // contract makes it a struct the Plugin owns.
+                    unsafe { bytes.write(read) };
+                    RV_OK
+                }
+                // SAFETY: as above, for `error`.
+                Err(failure) => unsafe { fail(lent, error, &failure) },
+            },
+        )
     })
 }
 

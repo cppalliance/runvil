@@ -22,7 +22,7 @@ Each installer puts one library there, the std Plugin, which holds the file tool
 
 Workshop checks for an update a few seconds after it starts and from Help, About, through the Tauri updater and the `latest.json` on the `workshop-latest` release, whose files are signed. On macOS and Linux it replaces its own `.app` or AppImage; on Windows it runs the new setup, which updates every installed component, the gateway included.
 
-On macOS and Linux the updater leaves the Plugin directory as it is, because that directory sits beside the `.app` or the AppImage and not inside it. A Plugin loads only in a Workshop that speaks its exact contract version, so a Workshop update that changes the contract leaves the installed std library unable to load until the installer runs again.
+On macOS and Linux the updater leaves the Plugin directory as it is, because that directory sits beside the `.app` or the AppImage and not inside it. A Plugin loads only in a Workshop that speaks its exact contract version, so a Workshop update that changes the contract leaves the installed std library unable to load until the installer runs again. An install made by a release that still linked the std Plugin has no Plugin directory, so after it updates itself it has no file tools until the installer runs again.
 
 ## Building
 

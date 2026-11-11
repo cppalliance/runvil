@@ -231,9 +231,11 @@ fn linux_unsigned_from_the_host_publishes_only_the_installer() {
     // The std Plugin's library rides in the payload's Plugin directory,
     // and installs with Workshop.
     let library = Path::new("plugins").join("libplugin_std.so");
+    let built = plugin_bytes(Some(target), "release");
     assert_eq!(
         std::fs::read(output_root.join("payload").join(&library)).expect("payload Plugin"),
-        b"plugin"
+        built,
+        "the library of the installer's own release build"
     );
     assert_eq!(
         std::fs::read(
@@ -245,7 +247,7 @@ fn linux_unsigned_from_the_host_publishes_only_the_installer() {
                 .join(&library)
         )
         .expect("packaged Plugin"),
-        b"plugin"
+        built
     );
     let installer = installer_path(environment, target);
     assert_eq!(

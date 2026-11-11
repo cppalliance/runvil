@@ -38,7 +38,9 @@ use serde_json::json;
 use workshop_agents::{Conversations, SessionState, TokioTimer, load_agent};
 use workshop_registry::Registry;
 
-use super::{agent_finder, host_packs, load_plugin_dir, read_mcp_servers, services, with_plugins};
+use super::{
+    agent_finder, holds_std, host_packs, load_plugin_dir, read_mcp_servers, services, with_plugins,
+};
 
 /// The runtime's key, built from the Plugin contract's name as any Host
 /// builds it.
@@ -349,7 +351,19 @@ async fn the_servers_host_loads_its_plugin_directory_beside_the_linked_plugins()
     assert_eq!(
         run_prompt(host, requiring("std")).await,
         Ok(Ok("browsed".to_owned())),
-        "the linked Plugins' Packs are installed as before"
+        "the library's Pack is installed, so a prompt that requires std runs"
+    );
+}
+
+#[test]
+fn only_a_plugin_directory_with_the_std_library_gives_the_host_the_std_pack() {
+    let (dir, _library) = plugin_dir("holds-std");
+    let mut packs = PackRegistry::new();
+    load_plugin_dir(&mut packs, dir.path()).expect("the directory is read");
+    assert!(holds_std(&packs));
+    assert!(
+        !holds_std(&PackRegistry::new()),
+        "std is not among the built-ins"
     );
 }
 

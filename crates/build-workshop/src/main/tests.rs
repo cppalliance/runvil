@@ -167,6 +167,13 @@ fn repository_root() -> PathBuf {
         .to_path_buf()
 }
 
+/// What the std Plugin's library holds in a test, as Cargo built it in
+/// `profile` for the named `target`, or for the host when no target is
+/// named. Each build's differs, so a test shows which one was placed.
+fn plugin_bytes(target: Option<&str>, profile: &str) -> Vec<u8> {
+    format!("plugin for {} in {profile}", target.unwrap_or("the host")).into_bytes()
+}
+
 fn write_file(path: &Path, contents: &[u8]) {
     std::fs::create_dir_all(path.parent().expect("parent")).expect("parent directory");
     std::fs::write(path, contents).expect("write file");
@@ -195,16 +202,17 @@ impl TestEnvironment {
 
     /// Writes the std Plugin's library where Cargo leaves it whenever it
     /// builds Workshop for `target`, in either profile, with the target
-    /// named or left to the host. No fake build writes a file of its own,
-    /// and every test that builds Workshop names its Gateway first, so
-    /// the Gateway helpers call this.
+    /// named or left to the host. Each of the four holds its own
+    /// [`plugin_bytes`]. No fake build writes a file of its own, and
+    /// every test that builds Workshop names its Gateway first, so the
+    /// Gateway helpers call this.
     fn leave_plugin(&self, target: &str) {
         let root = &self.environment.target_root;
-        for base in [root.clone(), root.join(target)] {
+        for (base, named) in [(root.clone(), None), (root.join(target), Some(target))] {
             for profile in ["debug", "release"] {
                 write_file(
                     &plugin::built_library(&base.join(profile), target),
-                    b"plugin",
+                    &plugin_bytes(named, profile),
                 );
             }
         }

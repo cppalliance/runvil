@@ -62,6 +62,11 @@ ${StrLoc}
 ; executable whenever it builds Workshop, so its path is the main
 ; executable's with the file name replaced.
 !searchreplace STDPLUGINSRCPATH "${MAINBINARYSRCPATH}" "${MAINBINARYNAME}.exe" "deps\plugin_std.dll"
+; A main executable under another name would leave the path unchanged, and
+; the setup would install the executable as the Plugin.
+!if "${STDPLUGINSRCPATH}" == "${MAINBINARYSRCPATH}"
+  !error "cannot find the std Plugin: ${MAINBINARYSRCPATH} does not end in ${MAINBINARYNAME}.exe"
+!endif
 !define BUNDLEID "{{bundle_id}}"
 !define COPYRIGHT "{{copyright}}"
 !define OUTFILE "{{out_file}}"

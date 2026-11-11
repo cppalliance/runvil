@@ -148,15 +148,17 @@ fn read_mcp_servers(setting: Option<&Path>) -> Value {
     }
 }
 
-/// A Host after the server calls, with the Host-wide `services`, the
-/// linked Plugins of the Packs agents may declare, `web` and `mcp`, with
-/// the `servers` object as mcp's configuration, and then loads the
-/// library Plugins in the directory `plugins`, when the server is given
-/// one. The std Plugin, whose Pack holds the file tools, is one of those
-/// libraries, so a Host with no Plugin directory has no `std` Pack and
-/// refuses a prompt that requires it. The Host keeps those Packs and the
-/// built-ins `subagents` and `user`, and each run makes its own instances
-/// of them. The report lists each library Plugin that loaded and each
+/// The Packs of the server's Host, and what its Plugin directory loaded.
+///
+/// The linked Plugins, web and mcp, install first with the Host-wide
+/// `services`, mcp with the `servers` object as its configuration. Then
+/// every library Plugin in the directory `plugins` loads, when the server
+/// is given one. The std Plugin, whose Pack holds the file tools, is one
+/// of those libraries, so a Host whose Plugin directory lacks it has no
+/// `std` Pack and refuses a prompt that requires it. A warning in the log
+/// says so at startup. The registry also holds the built-ins `subagents`
+/// and `user`, and each run makes its own instances of the Packs it
+/// holds. The report lists each library Plugin that loaded and each
 /// failure.
 fn with_plugins(
     services: &HostServices,
@@ -172,14 +174,26 @@ fn with_plugins(
         tracing::warn!(%error, "the mcp Plugin inserted no Pack");
     }
     let report = plugins.and_then(|directory| load_plugin_dir(&mut packs, directory));
+    if !holds_std(&packs) {
+        tracing::warn!(
+            directory = ?plugins,
+            "no library Plugin inserted the Pack runvil/std; an agent that requires std is refused"
+        );
+    }
     (Packs::new(packs), report)
+}
+
+/// Whether `packs` holds the Pack of the file tools, `runvil/std`, which
+/// only the std Plugin's library inserts.
+fn holds_std(packs: &PackRegistry) -> bool {
+    packs.list().any(|(info, _)| info.fqn == "runvil/std")
 }
 
 /// Loads every library Plugin in `directory` and returns the report of
 /// what loaded, or `None` when the directory cannot be read. A directory
-/// that does not exist is a state, not a failure: an installation may
-/// ship no Plugin directory. Each Plugin that loaded is logged with its
-/// name, version, and source, and each library that did not, with its
+/// that does not exist is a state, not a failure: a build that has not
+/// placed its Plugins has none. Each Plugin that loaded is logged with
+/// its name, version, and source, and each library that did not, with its
 /// path and the reason; one failure never stops the others.
 fn load_plugin_dir(packs: &mut PackRegistry, directory: &Path) -> Option<PluginReport> {
     let report = match insert_plugin_dir(packs, directory) {

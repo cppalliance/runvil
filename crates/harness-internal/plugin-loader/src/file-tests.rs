@@ -13,7 +13,7 @@ use runvil_plugin_sys::{
 };
 use serde_json::json;
 
-use super::{Lent, describe, raw_stat};
+use super::{Lent, contained, describe, raw_stat};
 use crate::fakes::*;
 
 /// The files every call below reads.
@@ -27,7 +27,8 @@ pack_fake!(
         add_tool(call, "stat");
         add_tool(call, "list");
         add_tool(call, "read");
-        add_tool(call, "tail")
+        add_tool(call, "tail");
+        add_tool(call, "past")
     },
     step: |call| {
         let args = step_args(call);
@@ -37,7 +38,8 @@ pack_fake!(
             "stat" => format!("{:?}", stat_of(call, &path)),
             "list" => format!("{:?}", list_of(call, &path)),
             "read" => format!("{:?}", read_of(call, &path, (0, u64::MAX))),
-            _ => format!("{:?}", read_of(call, &path, (3, 100))),
+            "tail" => format!("{:?}", read_of(call, &path, (3, 100))),
+            _ => format!("{:?}", read_of(call, &path, (u64::MAX, u64::MAX))),
         };
         finish(call, RV_RESULT_TRUSTED, &said)
     }
@@ -85,6 +87,11 @@ fn file_read_hands_back_the_whole_file_or_the_bytes_inside_a_range() {
     assert_eq!(said("read", "/notes/a.md"), format!("Ok({:?})", b"hello"));
     assert_eq!(said("read", "/notes/b.md"), "Ok([])");
     assert_eq!(said("tail", "/notes/a.md"), format!("Ok({:?})", b"lo"));
+    assert_eq!(
+        said("past", "/notes/a.md"),
+        "Ok([])",
+        "the largest offset is past the end, not a failure"
+    );
 }
 
 #[test]
@@ -170,7 +177,21 @@ fn each_kind_of_node_keeps_its_number_and_any_other_kind_is_other() {
 }
 
 #[test]
-fn each_error_reads_as_its_kind_and_a_text_without_a_label() {
+fn a_panic_inside_a_file_operation_is_a_failure_and_never_an_unwind() {
+    let caught: Result<(), VfsError> = contained(|| panic!("the policy broke"));
+    let failure = caught.expect_err("the panic is a failure");
+    assert_eq!(
+        describe(&failure),
+        (
+            RV_FILE_ERROR_OTHER,
+            "the file operation panicked".to_owned()
+        )
+    );
+    assert_eq!(contained(|| Ok(7)), Ok(7), "any other outcome passes");
+}
+
+#[test]
+fn each_error_reads_as_its_kind_and_a_text_a_model_can_read() {
     let path = || "/x".to_owned();
     for (error, kind, text) in [
         (
@@ -210,7 +231,7 @@ fn each_error_reads_as_its_kind_and_a_text_without_a_label() {
                 detail: "a write by another call".to_owned(),
             },
             RV_FILE_ERROR_CONFLICT,
-            "conflicting claim: a write by another call",
+            "another tool call of the run changed /x, or is changing it",
         ),
         (
             VfsError::Io {
@@ -229,6 +250,23 @@ fn each_error_reads_as_its_kind_and_a_text_without_a_label() {
             },
             RV_FILE_ERROR_OTHER,
             "path is empty",
+        ),
+        (
+            // The path holds the `": "` that ends a label.
+            VfsError::InvalidPath {
+                path: "a: b/../..".to_owned(),
+                reason: PathReason::Traversal,
+            },
+            RV_FILE_ERROR_OTHER,
+            "path contains a traversal segment",
+        ),
+        (
+            VfsError::NotUtf8 {
+                path: path(),
+                valid_up_to: 3,
+            },
+            RV_FILE_ERROR_OTHER,
+            "/x holds a name or contents that are not UTF-8",
         ),
         (
             VfsError::ScopeEnded { path: path() },

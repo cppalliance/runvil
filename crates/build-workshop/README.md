@@ -22,7 +22,7 @@ The script downloads the release asset, checks its SHA-256 against the pin, and 
 
 ## The std Plugin
 
-The file tools live in the std Plugin, a dynamic library whose code is in [cppalliance/runvil-plugin-std](https://github.com/cppalliance/runvil-plugin-std), pinned by commit in the root `Cargo.toml`. Nothing here builds it by name: the Workshop server depends on `workshop-plugin-std`, so Cargo writes `plugin_std.dll`, `libplugin_std.so`, or `libplugin_std.dylib` to `deps` in the profile's directory whenever it builds Workshop. Each mode takes the library from there and puts it in the Plugin directory, `plugins` beside Workshop. A Workshop run with plain `cargo run -p workshop` has no Plugin directory, so its agents have no file tools; run `cargo workshop` once to place the library.
+The file tools live in the std Plugin, a dynamic library whose code is in [cppalliance/runvil-plugin-std](https://github.com/cppalliance/runvil-plugin-std), pinned by commit in the root `Cargo.toml`. Nothing here builds it by name: the Workshop server depends on `workshop-plugin-std`, so Cargo writes `plugin_std.dll`, `libplugin_std.so`, or `libplugin_std.dylib` to `deps` in the profile's directory whenever it builds Workshop. Each mode takes the library from there and puts it in the Plugin directory, `plugins` beside Workshop. A Workshop run with plain `cargo run -p workshop` has no Plugin directory, so its agents have no file tools; run `cargo workshop` once to place the library. Plain Cargo builds do not refresh the placed copy, so run `cargo workshop` again after the pin or the contract version changes.
 
 ## Building an installer
 
