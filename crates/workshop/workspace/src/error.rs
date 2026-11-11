@@ -13,11 +13,6 @@ use std::io;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
-// The JSON cause behind `WorkspaceError::UiStateNotJson`. A caller that
-// needs the parse error itself names `shared_error_source` directly;
-// this crate does not re-export the wrapper, so there is one name for
-// the cause across the workspace rather than one per crate.
-use shared_error_source::JsonSource;
 use workshop_protocol::ErrorEnvelope;
 use workshop_support::{LEAK_DETAIL, StateBucketError, envelope_response, render_message};
 
@@ -178,7 +173,7 @@ pub enum WorkspaceError {
     UiStateNotJson {
         /// The parse refusal.
         #[source]
-        source: JsonSource,
+        source: serde_json::Error,
     },
 }
 
@@ -278,9 +273,7 @@ impl From<StateBucketError> for WorkspaceError {
         match error {
             StateBucketError::Key(key) => Self::UiStateKey(key),
             StateBucketError::TooLarge { actual, cap } => Self::UiStateTooLarge { actual, cap },
-            StateBucketError::NotJson { source } => Self::UiStateNotJson {
-                source: source.into(),
-            },
+            StateBucketError::NotJson { source } => Self::UiStateNotJson { source },
         }
     }
 }

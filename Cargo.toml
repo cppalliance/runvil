@@ -42,7 +42,6 @@ runvil-plugin-sdk = { version = "0.4.0", git = "https://github.com/cppalliance/r
 std-plugin = { package = "plugin-std", version = "0.1.0", git = "https://github.com/cppalliance/runvil-plugin-std", rev = "782ad23e5dfbe6fbfa5be7145fa73a9ca60ce8a8", default-features = false }
 runvil-types = { path = "crates/runvil-internal/types" }
 workshop-gateway-discovery = { path = "crates/workshop/gateway-discovery" }
-shared-error-source = { path = "crates/shared-error-source" }
 runvil = { path = "crates/runvil" }
 harness-gateway-client = { path = "crates/harness-gateway-client" }
 harness-runner = { path = "crates/harness-internal/runner" }

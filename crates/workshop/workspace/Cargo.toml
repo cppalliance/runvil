@@ -20,7 +20,6 @@ dunce.workspace = true
 humantime.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-shared-error-source = { workspace = true, features = ["database", "json"] }
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true

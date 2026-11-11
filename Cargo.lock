@@ -5509,16 +5509,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shared-error-source"
-version = "0.3.0"
-dependencies = [
- "reqwest",
- "serde_json",
- "thiserror 2.0.19",
- "turso",
-]
-
-[[package]]
 name = "shellexpand"
 version = "3.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8024,7 +8014,6 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
- "shared-error-source",
  "tempfile",
  "thiserror 2.0.19",
  "windows-sys 0.61.2",
@@ -8078,7 +8067,6 @@ version = "0.0.0"
 dependencies = [
  "runvil",
  "serde_json",
- "shared-error-source",
  "tempfile",
  "thiserror 2.0.19",
  "tokio",
@@ -8163,7 +8151,6 @@ version = "0.0.0"
 dependencies = [
  "axum",
  "serde_json",
- "shared-error-source",
  "tempfile",
  "thiserror 2.0.19",
  "tokio",
@@ -8184,7 +8171,6 @@ dependencies = [
  "percent-encoding",
  "serde",
  "serde_json",
- "shared-error-source",
  "tempfile",
  "thiserror 2.0.19",
  "tokio",

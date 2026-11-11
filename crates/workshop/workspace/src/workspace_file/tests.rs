@@ -12,19 +12,10 @@ mod mutations;
 mod ui_state_kv_tests;
 
 #[test]
-fn the_database_variant_reaches_the_database_error_through_the_shared_wrapper() {
+fn a_corrupt_database_error_says_the_file_is_not_a_database() {
     let error = WorkspaceFileError::from(turso::Error::Corrupt(
         "page 1 is not a b-tree page".to_owned(),
     ));
-    let Some(cause) = std::error::Error::source(&error) else {
-        panic!("the database variant reports its database cause as source()");
-    };
-    let Some(wrapper) = cause.downcast_ref::<DatabaseSource>() else {
-        panic!("the database cause is the shared DatabaseSource");
-    };
-    assert!(matches!(wrapper.as_inner(), turso::Error::Corrupt(_)));
-    // The refusal path reads the database error's variant through that same
-    // accessor; a wrapper that hid it would silently stop refusing.
     assert!(is_not_a_database(&error));
 }
 

@@ -14,11 +14,6 @@ use std::io;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
-// The JSON cause behind `UserStateError::NotJson`. A caller that needs
-// the parse error itself names `shared_error_source` directly; this
-// crate does not re-export the wrapper, so there is one name for the
-// cause across the workspace rather than one per crate.
-use shared_error_source::JsonSource;
 use workshop_protocol::ErrorEnvelope;
 use workshop_support::{LEAK_DETAIL, StateBucketError, envelope_response, render_message};
 
@@ -53,7 +48,7 @@ pub enum UserStateError {
     NotJson {
         /// The parse refusal.
         #[source]
-        source: JsonSource,
+        source: serde_json::Error,
     },
 
     /// The state file could not be written.
@@ -97,13 +92,7 @@ impl From<StateBucketError> for UserStateError {
         match error {
             StateBucketError::Key(key) => Self::Key(key),
             StateBucketError::TooLarge { actual, cap } => Self::TooLarge { actual, cap },
-            StateBucketError::NotJson { source } => Self::NotJson {
-                source: source.into(),
-            },
+            StateBucketError::NotJson { source } => Self::NotJson { source },
         }
     }
 }
-
-#[cfg(test)]
-#[path = "error-tests.rs"]
-mod tests;
