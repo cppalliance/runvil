@@ -12,7 +12,8 @@ use runvil_plugin::{
     ToolOutput, make_tool_error,
 };
 use runvil_plugin_sys::{
-    RV_OK, RV_PACK_DELETE, RV_PACK_NEW, RvCall, RvPackNewArgs, RvStatus, RvStr, RvToolInfo,
+    RV_MAX_NAME, RV_MAX_TOOL_TEXT, RV_OK, RV_PACK_DELETE, RV_PACK_NEW, RvCall, RvPackNewArgs,
+    RvStatus, RvStr, RvToolInfo,
 };
 use serde_json::Value;
 
@@ -29,10 +30,10 @@ use crate::session::{
 mod tests;
 
 const TOOL_INFO: Shape = shape!("add_tool", "info", "RvToolInfo");
-const TOOL_NAME: Field = field!("the tool's name", 64);
-const WIRE_NAME: Field = field!("the tool's wire name", 64);
-const DESCRIPTION: Field = field!("the tool's description", 65536);
-const PARAMETERS: Field = field!("the tool's parameter schema", 65536);
+const TOOL_NAME: Field = field!("the tool's name", 64, RV_MAX_NAME);
+const WIRE_NAME: Field = field!("the tool's wire name", 64, RV_MAX_NAME);
+const DESCRIPTION: Field = field!("the tool's description", 65536, RV_MAX_TOOL_TEXT);
+const PARAMETERS: Field = field!("the tool's parameter schema", 65536, RV_MAX_TOOL_TEXT);
 
 /// Makes each run's instance of one Pack that a Plugin inserted through
 /// its entry point. It holds an `Arc` of the Plugin, so the Plugin stays

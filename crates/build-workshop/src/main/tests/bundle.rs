@@ -5,8 +5,8 @@ use serde_json::Value;
 
 use super::ifw_tests::{ifw_built, ifw_commands, ifw_found, installer_path};
 use super::installer_tests::{
-    bundle, bundled, collect_signature, expected_commands, node_found, output, request,
-    version_printed,
+    bundle, bundled, bundled_plugin, collect_signature, expected_commands, node_found, output,
+    request, version_printed,
 };
 use super::*;
 use crate::installer::Platform;
@@ -200,6 +200,7 @@ fn macos_signed_collects_the_payload_and_publishes_workshop_s_updater() {
                     .join("Contents")
                     .join("MacOS")
                     .join("runvil-workshop"),
+                bundled_plugin(environment, target),
                 collect_signature(&updater),
                 updater,
             ],
@@ -257,7 +258,10 @@ fn macos_unsigned_publishes_only_the_dmg_around_the_pinned_gateway() {
         version_printed(),
         bundled(
             staged,
-            vec![app.join("Contents").join("MacOS").join("runvil-workshop")],
+            vec![
+                app.join("Contents").join("MacOS").join("runvil-workshop"),
+                bundled_plugin(environment, target),
+            ],
             success(""),
         ),
     ];
@@ -289,13 +293,18 @@ fn macos_unsigned_publishes_only_the_dmg_around_the_pinned_gateway() {
         "{plist}"
     );
     assert!(!payload.join("runvil-gateway").exists());
-    // The std Plugin's library sits in the Plugin directory beside the
-    // two bundles, where Workshop looks for it.
-    assert_eq!(
-        std::fs::read(payload.join("plugins").join("libplugin_std.dylib")).expect("payload Plugin"),
-        plugin_bytes(Some(target), "release"),
-        "the library of the installer's own release build"
+    // The std Plugin's library sits inside Workshop's bundle, where the
+    // updater replaces it with Workshop, and nowhere beside it.
+    assert!(
+        payload
+            .join("Runvil.app")
+            .join("Contents")
+            .join("Resources")
+            .join("plugins")
+            .join("libplugin_std.dylib")
+            .is_file()
     );
+    assert!(!payload.join("plugins").exists());
     let installer = installer_path(environment, target);
     assert_eq!(
         installer.file_name().expect("name"),

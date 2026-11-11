@@ -278,6 +278,11 @@ fn the_installed_names_match_workshop_s_gateway_lookup() {
         ("GATEWAY_BUNDLE_NAME", collect::GATEWAY_BUNDLE_NAME),
         ("WORKSHOP_APPIMAGE_NAME", collect::WORKSHOP_APPIMAGE_NAME),
         ("PLUGIN_DIR_NAME", crate::plugin::PLUGIN_DIR_NAME),
+        ("MACOS_PLUGIN_PARENT", crate::plugin::MACOS_PLUGIN_PARENT),
+        (
+            "APPIMAGE_PLUGIN_PARENT",
+            crate::plugin::APPIMAGE_PLUGIN_PARENT,
+        ),
     ] {
         assert_eq!(declared(&text, name), ours, "{name} in {}", peer.display());
     }

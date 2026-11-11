@@ -212,6 +212,15 @@ function Test-Selection($Want) {
     if ($output -ne $check.Expected) { Fail "$($check.Exe) --version printed '$output', required '$($check.Expected)'" }
   }
 
+  # Workshop loads the std Plugin it installed, which holds the file tools.
+  if ($Want.Workshop) {
+    $listed = @(& $workshopExe --plugins 2>(Join-Path $logs 'plugins.stderr.log'))
+    if (-not ($listed -match '^std \d')) {
+      Fail "$workshopExe --plugins must list the std Plugin; it printed '$($listed -join ', ')' and exited $LASTEXITCODE"
+    }
+    Write-Host "cell: Workshop loads its std Plugin ($($listed -join ', '))"
+  }
+
   # 4. Workshop serves its page, attached to the installed Gateway when
   # there is one and to the fixture endpoint otherwise.
   $origin = $null

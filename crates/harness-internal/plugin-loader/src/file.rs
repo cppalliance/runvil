@@ -11,8 +11,8 @@ use runvil_plugin_sys::{
     RV_ERR_FILE, RV_FILE_ERROR_CONFLICT, RV_FILE_ERROR_DENIED, RV_FILE_ERROR_IO,
     RV_FILE_ERROR_IS_A_DIRECTORY, RV_FILE_ERROR_NOT_A_DIRECTORY, RV_FILE_ERROR_NOT_FOUND,
     RV_FILE_ERROR_OTHER, RV_FILE_TYPE_DIRECTORY, RV_FILE_TYPE_FILE, RV_FILE_TYPE_OTHER,
-    RV_FILE_TYPE_SYMLINK, RV_OK, RvBytes, RvDirEntries, RvDirEntry, RvFileError, RvFileErrorKind,
-    RvStat, RvStatus, RvStr,
+    RV_FILE_TYPE_SYMLINK, RV_MAX_PATH, RV_OK, RvBytes, RvDirEntries, RvDirEntry, RvFileError,
+    RvFileErrorKind, RvStat, RvStatus, RvStr,
 };
 
 use crate::session::{Field, Out, answer_file, field, out, rv_str};
@@ -21,7 +21,7 @@ use crate::session::{Field, Out, answer_file, field, out, rv_str};
 #[path = "file-tests.rs"]
 mod tests;
 
-const PATH: Field = field!("the path", 4096);
+const PATH: Field = field!("the path", 4096, RV_MAX_PATH);
 const STAT: Out = out!("file_stat", "stat");
 const STAT_ERROR: Out = out!("file_stat", "error");
 const ENTRIES: Out = out!("file_list", "entries");

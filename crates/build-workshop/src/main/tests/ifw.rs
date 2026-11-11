@@ -1,7 +1,9 @@
 //! Unit tests for locating Qt IFW, its version check, and the installer
 //! commands, with the helpers the installer sequences share.
 
-use super::installer_tests::{bundle, bundled, node_found, output, request, version_printed};
+use super::installer_tests::{
+    bundle, bundled, bundled_plugin, node_found, output, request, version_printed,
+};
 use super::*;
 use crate::installer::Platform;
 use crate::installer::ifw::{self, IFW_VERSION, Ifw, Sources};
@@ -355,7 +357,7 @@ fn bundled_responses(test_environment: &TestEnvironment, target: &str) -> Vec<Fa
         version_printed(),
         bundled(
             test_environment.stage_gateway(target),
-            vec![file],
+            vec![file, bundled_plugin(environment, target)],
             success(""),
         ),
     ]

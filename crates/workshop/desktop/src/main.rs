@@ -89,6 +89,9 @@ fn main() -> ExitCode {
     if std::env::args_os().any(|arg| arg == "--version") {
         return print_version();
     }
+    if std::env::args_os().any(|arg| arg == "--plugins") {
+        return print_plugins();
+    }
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
@@ -105,6 +108,44 @@ fn main() -> ExitCode {
 fn print_version() -> ExitCode {
     println!("runvil-workshop {}", env!("CARGO_PKG_VERSION"));
     ExitCode::SUCCESS
+}
+
+/// `runvil-workshop --plugins`: print each library Plugin this
+/// installation loads, as its name and its version, and exit, without
+/// booting the server or opening a window. A library that does not load
+/// goes to stderr with the reason. Workshop keeps no log, so this is how
+/// a person sees why an agent has no file tools, and the release
+/// workflows check the installed std Plugin with it.
+fn print_plugins() -> ExitCode {
+    let directory = match config::load() {
+        Ok(config) => config.agents.plugins,
+        Err(error) => {
+            eprintln!("{error:?}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let Some(directory) = directory else {
+        eprintln!("this installation names no Plugin directory");
+        return ExitCode::FAILURE;
+    };
+    match workshop_server_api::list_plugin_dir(&directory) {
+        Ok(listing) => {
+            for line in &listing.loaded {
+                println!("{line}");
+            }
+            for line in &listing.failed {
+                eprintln!("{line}");
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!(
+                "cannot read the Plugin directory {}: {error}",
+                directory.display()
+            );
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn update_supported(os: &str, appimage: Option<&OsStr>) -> bool {

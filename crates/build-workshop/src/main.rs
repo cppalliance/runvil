@@ -3,8 +3,10 @@
 //! Workshop's bundle; macOS and Linux payloads carry it beside Workshop, and
 //! Qt IFW packages them into one installer. The Gateway is its own product
 //! in `cppalliance/runvil-gateway`, so nothing here compiles it. Every
-//! build and every installer carries the std Plugin's library in the
-//! Plugin directory, `plugins` beside Workshop (`plugin`). The
+//! build and every installer carries the std Plugin's library in
+//! Workshop's Plugin directory: `plugins` beside Workshop in a build and
+//! on Windows, and inside Workshop's bundle on macOS and Linux
+//! (`plugin`). The
 //! `manifest` mode verifies every platform's published files as one release
 //! and writes its `latest.json` and `SHA256SUMS`.
 

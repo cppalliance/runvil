@@ -135,10 +135,16 @@ pub(super) fn build_installer(
     };
     run_checked(runner, &node_check_command(environment), NODE_CHECK)?;
     let release = environment.target_root.join(&target).join("release");
+    let bundle_directory = release.join("bundle").join(platform.bundle_directory());
     // A bundle left by an earlier build, possibly at another version, would
     // make the collection ambiguous.
-    remove_directory(&release.join("bundle").join(platform.bundle_directory()))?;
+    remove_directory(&bundle_directory)?;
     check_gateway_version(runner, environment, &gateway)?;
+    // The Windows setup takes the std Plugin's library from the build
+    // itself. On macOS and Linux Tauri copies it into Workshop's bundle,
+    // so the updater replaces it with Workshop.
+    let library = plugin::built_library(&release, &target);
+    let plugin_config = plugin::bundle_config(platform.system, &library).map_err(failure)?;
     with_staged_sidecar(
         environment,
         &target,
@@ -146,11 +152,23 @@ pub(super) fn build_installer(
         "Workshop bundle",
         &source,
         |runner| {
-            let mut bundle = tauri_build_command(environment, &target, platform, request.sign);
+            let mut bundle = tauri_build_command(
+                environment,
+                &target,
+                platform,
+                request.sign,
+                plugin_config.as_deref(),
+            );
             bundle.envs.extend(source.child_envs());
             run_checked(runner, &bundle, "Workshop bundle").map(|_| ())
         },
     )?;
+    plugin::check_bundled(
+        platform.system,
+        &bundle_directory,
+        plugin::library_name(&target),
+    )
+    .map_err(failure)?;
     let output = environment.target_root.join("installer").join(&target);
     collect::collect(
         &environment.workspace_root,
@@ -161,20 +179,6 @@ pub(super) fn build_installer(
         &output,
     )
     .map_err(failure)?;
-    // The Windows setup takes the std Plugin's library from the build
-    // itself. The other installers package the payload, so it goes there,
-    // beside Workshop.
-    if platform.system != System::Windows {
-        plugin::place(
-            &plugin::built_library(&release, &target),
-            &output.join("payload"),
-        )
-        .map_err(|reason| {
-            failure(format!(
-                "cannot place the std Plugin in the installer payload: {reason}"
-            ))
-        })?;
-    }
     let installer = match &ifw {
         Some(ifw) => build_ifw_installer(ifw, environment, platform, &gateway, &output, runner)?,
         None => output
@@ -315,11 +319,15 @@ fn check_gateway_version(
     }
 }
 
+/// The Tauri build of Workshop's bundle for `target`. `plugin_config` is
+/// the configuration that copies the std Plugin's library into the
+/// bundle, when the platform has one.
 fn tauri_build_command(
     environment: &BuildEnvironment,
     target: &str,
     platform: Platform,
     sign: bool,
+    plugin_config: Option<&str>,
 ) -> CommandSpec {
     let mut args = vec![environment.tauri_cli.clone().into_os_string()];
     args.extend(
@@ -335,6 +343,9 @@ fn tauri_build_command(
     );
     if !sign {
         args.extend(["--config", UNSIGNED_CONFIG].map(OsString::from));
+    }
+    if let Some(config) = plugin_config {
+        args.extend(["--config", config].map(OsString::from));
     }
     CommandSpec {
         program: environment.node.clone(),

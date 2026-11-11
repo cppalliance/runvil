@@ -155,7 +155,7 @@ fn read_mcp_servers(setting: Option<&Path>) -> Value {
 /// every library Plugin in the directory `plugins` loads, when the server
 /// is given one. The std Plugin, whose Pack holds the file tools, is one
 /// of those libraries, so a Host whose Plugin directory lacks it has no
-/// `std` Pack and refuses a prompt that requires it. A warning in the log
+/// `std` Pack and refuses a prompt that requires it. A `tracing` warning
 /// says so at startup. The registry also holds the built-ins `subagents`
 /// and `user`, and each run makes its own instances of the Packs it
 /// holds. The report lists each library Plugin that loaded and each
@@ -187,6 +187,49 @@ fn with_plugins(
 /// only the std Plugin's library inserts.
 fn holds_std(packs: &PackRegistry) -> bool {
     packs.list().any(|(info, _)| info.fqn == "runvil/std")
+}
+
+/// What the library Plugins in one directory do when they are loaded.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct PluginListing {
+    /// Each Plugin that loads, as its name, a space, and its version, in
+    /// the order the directory loads them.
+    pub loaded: Vec<String>,
+    /// Each library that does not load, as its path and the reason.
+    pub failed: Vec<String>,
+}
+
+/// Loads every library Plugin in `directory`, lists what each did, and
+/// unloads them all again.
+///
+/// The desktop app prints the listing for `runvil-workshop --plugins`.
+/// Workshop keeps no log, so this is how a person, or an installer test,
+/// sees which Plugins an installation loads.
+///
+/// # Errors
+/// Returns the I/O error when `directory` cannot be read, as when it does
+/// not exist.
+pub fn list_plugin_dir(directory: &Path) -> io::Result<PluginListing> {
+    let mut packs = PackRegistry::new();
+    let report = insert_plugin_dir(&mut packs, directory)?;
+    let loaded = report
+        .plugins()
+        .iter()
+        .map(|plugin| format!("{} {}", plugin.name(), plugin.version()))
+        .collect();
+    let failed = report
+        .failures()
+        .iter()
+        .map(|failure| {
+            let path = failure
+                .facts
+                .get(&ErrorFact::Path)
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            format!("{path}: {failure}")
+        })
+        .collect();
+    Ok(PluginListing { loaded, failed })
 }
 
 /// Loads every library Plugin in `directory` and returns the report of

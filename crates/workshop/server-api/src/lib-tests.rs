@@ -14,6 +14,12 @@ fn spawn_signature(start: fn(Config) -> Result<ServerHandle, SpawnError>) {
     let _ = start;
 }
 
+/// Compile-level check: `list_plugin_dir` resolves and has the server's
+/// signature.
+fn list_signature(list: fn(&std::path::Path) -> std::io::Result<PluginListing>) {
+    let _ = list;
+}
+
 #[test]
 fn the_desktop_app_facing_surface_names_every_re_export() {
     // Configuration.
@@ -32,6 +38,9 @@ fn the_desktop_app_facing_surface_names_every_re_export() {
         short_name::<GatewayPublicationError>(),
         "GatewayPublicationError"
     );
+    // The listing of a Plugin directory.
+    list_signature(list_plugin_dir);
+    assert_eq!(short_name::<PluginListing>(), "PluginListing");
 }
 
 #[test]

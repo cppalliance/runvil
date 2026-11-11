@@ -7,8 +7,9 @@ use std::{mem, ptr};
 
 use runvil_plugin::{Error, PackId};
 use runvil_plugin_sys::{
-    PluginEntry, RV_API_MAJOR, RV_API_MINOR, RV_OK, RV_PLUGIN_LOAD, RV_PLUGIN_UNLOAD, RvCall,
-    RvHost, RvLoadArgs, RvPackInfo, RvPluginInfo, RvStatus, RvStr, RvVerb,
+    PluginEntry, RV_API_MAJOR, RV_API_MINOR, RV_MAX_LINE, RV_MAX_NAME, RV_OK, RV_PLUGIN_LOAD,
+    RV_PLUGIN_UNLOAD, RvCall, RvHost, RvLoadArgs, RvPackInfo, RvPluginInfo, RvStatus, RvStr,
+    RvVerb,
 };
 
 use crate::load::make_load_error;
@@ -33,13 +34,13 @@ pub(crate) static HOST: RvHost = RvHost {
 pub(crate) const MAX_SEGMENT: usize = 64;
 
 const PLUGIN_INFO: Shape = shape!("describe_plugin", "info", "RvPluginInfo");
-const NAME: Field = field!("the name", 64);
-const VERSION: Field = field!("the version", 64);
+const NAME: Field = field!("the name", 64, RV_MAX_NAME);
+const VERSION: Field = field!("the version", 64, RV_MAX_NAME);
 
 const PACK_INFO: Shape = shape!("insert_pack", "info", "RvPackInfo");
 /// Two segments of 64 bytes and the `/` between them.
-const PACK_NAME: Field = field!("the Pack's name", 129);
-const PACK_DESCRIPTION: Field = field!("the Pack's description", 1024);
+const PACK_NAME: Field = field!("the Pack's name", 129, 2 * RV_MAX_NAME + 1);
+const PACK_DESCRIPTION: Field = field!("the Pack's description", 1024, RV_MAX_LINE);
 
 /// An `RvCall` that sends `verb` to the Plugin instance `plugin`, with the
 /// loader's `RvHost` table and nothing else set.

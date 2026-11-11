@@ -271,12 +271,19 @@ fn the_plugin_directory_sits_beside_an_unbundled_workshop_in_every_layout() {
 }
 
 #[test]
-fn the_macos_plugin_directory_sits_beside_the_workshop_bundle() {
+fn the_macos_plugin_directory_sits_inside_the_workshop_bundle() {
     let install = Path::new("Applications").join("Runvil");
     let workshop = bundle_exe(&install, WORKSHOP_BUNDLE_NAME, "runvil-workshop");
     assert_eq!(
         plugin_dir(Layout::MacOs, &workshop, None),
-        Some(install.join(PLUGIN_DIR_NAME))
+        Some(
+            install
+                .join(WORKSHOP_BUNDLE_NAME)
+                .join("Contents")
+                .join("Resources")
+                .join(PLUGIN_DIR_NAME)
+        ),
+        "the updater replaces the bundle, so the Plugins go with it"
     );
     assert_eq!(
         plugin_dir(Layout::Windows, &workshop, None),
@@ -292,7 +299,7 @@ fn the_macos_plugin_directory_sits_beside_the_workshop_bundle() {
 }
 
 #[test]
-fn the_linux_plugin_directory_sits_beside_the_appimage() {
+fn the_linux_plugin_directory_sits_inside_the_appimage_s_mount() {
     let install = Path::new("opt").join("Runvil");
     let appimage = install.join(WORKSHOP_APPIMAGE_NAME);
     let workshop = Path::new("mount")
@@ -301,7 +308,24 @@ fn the_linux_plugin_directory_sits_beside_the_appimage() {
         .join("runvil-workshop");
     assert_eq!(
         plugin_dir(Layout::Linux, &workshop, Some(appimage.as_path())),
-        Some(install.join(PLUGIN_DIR_NAME))
+        Some(
+            Path::new("mount")
+                .join("usr")
+                .join("lib")
+                .join("runvil")
+                .join(PLUGIN_DIR_NAME)
+        ),
+        "the updater replaces the AppImage, so the Plugins go with it"
+    );
+    assert_eq!(
+        plugin_dir(Layout::Linux, &workshop, None),
+        Some(
+            Path::new("mount")
+                .join("usr")
+                .join("bin")
+                .join(PLUGIN_DIR_NAME)
+        ),
+        "outside an AppImage the directory sits beside the executable"
     );
     assert_eq!(
         plugin_dir(Layout::Windows, &workshop, Some(appimage.as_path())),

@@ -11,9 +11,9 @@ use std::task::{Context, Poll};
 
 use runvil_plugin::{Access, Error, ErrorCode, ToolOutput, make_tool_error};
 use runvil_plugin_sys::{
-    RV_OK, RV_PENDING, RV_RESULT_BACKEND, RV_RESULT_INVALID_ARGUMENTS, RV_RESULT_OTHER,
-    RV_RESULT_TRANSPORT, RV_RESULT_TRUSTED, RV_RESULT_UNTRUSTED, RV_TOOL_CALL, RV_TOOL_CANCEL,
-    RvCall, RvStatus, RvToolCallArgs, RvToolResult,
+    RV_MAX_RESULT, RV_OK, RV_PENDING, RV_RESULT_BACKEND, RV_RESULT_INVALID_ARGUMENTS,
+    RV_RESULT_OTHER, RV_RESULT_TRANSPORT, RV_RESULT_TRUSTED, RV_RESULT_UNTRUSTED, RV_TOOL_CALL,
+    RV_TOOL_CANCEL, RvCall, RvStatus, RvToolCallArgs, RvToolResult,
 };
 use serde_json::Value;
 
@@ -28,7 +28,7 @@ use crate::session::{
 mod tests;
 
 const RESULT: Shape = shape!("finish", "result", "RvToolResult");
-const TEXT: Field = field!("the result's text", 16_777_216);
+const TEXT: Field = field!("the result's text", 16_777_216, RV_MAX_RESULT);
 
 /// One tool call in flight. Each poll sends one RV_TOOL_CALL step. A step
 /// that returns RV_PENDING wakes the future's own task and leaves it

@@ -83,6 +83,7 @@ mod workshop_socket;
 #[doc(hidden)]
 pub mod fixtures;
 
+pub use agents::{PluginListing, list_plugin_dir};
 pub use app::{AppState, router};
 pub use serve::{ServerHandle, SpawnError, Termination, spawn};
 pub use workshop_gateway::discovery;

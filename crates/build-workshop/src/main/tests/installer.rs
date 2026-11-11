@@ -52,12 +52,59 @@ pub(super) fn bundled(
     )
 }
 
+/// The std Plugin's library inside the Workshop bundle a Tauri build
+/// leaves for a macOS or Linux `target`, where the build's configuration
+/// has Tauri copy it.
+pub(super) fn bundled_plugin(environment: &BuildEnvironment, target: &str) -> PathBuf {
+    if target.contains("apple") {
+        bundle(environment, target, "macos")
+            .join("Runvil.app")
+            .join("Contents")
+            .join("Resources")
+            .join("plugins")
+            .join("libplugin_std.dylib")
+    } else {
+        bundle(environment, target, "appimage")
+            .join("Runvil.AppDir")
+            .join("usr")
+            .join("lib")
+            .join("runvil")
+            .join("plugins")
+            .join("libplugin_std.so")
+    }
+}
+
+/// The `--config` text that has Tauri copy the library of `target`'s
+/// release build into Workshop's bundle, or `None` for Windows.
+fn plugin_config(environment: &BuildEnvironment, target: &str) -> Option<String> {
+    let deps = release(environment, target).join("deps");
+    let config = if target.contains("apple") {
+        let library = deps.join("libplugin_std.dylib");
+        serde_json::json!({
+            "bundle": { "macOS": { "files": {
+                "Resources/plugins/libplugin_std.dylib": library
+            } } }
+        })
+    } else if target.contains("linux") {
+        let library = deps.join("libplugin_std.so");
+        serde_json::json!({
+            "bundle": { "linux": { "appimage": { "files": {
+                "/usr/lib/runvil/plugins/libplugin_std.so": library
+            } } } }
+        })
+    } else {
+        return None;
+    };
+    Some(config.to_string())
+}
+
 pub(super) fn expected_commands(
     environment: &BuildEnvironment,
     target: &str,
     bundle: &str,
     sign: bool,
 ) -> Vec<CommandSpec> {
+    let plugin_config = plugin_config(environment, target);
     let mut tauri = vec![
         environment.tauri_cli.to_str().expect("UTF-8 CLI"),
         "build",
@@ -69,6 +116,11 @@ pub(super) fn expected_commands(
     ];
     if !sign {
         tauri.extend(["--config", "tauri.unsigned.conf.json"]);
+    }
+    // The library of the installer's own release build goes into the
+    // bundle, so the updater replaces it with Workshop.
+    if let Some(config) = &plugin_config {
+        tauri.extend(["--config", config.as_str()]);
     }
     // macOS and Linux check Qt IFW once the target is known.
     let ifw = (!target.ends_with("windows-msvc")).then(|| ifw_version_command(environment));
@@ -190,6 +242,7 @@ fn linux_unsigned_from_the_host_publishes_only_the_installer() {
             vec![
                 appimage.join(format!("Runvil_{VERSION}_amd64.AppImage")),
                 appimage.join("Runvil.AppDir").join("AppRun"),
+                bundled_plugin(environment, target),
             ],
             success(""),
         ),
@@ -228,26 +281,17 @@ fn linux_unsigned_from_the_host_publishes_only_the_installer() {
         std::fs::read(output_root.join("payload").join("runvil-gateway")).expect("payload"),
         b"gateway"
     );
-    // The std Plugin's library rides in the payload's Plugin directory,
-    // and installs with Workshop.
-    let library = Path::new("plugins").join("libplugin_std.so");
-    let built = plugin_bytes(Some(target), "release");
-    assert_eq!(
-        std::fs::read(output_root.join("payload").join(&library)).expect("payload Plugin"),
-        built,
-        "the library of the installer's own release build"
-    );
-    assert_eq!(
-        std::fs::read(
-            output_root
-                .join("ifw")
-                .join("packages")
-                .join("com.runvil.workshop")
-                .join("data")
-                .join(&library)
-        )
-        .expect("packaged Plugin"),
-        built
+    // The std Plugin's library rides inside the AppImage, so nothing
+    // beside it carries a Plugin directory.
+    assert!(!output_root.join("payload").join("plugins").exists());
+    assert!(
+        !output_root
+            .join("ifw")
+            .join("packages")
+            .join("com.runvil.workshop")
+            .join("data")
+            .join("plugins")
+            .exists()
     );
     let installer = installer_path(environment, target);
     assert_eq!(
@@ -291,7 +335,11 @@ fn linux_signed_publishes_the_appimage_and_its_signature_beside_the_installer() 
         version_printed(),
         bundled(
             staged,
-            vec![collect_signature(&appimage), appimage],
+            vec![
+                collect_signature(&appimage),
+                appimage,
+                bundled_plugin(environment, target),
+            ],
             success(""),
         ),
     ];

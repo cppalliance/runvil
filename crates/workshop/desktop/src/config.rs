@@ -10,7 +10,8 @@
 //! agent prompt paths; the gateway endpoint itself resolves inside the
 //! server, gateway discovery file first, explicit config second. A config
 //! that names no Plugin directory gets the installation's own, `plugins`
-//! where the installer lays it out beside Workshop.
+//! where the installer lays it out: beside Workshop on Windows, and
+//! inside Workshop's bundle on macOS and Linux.
 
 use std::path::{Path, PathBuf};
 

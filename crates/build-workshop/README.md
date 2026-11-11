@@ -22,7 +22,7 @@ The script downloads the release asset, checks its SHA-256 against the pin, and 
 
 ## The std Plugin
 
-The file tools live in the std Plugin, a dynamic library whose code is in [cppalliance/runvil-plugin-std](https://github.com/cppalliance/runvil-plugin-std), pinned by commit in the root `Cargo.toml`. Nothing here builds it by name: the Workshop server depends on `workshop-plugin-std`, so Cargo writes `plugin_std.dll`, `libplugin_std.so`, or `libplugin_std.dylib` to `deps` in the profile's directory whenever it builds Workshop. Each mode takes the library from there and puts it in the Plugin directory, `plugins` beside Workshop. A Workshop run with plain `cargo run -p workshop` has no Plugin directory, so its agents have no file tools; run `cargo workshop` once to place the library. Plain Cargo builds do not refresh the placed copy, so run `cargo workshop` again after the pin or the contract version changes.
+The file tools live in the std Plugin, a dynamic library whose code is in [cppalliance/runvil-plugin-std](https://github.com/cppalliance/runvil-plugin-std), pinned by commit in the root `Cargo.toml`. Nothing here builds it by name: the Workshop server depends on `workshop-plugin-std`, so Cargo writes `plugin_std.dll`, `libplugin_std.so`, or `libplugin_std.dylib` to `deps` in the profile's directory whenever it builds Workshop. Each mode takes the library from there. A build copies it into `plugins` beside Workshop in the target directory. A macOS or Linux installer has Tauri copy it into Workshop's bundle, at `Runvil.app/Contents/Resources/plugins` or at `usr/lib/runvil/plugins` in the AppImage, so the updater, which replaces only that bundle, replaces the library with it. The installer build fails when the bundle Tauri built does not hold the library. A Workshop run with plain `cargo run -p workshop` has no Plugin directory, so its agents have no file tools; run `cargo workshop` once to place the library. Plain Cargo builds do not refresh the placed copy, so run `cargo workshop` again after the pin or the contract version changes.
 
 ## Building an installer
 
@@ -35,7 +35,7 @@ npm ci --prefix crates/workshop
 The output lands in `target/installer/<triple>/`:
 
 - `publish/`: the installer, and under `--sign` the updater files and their `.sig` signatures. Windows gets `Runvil_<version>_x64-setup.exe`, macOS `Runvil_<version>_<aarch64|x86_64>-setup.dmg`, and Linux `Runvil_<version>_<amd64|aarch64>-setup.run`.
-- `payload/` (macOS and Linux): the installed items, `Runvil.app` and `Runvil Gateway.app`, or `Runvil.AppImage` and `runvil-gateway`, and `plugins/` with the std Plugin's library.
+- `payload/` (macOS and Linux): the installed items, `Runvil.app` and `Runvil Gateway.app`, or `Runvil.AppImage` and `runvil-gateway`. The std Plugin's library is inside Workshop's item.
 - `ifw/` (macOS and Linux): the Qt IFW definition filled in from `ifw/` in this crate, with the payload copied into its packages. The Plugin directory goes in Workshop's package.
 
 Windows needs nothing more: Tauri builds the NSIS setup from `crates/workshop/desktop/installer.nsi`, with the gateway inside. That template takes the std Plugin's library from `deps` beside the built executable and installs it as `plugins\plugin_std.dll`.

@@ -39,7 +39,8 @@ use workshop_agents::{Conversations, SessionState, TokioTimer, load_agent};
 use workshop_registry::Registry;
 
 use super::{
-    agent_finder, holds_std, host_packs, load_plugin_dir, read_mcp_servers, services, with_plugins,
+    PluginListing, agent_finder, holds_std, host_packs, list_plugin_dir, load_plugin_dir,
+    read_mcp_servers, services, with_plugins,
 };
 
 /// The runtime's key, built from the Plugin contract's name as any Host
@@ -324,6 +325,34 @@ fn a_file_that_is_no_library_is_reported_and_the_std_plugin_still_loads() {
         failure.facts.get(&ErrorFact::Path),
         Some(&json!(expected.display().to_string()))
     );
+}
+
+#[test]
+fn a_listing_names_each_plugin_that_loads_and_each_library_that_does_not() {
+    let (dir, _library) = plugin_dir("lists-std");
+    assert_eq!(
+        list_plugin_dir(dir.path()).expect("the directory is read"),
+        PluginListing {
+            loaded: vec!["std 0.1.0".to_owned()],
+            failed: Vec::new(),
+        }
+    );
+
+    let bad = dir.path().join(format!("a-text-file.{DLL_EXTENSION}"));
+    std::fs::write(&bad, "not a library").expect("write fixture");
+    let listing = list_plugin_dir(dir.path()).expect("the directory is read");
+    assert_eq!(listing.loaded, ["std 0.1.0"]);
+    let [failed] = listing.failed.as_slice() else {
+        panic!("the text file is the one failure: {:?}", listing.failed);
+    };
+    let path = std::path::absolute(&bad).expect("the path is made absolute");
+    assert!(
+        failed.starts_with(&format!("{}: ", path.display())),
+        "the line opens with the library's path: {failed}"
+    );
+
+    let missing = list_plugin_dir(&dir.path().join("absent")).expect_err("no such directory");
+    assert_eq!(missing.kind(), std::io::ErrorKind::NotFound);
 }
 
 #[test]
