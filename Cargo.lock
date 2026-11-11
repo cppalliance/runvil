@@ -4085,17 +4085,10 @@ dependencies = [
 [[package]]
 name = "plugin-std"
 version = "0.1.0"
-source = "git+https://github.com/cppalliance/runvil-plugin-std?rev=6d1e49e31853269210e420cdc0594bedda83f6fc#6d1e49e31853269210e420cdc0594bedda83f6fc"
-dependencies = [
- "runvil-plugin-sdk",
-]
-
-[[package]]
-name = "plugin-std"
-version = "0.3.0"
+source = "git+https://github.com/cppalliance/runvil-plugin-std?rev=7a94a7adc0449b1a29a83a6bf46c63f29ba2c254#7a94a7adc0449b1a29a83a6bf46c63f29ba2c254"
 dependencies = [
  "regex",
- "runvil-plugin",
+ "runvil-plugin-sdk",
  "serde",
  "serde_json",
 ]
@@ -8057,7 +8050,7 @@ dependencies = [
 name = "workshop-plugin-std"
 version = "0.3.0"
 dependencies = [
- "plugin-std 0.1.0",
+ "plugin-std",
  "runvil-plugin-sdk",
 ]
 
@@ -8102,7 +8095,6 @@ dependencies = [
  "futures-util",
  "harness-gateway-client",
  "plugin-mcp",
- "plugin-std 0.3.0",
  "plugin-web",
  "reqwest",
  "runvil",

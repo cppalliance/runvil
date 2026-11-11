@@ -32,7 +32,9 @@
 //!   `workshop-status`), the feature crates (`workshop-agents`,
 //!   `workshop-run-log`, `workshop-user-state`, `workshop-workspace`),
 //!   the Harness's public crates `runvil` and `harness-gateway-client`,
-//!   and the Plugin crates `plugin-web`, `plugin-mcp`, and `plugin-std`.
+//!   the Plugin crates `plugin-web` and `plugin-mcp`, and
+//!   `workshop-plugin-std`, the std Plugin's library, which the server
+//!   loads from its Plugin directory and never links.
 //!   It reaches the Engine and the Plugin contract through `runvil`
 //!   alone, never through an Engine crate.
 //!   `cargo test -p build-xtask` enforces the product and container

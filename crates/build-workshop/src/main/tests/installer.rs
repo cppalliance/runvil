@@ -228,6 +228,25 @@ fn linux_unsigned_from_the_host_publishes_only_the_installer() {
         std::fs::read(output_root.join("payload").join("runvil-gateway")).expect("payload"),
         b"gateway"
     );
+    // The std Plugin's library rides in the payload's Plugin directory,
+    // and installs with Workshop.
+    let library = Path::new("plugins").join("libplugin_std.so");
+    assert_eq!(
+        std::fs::read(output_root.join("payload").join(&library)).expect("payload Plugin"),
+        b"plugin"
+    );
+    assert_eq!(
+        std::fs::read(
+            output_root
+                .join("ifw")
+                .join("packages")
+                .join("com.runvil.workshop")
+                .join("data")
+                .join(&library)
+        )
+        .expect("packaged Plugin"),
+        b"plugin"
+    );
     let installer = installer_path(environment, target);
     assert_eq!(
         installer.file_name().expect("name"),

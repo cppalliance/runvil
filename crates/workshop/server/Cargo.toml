@@ -28,8 +28,12 @@ plugin-web.workspace = true
 # The MCP client Pack, installed once over every server of the
 # configured `mcp.json`.
 plugin-mcp.workspace = true
-# The file-tool Pack every agent run's Host installs: `runvil/std`.
-plugin-std.workspace = true
+# The std Plugin's dynamic library, which holds the file-tool Pack
+# `runvil/std`. Nothing here links it in or calls it: the dependency makes
+# Cargo build the library with every build of the server, into `deps`
+# beside the test executables, and the server loads it from its Plugin
+# directory like any other library Plugin.
+workshop-plugin-std.workspace = true
 reqwest.workspace = true
 rust-embed.workspace = true
 serde.workspace = true
@@ -65,9 +69,6 @@ test-fixtures = [
 
 [dev-dependencies]
 workshop-server = { path = ".", features = ["test-fixtures"] }
-# The std Plugin's dynamic library, which Cargo builds beside the test
-# executables so a test can copy it into a Plugin directory.
-workshop-plugin-std.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 tower.workspace = true

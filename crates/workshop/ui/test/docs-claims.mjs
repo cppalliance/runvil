@@ -162,7 +162,7 @@ const PLUGIN_DOC_DIRS = [
   "crates/harness-gateway-client",
   "crates/plugin-web",
   "crates/plugin-mcp",
-  "crates/plugin-std",
+  "crates/workshop/plugin-std",
 ];
 
 test("the root AGENTS.md and the Pack-facing crates' comments never describe Pack activation", async () => {

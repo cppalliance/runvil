@@ -17,6 +17,7 @@ use super::collect::{
     installer_name,
 };
 use super::{Platform, System, VERSION};
+use crate::plugin::PLUGIN_DIR_NAME;
 use crate::{CommandSpec, OutputMode};
 
 /// The one IFW release local and CI builds use; any other is refused.
@@ -233,7 +234,15 @@ pub(crate) fn stage(
             copy_file(&sources.icons.join("icon.png"), &data.join(icon))?;
         }
     }
-    Ok(())
+    // The Plugin directory installs with Workshop, beside it, where
+    // Workshop looks for the libraries it loads.
+    copy_tree(
+        &payload.join(PLUGIN_DIR_NAME),
+        &packages
+            .join(WORKSHOP_PACKAGE)
+            .join("data")
+            .join(PLUGIN_DIR_NAME),
+    )
 }
 
 /// Copies the definition tree, filling the placeholders in its `.xml` and

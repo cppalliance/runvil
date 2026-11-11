@@ -7,9 +7,9 @@
 //!
 //! The server builds one [`Host`] at startup: its `Packs`, installed from
 //! the linked web and mcp Plugins, mcp over the servers of the configured
-//! `mcp.json`, the library Plugins in the configured Plugin directory, the
-//! linked std Plugin when no library Plugin inserted the file-tool Pack,
-//! and the built-ins subagents and user; a finder that reads
+//! `mcp.json`, the library Plugins in the configured Plugin directory,
+//! the std Plugin with the file-tool Pack among them, and the built-ins
+//! subagents and user; a finder that reads
 //! each agent from the agents folder through `load_agent`; and the tokio
 //! timer. Each launch opens a conversation in `workshop-agents` and builds
 //! that conversation's one run its own [`RunSetup`]: the conversation's
@@ -148,18 +148,16 @@ fn read_mcp_servers(setting: Option<&Path>) -> Value {
     }
 }
 
-/// The fully qualified name of the file-tool Pack, which a library Plugin
-/// in the Plugin directory inserts, or else the linked std Plugin.
-const STD_PACK: &str = "runvil/std";
-
 /// A Host after the server calls, with the Host-wide `services`, the
 /// linked Plugins of the Packs agents may declare, `web` and `mcp`, with
-/// the `servers` object as mcp's configuration, then loads the library
-/// Plugins in the directory `plugins`, when the server is given one, and
-/// then calls the linked std Plugin when no library Plugin inserted the
-/// file-tool Pack. The Host keeps those Packs and the built-ins
-/// `subagents` and `user`, and each run makes its own instances of them.
-/// The report lists each library Plugin that loaded and each failure.
+/// the `servers` object as mcp's configuration, and then loads the
+/// library Plugins in the directory `plugins`, when the server is given
+/// one. The std Plugin, whose Pack holds the file tools, is one of those
+/// libraries, so a Host with no Plugin directory has no `std` Pack and
+/// refuses a prompt that requires it. The Host keeps those Packs and the
+/// built-ins `subagents` and `user`, and each run makes its own instances
+/// of them. The report lists each library Plugin that loaded and each
+/// failure.
 fn with_plugins(
     services: &HostServices,
     servers: Value,
@@ -174,13 +172,6 @@ fn with_plugins(
         tracing::warn!(%error, "the mcp Plugin inserted no Pack");
     }
     let report = plugins.and_then(|directory| load_plugin_dir(&mut packs, directory));
-    // The built-in chat agent declares the file tools, so a Host with no
-    // Plugin directory, or one whose std library did not load, still
-    // installs them.
-    let has_std = packs.list().any(|(info, _)| info.fqn == STD_PACK);
-    if !has_std && let Err(error) = plugin_std::install(&mut packs, Value::Null, services) {
-        tracing::warn!(%error, "the std Plugin inserted no Pack");
-    }
     (Packs::new(packs), report)
 }
 

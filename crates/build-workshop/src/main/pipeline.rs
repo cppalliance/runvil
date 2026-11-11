@@ -10,7 +10,7 @@ use super::installer::collect::copy_executable;
 use super::sidecar::{self, GatewaySource};
 use super::{
     BuildEnvironment, BuildError, BuildRequest, CommandRunner, CommandSpec, OutputMode, Profile,
-    StepError,
+    StepError, plugin,
 };
 
 pub(super) fn build_workshop(
@@ -43,17 +43,26 @@ pub(super) fn build_workshop(
             let mut build = cargo_build_command(environment, request, "workshop");
             build.envs.extend(source.child_envs());
             run_checked(runner, &build, "Workshop build")?;
+            let mut profile = environment.target_root.clone();
+            if request.target.is_some() {
+                profile.push(&target);
+            }
+            profile.push(request.profile.directory());
+            // Workshop loads its Plugins from `plugins` beside its own
+            // executable in a development tree.
+            plugin::place(&plugin::built_library(&profile, &target), &profile).map_err(
+                |reason| {
+                    StepError::failed(format!(
+                        "cannot place the std Plugin beside Workshop: {reason}"
+                    ))
+                },
+            )?;
             if sidecar::bundles_sidecar(&target) {
                 return Ok(());
             }
             // Workshop finds the Gateway beside its own executable in a
             // development tree, as tauri-build arranges on Windows.
-            let mut beside = environment.target_root.clone();
-            if request.target.is_some() {
-                beside.push(&target);
-            }
-            beside.push(request.profile.directory());
-            beside.push(sidecar::gateway_binary_name(&target));
+            let beside = profile.join(sidecar::gateway_binary_name(&target));
             let gateway = source.binary(&environment.workspace_root, &target);
             // Copying a file onto itself would truncate it.
             if fs::canonicalize(&gateway).ok() == fs::canonicalize(&beside).ok() && beside.exists()

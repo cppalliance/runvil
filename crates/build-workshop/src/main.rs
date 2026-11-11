@@ -2,7 +2,9 @@
 //! release. For Windows targets the Gateway is Tauri's sidecar inside
 //! Workshop's bundle; macOS and Linux payloads carry it beside Workshop, and
 //! Qt IFW packages them into one installer. The Gateway is its own product
-//! in `cppalliance/runvil-gateway`, so nothing here compiles it. The
+//! in `cppalliance/runvil-gateway`, so nothing here compiles it. Every
+//! build and every installer carries the std Plugin's library in the
+//! Plugin directory, `plugins` beside Workshop (`plugin`). The
 //! `manifest` mode verifies every platform's published files as one release
 //! and writes its `latest.json` and `SHA256SUMS`.
 
@@ -23,6 +25,8 @@ mod installer;
 mod manifest;
 #[path = "main/pipeline.rs"]
 mod pipeline;
+#[path = "main/plugin.rs"]
+mod plugin;
 #[path = "main/runner.rs"]
 mod runner;
 #[path = "main/sidecar.rs"]

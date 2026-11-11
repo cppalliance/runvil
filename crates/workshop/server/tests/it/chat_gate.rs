@@ -33,7 +33,7 @@ use workshop_server::{AgentsConfig, AppState, Config};
 use crate::agents::{answer, collect_turn, delta_text, is_awaiting, next_wait};
 use crate::common::{
     JsonSocket, connect_agents, echo_stream, launch, spawn_gateway, spawn_router, sse_chunk,
-    sse_line, test_config, typed_catalog,
+    sse_line, std_plugin_dir, test_config, typed_catalog,
 };
 
 /// Every completion request body the gate mock received, in arrival
@@ -129,6 +129,7 @@ async fn spawn_chat_server_with_selection(models: &[&str], selected: Option<&str
     let config = Config {
         agents: AgentsConfig {
             path: dir.path().join("missing-agents"),
+            plugins: Some(std_plugin_dir()),
             ..AgentsConfig::default()
         },
         ..test_config(&gateway_url, dir.path())

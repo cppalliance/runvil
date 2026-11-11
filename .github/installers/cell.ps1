@@ -44,6 +44,8 @@ if (-not $gatewayVersion) { Fail "$pin names no Gateway version" }
 $root = Join-Path $env:LOCALAPPDATA 'Runvil'
 $profileDir = Join-Path $env:USERPROFILE '.runvil'
 $workshopExe = Join-Path $root 'runvil-workshop.exe'
+# The std Plugin's library installs with Workshop, in its Plugin directory.
+$stdPlugin = Join-Path $root 'plugins\plugin_std.dll'
 $gatewayExe = Join-Path $root 'runvil-gateway.exe'
 $config = Join-Path $profileDir 'gateway.toml'
 $discovery = Join-Path $profileDir 'run\gateway.json'
@@ -192,6 +194,7 @@ function Test-Selection($Want) {
   # nothing into the profile, and the Speech to Text gate records the
   # choice for the Gateway's first start.
   Test-Presence 'Workshop' $Want.Workshop $workshopExe
+  Test-Presence "Workshop's std Plugin" $Want.Workshop $stdPlugin
   Test-Presence 'Gateway' $Want.Gateway $gatewayExe
   if (Test-Path -LiteralPath $config) { Fail "the install must leave the Gateway config to the Gateway's first start, but $config exists" }
   $downloaded = @(Get-ModelFiles)

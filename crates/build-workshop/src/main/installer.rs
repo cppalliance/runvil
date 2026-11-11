@@ -14,7 +14,9 @@ use std::path::{Path, PathBuf};
 use super::args::InstallerRequest;
 use super::pipeline::{resolve_target, run_checked, with_staged_sidecar};
 use super::sidecar::{self, GatewaySource};
-use super::{BuildEnvironment, BuildError, CommandRunner, CommandSpec, OutputMode, StepError};
+use super::{
+    BuildEnvironment, BuildError, CommandRunner, CommandSpec, OutputMode, StepError, plugin,
+};
 
 // This file is loaded through a path attribute, so its children need one
 // too to resolve under `installer/`.
@@ -159,6 +161,20 @@ pub(super) fn build_installer(
         &output,
     )
     .map_err(failure)?;
+    // The Windows setup takes the std Plugin's library from the build
+    // itself. The other installers package the payload, so it goes there,
+    // beside Workshop.
+    if platform.system != System::Windows {
+        plugin::place(
+            &plugin::built_library(&release, &target),
+            &output.join("payload"),
+        )
+        .map_err(|reason| {
+            failure(format!(
+                "cannot place the std Plugin in the installer payload: {reason}"
+            ))
+        })?;
+    }
     let installer = match &ifw {
         Some(ifw) => build_ifw_installer(ifw, environment, platform, &gateway, &output, runner)?,
         None => output

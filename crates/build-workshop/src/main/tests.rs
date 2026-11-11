@@ -23,6 +23,8 @@ mod gateway_tests;
 mod ifw_tests;
 #[path = "tests/installer.rs"]
 mod installer_tests;
+#[path = "tests/plugin.rs"]
+mod plugin_tests;
 #[path = "tests/sidecar.rs"]
 mod sidecar_tests;
 #[path = "tests/stage.rs"]
@@ -191,7 +193,36 @@ impl TestEnvironment {
         self.stage_gateway_kind(target, "stub")
     }
 
+    /// Writes the std Plugin's library where Cargo leaves it whenever it
+    /// builds Workshop for `target`, in either profile, with the target
+    /// named or left to the host. No fake build writes a file of its own,
+    /// and every test that builds Workshop names its Gateway first, so
+    /// the Gateway helpers call this.
+    fn leave_plugin(&self, target: &str) {
+        let root = &self.environment.target_root;
+        for base in [root.clone(), root.join(target)] {
+            for profile in ["debug", "release"] {
+                write_file(
+                    &plugin::built_library(&base.join(profile), target),
+                    b"plugin",
+                );
+            }
+        }
+    }
+
+    /// Removes what [`leave_plugin`](Self::leave_plugin) wrote, as a
+    /// build that never compiled the library leaves things.
+    fn lose_plugin(&self, target: &str) {
+        let root = &self.environment.target_root;
+        for base in [root.clone(), root.join(target)] {
+            for profile in ["debug", "release"] {
+                let _ = std::fs::remove_file(plugin::built_library(&base.join(profile), target));
+            }
+        }
+    }
+
     fn stage_gateway_kind(&self, target: &str, kind: &str) -> PathBuf {
+        self.leave_plugin(target);
         let slot = self.sidecar(target);
         write_file(&slot, b"gateway");
         let mut marker = slot.clone().into_os_string();
@@ -206,6 +237,7 @@ impl TestEnvironment {
     /// A Gateway binary outside the slot, as `--gateway-binary` or
     /// `RUNVIL_GATEWAY_SIDECAR` names one.
     fn given_gateway(&self, target: &str) -> PathBuf {
+        self.leave_plugin(target);
         let path = self
             .temp
             .path()

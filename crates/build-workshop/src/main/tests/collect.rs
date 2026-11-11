@@ -277,6 +277,7 @@ fn the_installed_names_match_workshop_s_gateway_lookup() {
         ("WORKSHOP_BUNDLE_NAME", collect::WORKSHOP_BUNDLE_NAME),
         ("GATEWAY_BUNDLE_NAME", collect::GATEWAY_BUNDLE_NAME),
         ("WORKSHOP_APPIMAGE_NAME", collect::WORKSHOP_APPIMAGE_NAME),
+        ("PLUGIN_DIR_NAME", crate::plugin::PLUGIN_DIR_NAME),
     ] {
         assert_eq!(declared(&text, name), ours, "{name} in {}", peer.display());
     }

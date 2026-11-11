@@ -58,6 +58,10 @@ ${StrLoc}
 !define UNINSTALLERHEADERIMAGE "{{uninstaller_header_image}}"
 !define MAINBINARYNAME "{{main_binary_name}}"
 !define MAINBINARYSRCPATH "{{main_binary_path}}"
+; The std Plugin's library. Cargo writes it to `deps` beside the main
+; executable whenever it builds Workshop, so its path is the main
+; executable's with the file name replaced.
+!searchreplace STDPLUGINSRCPATH "${MAINBINARYSRCPATH}" "${MAINBINARYNAME}.exe" "deps\plugin_std.dll"
 !define BUNDLEID "{{bundle_id}}"
 !define COPYRIGHT "{{copyright}}"
 !define OUTFILE "{{out_file}}"
@@ -734,6 +738,11 @@ Section "Runvil Workshop" SecWorkshop
  ; Copy main executable
  File "${MAINBINARYSRCPATH}"
 
+ ; Copy the std Plugin's library into the Plugin directory, `plugins`
+ ; beside the main executable, where Workshop loads library Plugins from
+ CreateDirectory "$INSTDIR\plugins"
+ File "/oname=plugins\plugin_std.dll" "${STDPLUGINSRCPATH}"
+
  ; Copy resources
  {{#each resources_dirs}}
  CreateDirectory "$INSTDIR\\{{this}}"
@@ -884,6 +893,11 @@ Section "-Finalize"
  ; payloads of declined components or they would linger.
  !insertmacro DeleteComponentPayloadIfDeclined ${SecGateway} $INSTDIR\runvil-gateway.exe
  !insertmacro DeleteComponentPayloadIfDeclined ${SecWorkshop} $INSTDIR\${MAINBINARYNAME}.exe
+ !insertmacro DeleteComponentPayloadIfDeclined ${SecWorkshop} $INSTDIR\plugins\plugin_std.dll
+ ; Without /r, RMDir removes the Plugin directory only when it is empty,
+ ; which it is only after the line above deleted the one library in it.
+ RMDir "$INSTDIR\plugins"
+ ClearErrors
 
 SectionEnd
 
@@ -960,6 +974,11 @@ Section "un.Workshop"
 
  ; Delete the main executable
  Delete "$INSTDIR\${MAINBINARYNAME}.exe"
+
+ ; Delete the std Plugin's library, and the Plugin directory unless a
+ ; library the installer did not put there is left in it
+ Delete "$INSTDIR\plugins\plugin_std.dll"
+ RMDir "$INSTDIR\plugins"
 
  ; Delete resources
  {{#each resources}}

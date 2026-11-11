@@ -3,19 +3,25 @@
 //! the directory, find a word with Grep, read a window of the file, and read
 //! the next window from the offset the first window's trailer names.
 //!
-//! This lives here and not in `plugin-std` because the crate needs the
-//! real backend, and a Plugin crate imports only `runvil-plugin`.
+//! The tools come from the std Plugin's dynamic library, loaded from a
+//! Plugin directory as the server loads it, so each call crosses the C
+//! contract and each read goes through the loader's file functions to the
+//! real backend.
 
 use std::future::Future;
 use std::pin::pin;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll, Waker};
 
 use runvil::effect::{ToolCallOrigin, ToolCaller};
-use runvil::plugin::{HostServices, Pack, PackRegistry, ToolContext};
+use runvil::harness::{PluginReport, insert_plugin_dir};
+use runvil::plugin::{Pack, PackRegistry, ToolContext};
 use runvil::vfs::{Access, Origin, RealBackend, VfsRef};
 use runvil::{OutputTrust, ToolId, ToolOutput};
 use serde_json::{Value, json};
+
+use crate::common::std_plugin_dir;
 
 /// The file the flow runs over.
 const FILE: &str = "big.txt";
@@ -70,24 +76,26 @@ fn seeded_directory() -> tempfile::TempDir {
     directory
 }
 
-/// The Pack the factory `plugin_std::install` inserts makes under the Pack
-/// id `std`.
+/// One run's instance of the Pack `runvil/std`, made by the std Plugin's
+/// library, loaded from the Plugin directory the tests share. The report
+/// keeps the Plugin loaded, so it comes back with the Pack.
 #[expect(
     clippy::expect_used,
     reason = "test helpers fail by panicking with the invariant named"
 )]
-fn std_pack() -> std::sync::Arc<dyn Pack> {
+fn std_pack() -> (Arc<dyn Pack>, PluginReport) {
     let mut packs = PackRegistry::new();
-    plugin_std::install(&mut packs, Value::Null, &HostServices::new())
-        .expect("a fresh registry takes the Pack");
+    let report = insert_plugin_dir(&mut packs, &std_plugin_dir()).expect("the directory is read");
+    assert!(report.failures().is_empty(), "{:?}", report.failures());
     let (_info, id, factory) = packs
         .into_entries()
         .find(|(info, _, _)| info.fqn == "runvil/std")
-        .expect("install inserts the std Pack");
-    factory
-        .expect("install inserts std usable with no configuration")
+        .expect("the std Plugin inserts its Pack");
+    let pack = factory
+        .expect("the Pack is usable")
         .new_pack(&id)
-        .expect("the Pack is made")
+        .expect("the Pack instance is made");
+    (pack, report)
 }
 
 /// Drives a future to its output, polling again after each `Pending`.
@@ -121,7 +129,7 @@ fn list_find_read_a_window_and_read_the_next_one_by_the_trailer_offset() {
     let access = vfs
         .acquire(Origin::new("std real directory"))
         .expect("the run acquires the filesystem");
-    let pack = std_pack();
+    let (pack, _report) = std_pack();
 
     let listing = call(&*pack, &access, "dir", json!({ "target_directory": "/" }));
     assert_eq!(listing.trust(), OutputTrust::Untrusted);

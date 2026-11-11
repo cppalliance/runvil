@@ -1,5 +1,6 @@
 //! The agent conversations' Harness setup: after the server calls the
-//! three Plugins and builds its Host, every run of a conversation, which
+//! two linked Plugins, loads the std Plugin's library from its Plugin
+//! directory, and builds its Host, every run of a conversation, which
 //! has a user, holds the `web`, `subagents`, `mcp`, `std`, and `user`
 //! Packs. A prompt declaring `web` or the built-in
 //! `subagents` prepares over the server's installed Packs, a Host without
@@ -13,7 +14,9 @@
 //! refuses an unknown agent as `NotFound` and an unreadable one as `Io`,
 //! each with the launch refusal's own text. A configured Plugin directory
 //! loads each library Plugin in it and reports each file that is none,
-//! and a directory that does not exist loads nothing.
+//! and a directory that does not exist loads nothing. A prompt reads a
+//! file of its run through the std library's `Read` tool, and a Host with
+//! no Plugin directory refuses a prompt that requires `std`.
 
 use std::env::consts::{DLL_EXTENSION, DLL_PREFIX, DLL_SUFFIX};
 use std::path::PathBuf;
@@ -29,7 +32,7 @@ use runvil::model::{
     make_completion_error, phrase,
 };
 use runvil::plugin::{HostServices, PackRegistry, ServiceKey, TOKIO_RUNTIME};
-use runvil::vfs::VfsRef;
+use runvil::vfs::{Origin, VfsRef};
 use runvil::{BoxFuture, Error, ErrorCode, ErrorFact, Host, RunSetup};
 use serde_json::json;
 use workshop_agents::{Conversations, SessionState, TokioTimer, load_agent};
@@ -141,7 +144,8 @@ async fn every_run_holds_the_packs_the_three_plugins_add_and_the_builtins() {
           names[#names + 1] = tools.packs.get(id).name\n\
         end\n\
         return table.concat(names, ',') .. '|' .. tostring(tools.packs.get('user-input'))\n```\n";
-    let (host, _) = host_packs(&Registry::new(), None, None);
+    let (dir, _library) = plugin_dir("every-run-holds");
+    let (host, _) = host_packs(&Registry::new(), None, Some(dir.path()));
     assert_eq!(
         run_prompt(host, lists.to_owned()).await,
         Ok(Ok("web,subagents,mcp,std,user|nil".to_owned())),
@@ -250,18 +254,23 @@ async fn the_servers_value_is_the_mcp_packs_configuration() {
 /// never share one.
 static PLUGIN_DIRS: AtomicUsize = AtomicUsize::new(0);
 
+/// The file name of the std Plugin's dynamic library.
+fn std_plugin_file() -> String {
+    format!("{DLL_PREFIX}plugin_std{DLL_SUFFIX}")
+}
+
 /// The std Plugin's dynamic library. Cargo builds it beside this test
 /// executable, because the crate depends on `workshop-plugin-std`.
 fn std_plugin_library() -> PathBuf {
     let exe = std::env::current_exe().expect("the test executable has a path");
     let dir = exe.parent().expect("the test executable has a directory");
-    dir.join(format!("{DLL_PREFIX}workshop_plugin_std{DLL_SUFFIX}"))
+    dir.join(std_plugin_file())
 }
 
 /// A Plugin directory for the test named `test`, holding a copy of the
-/// std Plugin's library as `plugin_std`, and that copy's path. The
-/// directory's name comes from the test, the process id, and a counter.
-fn plugin_dir(test: &str) -> (tempfile::TempDir, PathBuf) {
+/// std Plugin's library, and that copy's path. The directory's name comes
+/// from the test, the process id, and a counter.
+pub(super) fn plugin_dir(test: &str) -> (tempfile::TempDir, PathBuf) {
     let prefix = format!(
         "{test}-{}-{}-",
         std::process::id(),
@@ -271,7 +280,7 @@ fn plugin_dir(test: &str) -> (tempfile::TempDir, PathBuf) {
         .prefix(&prefix)
         .tempdir()
         .expect("a temporary directory is made");
-    let library = dir.path().join(format!("plugin_std.{DLL_EXTENSION}"));
+    let library = dir.path().join(std_plugin_file());
     std::fs::copy(std_plugin_library(), &library).expect("the std Plugin's library is copied");
     (dir, library)
 }
@@ -344,40 +353,63 @@ async fn the_servers_host_loads_its_plugin_directory_beside_the_linked_plugins()
     );
 }
 
-/// A prompt that declares `std` and returns what `std/hello` answers.
-const CALLS_HELLO: &str = "---\nname: hello\ndescription: calls std/hello\nrunvil: 0\n\
-    uses:\n  - std\n---\n\n# Hello\n\n## Only\n\n```lua\nreturn tools.call('std/hello', {})\n```\n";
+/// A prompt that declares `std` and returns what `std/read` answers for
+/// `/notes.md`, then what `std/write` answers.
+const READS_NOTES: &str = "---\nname: reads\ndescription: reads a file\nrunvil: 0\n\
+    uses:\n  - std\n---\n\n# Reads\n\n## Only\n\n```lua\n\
+    local read = tools.call('std/read', { path = '/notes.md' })\n\
+    local write = tools.call('std/write', { path = '/out.md', contents = 'x' })\n\
+    return read .. '|' .. write\n```\n";
 
 #[tokio::test]
-async fn a_prompt_calls_a_tool_of_the_std_library_plugin() {
-    let (dir, _library) = plugin_dir("calls-hello");
+async fn a_prompt_reads_a_file_of_its_run_through_the_std_library_plugin() {
+    let (dir, _library) = plugin_dir("reads-notes");
     let (host, report) = host_packs(&Registry::new(), None, Some(dir.path()));
-
     let report = report.expect("the configured directory is read");
+    assert!(report.failures().is_empty(), "{:?}", report.failures());
+
+    let vfs = VfsRef::default();
+    vfs.acquire(Origin::new("seed"))
+        .expect("a fresh memory filesystem acquires")
+        .write("/notes.md", b"hello\nworld\n")
+        .expect("the file is seeded");
+
+    let result = run_prompt_over(host, READS_NOTES.to_owned(), vfs).await;
+    let Ok(Ok(text)) = result else {
+        panic!("the run ends with its text: {result:?}");
+    };
+    // Each numbered line holds a `|`, and the stub's text holds none.
+    let (read, write) = text.rsplit_once('|').expect("the prompt joins two answers");
     assert!(
-        report.failures().is_empty(),
-        "the library's std Pack goes in before the linked std Plugin is tried: {:?}",
-        report.failures()
+        read.contains("     1|hello\n     2|world\n"),
+        "Read answers the file's numbered lines: {read}"
+    );
+    assert!(
+        read.contains("<untrusted_input_"),
+        "file text reaches the script marked as untrusted: {read}"
     );
     assert_eq!(
-        run_prompt(host, CALLS_HELLO.to_owned()).await,
-        Ok(Ok("Hello from the std Plugin.".to_owned())),
-        "the run's std Pack is the library Plugin's, whose hello tool answers"
+        write,
+        "The Write tool is not implemented in this build. The implementation is missing and \
+         nothing in this session will change that. Calling Write again is safe, but it will \
+         return this same result every time, whatever the arguments. Carry on without it.",
+        "Write is still a stub, and its text is trusted, so it comes back as it is"
     );
 }
 
 #[tokio::test]
-async fn without_a_plugin_directory_the_linked_std_plugin_installs_the_file_tools() {
+async fn without_a_plugin_directory_a_prompt_requiring_std_is_refused() {
     let (host, report) = host_packs(&Registry::new(), None, None);
     assert!(report.is_none(), "no directory is read");
 
-    // The linked Pack has the file tools and no hello tool, so the prompt
-    // prepares and its call names no tool of the run.
-    let result = run_prompt(host, CALLS_HELLO.to_owned()).await;
-    let Ok(Err(error)) = result else {
-        panic!("the run begins and its call fails: {result:?}");
+    let result = run_prompt(host, requiring("std")).await;
+    let Err(message) = result else {
+        panic!("the Host refuses the prompt as it parses: {result:?}");
     };
-    assert_eq!(error.code, ErrorCode::UnboundTool, "{error:?}");
+    assert!(
+        message.contains("- std is unavailable: runvil/std is not installed"),
+        "the refusal names the Pack no Plugin inserted: {message}"
+    );
 }
 
 #[test]

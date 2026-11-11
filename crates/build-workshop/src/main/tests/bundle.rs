@@ -289,6 +289,12 @@ fn macos_unsigned_publishes_only_the_dmg_around_the_pinned_gateway() {
         "{plist}"
     );
     assert!(!payload.join("runvil-gateway").exists());
+    // The std Plugin's library sits in the Plugin directory beside the
+    // two bundles, where Workshop looks for it.
+    assert_eq!(
+        std::fs::read(payload.join("plugins").join("libplugin_std.dylib")).expect("payload Plugin"),
+        b"plugin"
+    );
     let installer = installer_path(environment, target);
     assert_eq!(
         installer.file_name().expect("name"),

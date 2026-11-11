@@ -34,7 +34,20 @@ fn payload(root: &Path, macos: bool) -> PathBuf {
         write_file(&executable, b"program");
         set_mode(&executable, 0o755);
     }
+    write_file(
+        &payload.join("plugins").join(plugin_library(macos)),
+        b"plugin",
+    );
     payload
+}
+
+/// The file name of the std Plugin's library in a payload.
+fn plugin_library(macos: bool) -> &'static str {
+    if macos {
+        "libplugin_std.dylib"
+    } else {
+        "libplugin_std.so"
+    }
 }
 
 #[cfg(unix)]
@@ -79,12 +92,14 @@ fn expected_files(macos: bool) -> Vec<String> {
             "packages/com.runvil.gateway/data/Runvil Gateway.app/Contents/MacOS/runvil-gateway",
             "packages/com.runvil.gateway/data/Runvil Gateway.app/Contents/Resources/icon.icns",
             "packages/com.runvil.workshop/data/Runvil.app/Contents/MacOS/runvil-workshop",
+            "packages/com.runvil.workshop/data/plugins/libplugin_std.dylib",
         ]);
     } else {
         files.extend([
             "packages/com.runvil.gateway/data/runvil-gateway",
             "packages/com.runvil.gateway/data/runvil-gateway.png",
             "packages/com.runvil.workshop/data/Runvil.AppImage",
+            "packages/com.runvil.workshop/data/plugins/libplugin_std.so",
             "packages/com.runvil.workshop/data/runvil-workshop.png",
         ]);
     }

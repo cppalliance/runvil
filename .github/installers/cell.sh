@@ -56,6 +56,7 @@ case "$system" in
     root=${CELL_ROOT:-/Applications/Runvil}
     workshop_item="$root/Runvil.app"
     workshop_exe="$workshop_item/Contents/MacOS/runvil-workshop"
+    std_plugin="$root/plugins/libplugin_std.dylib"
     gateway_item="$root/Runvil Gateway.app"
     gateway_exe="$gateway_item/Contents/MacOS/runvil-gateway"
     ;;
@@ -63,6 +64,7 @@ case "$system" in
     root=${CELL_ROOT:-$HOME/Runvil}
     workshop_item="$root/Runvil.AppImage"
     workshop_exe=$workshop_item
+    std_plugin="$root/plugins/libplugin_std.so"
     gateway_item="$root/runvil-gateway"
     gateway_exe=$gateway_item
     ;;
@@ -174,6 +176,8 @@ check_presence() {
   fi
 }
 check_presence Workshop "$want_workshop" "$workshop_item"
+# The std Plugin's library installs with Workshop, in its Plugin directory.
+check_presence "Workshop's std Plugin" "$want_workshop" "$std_plugin"
 check_presence Gateway "$want_gateway" "$gateway_item"
 if [ "$system" = Linux ]; then
   check_presence "Workshop's desktop entry" "$want_workshop" "$applications/com.runvil.workshop.desktop"

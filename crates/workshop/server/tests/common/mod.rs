@@ -12,8 +12,9 @@
     reason = "test helpers fail by panicking with the invariant named"
 )]
 
-use std::path::Path;
-use std::time::Duration;
+use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
@@ -32,6 +33,52 @@ use workshop_server::{
 /// How long one frame read may take before the test fails: generous enough
 /// for a slow CI runner, far below any test's own deadline.
 pub(crate) const RECV_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// A Plugin directory that holds the std Plugin's library and nothing
+/// else, for a server whose agents declare `std`, as the built-in chat
+/// agent does.
+///
+/// Cargo builds the library beside this test executable, because the
+/// server depends on `workshop-plugin-std`. That directory holds other
+/// libraries too, so the Plugin directory is one beside it, with a hard
+/// link to the library. Every test of a build shares it: a server may
+/// keep the library loaded until its test's process exits, and Windows
+/// cannot remove a loaded library, so a copy for each test would be left
+/// behind in the temporary directory.
+pub(crate) fn std_plugin_dir() -> PathBuf {
+    let file = format!("{DLL_PREFIX}plugin_std{DLL_SUFFIX}");
+    let exe = std::env::current_exe().expect("the test executable has a path");
+    let beside = exe.parent().expect("the test executable has a directory");
+    let built = beside.join(&file);
+    let directory = beside.join("workshop-server-plugins");
+    std::fs::create_dir_all(&directory).expect("the Plugin directory is made");
+    let link = directory.join(&file);
+    if !is_link_to(&link, &built) {
+        // A link an earlier build left names that build's library.
+        let _ = std::fs::remove_file(&link);
+        if let Err(error) = std::fs::hard_link(&built, &link) {
+            // Each test is its own process, and another may have made the
+            // link between the check above and this call.
+            assert!(
+                is_link_to(&link, &built),
+                "cannot link {} to {}: {error}",
+                link.display(),
+                built.display()
+            );
+        }
+    }
+    directory
+}
+
+/// Whether `link` and `built` have one length and one modification time,
+/// as two names of one file do.
+fn is_link_to(link: &Path, built: &Path) -> bool {
+    let stamp = |path: &Path| -> Option<(u64, SystemTime)> {
+        let metadata = std::fs::metadata(path).ok()?;
+        Some((metadata.len(), metadata.modified().ok()?))
+    };
+    stamp(link).is_some_and(|linked| Some(linked) == stamp(built))
+}
 
 /// A workshop server spawned in-process for one test, anchoring its state
 /// in a tempdir that lives as long as the fixture.
