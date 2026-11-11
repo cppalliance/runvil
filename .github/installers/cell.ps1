@@ -213,12 +213,16 @@ function Test-Selection($Want) {
   }
 
   # Workshop loads the std Plugin it installed, which holds the file tools.
+  # The pipe matters: Workshop is a windowed program, and PowerShell waits
+  # for one, and reads its output, only when that output is piped.
   if ($Want.Workshop) {
-    $listed = @(& $workshopExe --plugins 2>(Join-Path $logs 'plugins.stderr.log'))
-    if (-not ($listed -match '^std \d')) {
-      Fail "$workshopExe --plugins must list the std Plugin; it printed '$($listed -join ', ')' and exited $LASTEXITCODE"
+    $stderr = Join-Path $logs 'plugins.stderr.log'
+    $listed = (& $workshopExe --plugins 2>$stderr | Out-String).Trim()
+    if ($listed -notmatch '(?m)^std \d') {
+      $reason = if (Test-Path -LiteralPath $stderr) { (Get-Content -LiteralPath $stderr -Raw) } else { '' }
+      Fail "$workshopExe --plugins must list the std Plugin; it printed '$listed' and exited $LASTEXITCODE. stderr: $reason"
     }
-    Write-Host "cell: Workshop loads its std Plugin ($($listed -join ', '))"
+    Write-Host "cell: Workshop loads its std Plugin ($listed)"
   }
 
   # 4. Workshop serves its page, attached to the installed Gateway when
