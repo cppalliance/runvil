@@ -260,7 +260,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node tools/fetch-gateway-sidecar.mjs --target ${{ matrix.triple }}
 
+      # A mirror that does not answer makes apt-get wait for a long time, so
+      # the step fails after 20 minutes. It normally takes under one.
       - name: Install the Linux build packages
+        timeout-minutes: 20
         if: startsWith(matrix.platform, 'linux')
         run: |
           sudo apt-get update
@@ -406,7 +409,10 @@ jobs:
       # (https://github.com/AppImageCommunity/pkg2appimage/blob/master/excludelist),
       # and Workshop opens GLES at run time; every GTK desktop has all five.
       # The runner images lack EGL, and a bare Ubuntu image the others.
+      # A mirror that does not answer makes apt-get wait for a long time, so
+      # the step fails after 20 minutes. It normally takes under one.
       - name: Install the Linux test packages
+        timeout-minutes: 20
         if: runner.os == 'Linux'
         run: |
           set -euo pipefail
