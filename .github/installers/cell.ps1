@@ -87,16 +87,16 @@ function Get-Started {
 }
 
 # Stops Workshop and every Gateway, and returns only when a fresh listing
-# finds neither. Workshop goes first, because it supervises its Gateway
-# and starts another when it finds none. Each round lists the processes
-# again, because one that started after a listing was never stopped, and a
-# Gateway left running keeps its download going under the checks below.
+# finds neither. Windows keeps a stopped process in the list, with its
+# files still open, while it tears the process down, and `Wait-Process`
+# returns before that ends. A listing of the model files taken in that
+# time is stale. Workshop goes first, because it supervises its Gateway
+# and starts another when it finds none.
 function Stop-Started {
-  foreach ($round in 1..10) {
-    $stopped = 0
+  $clock = [Diagnostics.Stopwatch]::StartNew()
+  while ($true) {
     foreach ($name in 'runvil-workshop', 'runvil-gateway') {
       $running = @(Get-Process -Name $name -ErrorAction SilentlyContinue)
-      $stopped += $running.Count
       foreach ($process in $running) {
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
       }
@@ -104,10 +104,20 @@ function Stop-Started {
         Wait-Process -Id $process.Id -Timeout 30 -ErrorAction SilentlyContinue
       }
     }
-    if ($stopped -eq 0) { return }
+    $left = @(Get-Started)
+    if ($left.Count -eq 0) {
+      # Worth a line when it was slow: the next failure may be this.
+      if ($clock.Elapsed.TotalSeconds -ge 1) {
+        Write-Host ('cell: Workshop and the Gateway took {0:N1} seconds to stop' -f $clock.Elapsed.TotalSeconds)
+      }
+      return
+    }
+    if ($clock.Elapsed.TotalSeconds -ge 120) {
+      $names = ($left | ForEach-Object { "$($_.ProcessName) (pid $($_.Id))" }) -join ', '
+      Fail "Workshop and the Gateway must stop, but after 120 seconds these still run: $names"
+    }
+    Start-Sleep -Milliseconds 100
   }
-  $left = (Get-Started | ForEach-Object { "$($_.ProcessName) (pid $($_.Id))" }) -join ', '
-  Fail "Workshop and the Gateway must stop, but after ten rounds these still run: $left"
 }
 
 function Test-Presence([string]$Name, [bool]$Wanted, [string]$Path) {
