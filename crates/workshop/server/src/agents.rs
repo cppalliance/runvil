@@ -6,9 +6,10 @@
 //! the two share only [`crate::websocket`].
 //!
 //! The server builds one [`Host`] at startup: its `Packs`, installed from
-//! the web, mcp, and std Plugins, mcp over the servers of the configured
-//! `mcp.json`, the library Plugins in the configured Plugin directory, and
-//! the built-ins subagents and user; a finder that reads
+//! the linked web and mcp Plugins, mcp over the servers of the configured
+//! `mcp.json`, the library Plugins in the configured Plugin directory, the
+//! linked std Plugin when no library Plugin inserted the file-tool Pack,
+//! and the built-ins subagents and user; a finder that reads
 //! each agent from the agents folder through `load_agent`; and the tokio
 //! timer. Each launch opens a conversation in `workshop-agents` and builds
 //! that conversation's one run its own [`RunSetup`]: the conversation's
@@ -147,14 +148,18 @@ fn read_mcp_servers(setting: Option<&Path>) -> Value {
     }
 }
 
+/// The fully qualified name of the file-tool Pack, which a library Plugin
+/// in the Plugin directory inserts, or else the linked std Plugin.
+const STD_PACK: &str = "runvil/std";
+
 /// A Host after the server calls, with the Host-wide `services`, the
-/// Plugins of the Packs agents may declare: `web`, `mcp`, with the
-/// `servers` object as its configuration, and `std`, the file tools, and
-/// then loads the library Plugins in the directory `plugins`, when the
-/// server is given one. The Host keeps those Packs and the built-ins
+/// linked Plugins of the Packs agents may declare, `web` and `mcp`, with
+/// the `servers` object as mcp's configuration, then loads the library
+/// Plugins in the directory `plugins`, when the server is given one, and
+/// then calls the linked std Plugin when no library Plugin inserted the
+/// file-tool Pack. The Host keeps those Packs and the built-ins
 /// `subagents` and `user`, and each run makes its own instances of them.
-/// The report holds each library Plugin that loaded, so the caller keeps
-/// it for as long as those Plugins should stay loaded.
+/// The report lists each library Plugin that loaded and each failure.
 fn with_plugins(
     services: &HostServices,
     servers: Value,
@@ -168,10 +173,14 @@ fn with_plugins(
     if let Err(error) = plugin_mcp::install(&mut packs, Value::Object(mcp), services) {
         tracing::warn!(%error, "the mcp Plugin inserted no Pack");
     }
-    if let Err(error) = plugin_std::install(&mut packs, Value::Null, services) {
+    let report = plugins.and_then(|directory| load_plugin_dir(&mut packs, directory));
+    // The built-in chat agent declares the file tools, so a Host with no
+    // Plugin directory, or one whose std library did not load, still
+    // installs them.
+    let has_std = packs.list().any(|(info, _)| info.fqn == STD_PACK);
+    if !has_std && let Err(error) = plugin_std::install(&mut packs, Value::Null, services) {
         tracing::warn!(%error, "the std Plugin inserted no Pack");
     }
-    let report = plugins.and_then(|directory| load_plugin_dir(&mut packs, directory));
     (Packs::new(packs), report)
 }
 
@@ -286,8 +295,9 @@ struct Inner {
     /// instances of, the finder that reads each agent from the agents
     /// folder, and the tokio timer.
     host: Arc<Host>,
-    /// What the Plugin directory loaded, held so each library Plugin in it
-    /// stays loaded for as long as the launcher lives.
+    /// What the Plugin directory loaded, held so that a library Plugin
+    /// which inserted no Pack still stays loaded for as long as the
+    /// launcher lives.
     _plugins: Option<PluginReport>,
     /// The running conversations.
     conversations: Conversations,

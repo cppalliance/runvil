@@ -344,6 +344,42 @@ async fn the_servers_host_loads_its_plugin_directory_beside_the_linked_plugins()
     );
 }
 
+/// A prompt that declares `std` and returns what `std/hello` answers.
+const CALLS_HELLO: &str = "---\nname: hello\ndescription: calls std/hello\nrunvil: 0\n\
+    uses:\n  - std\n---\n\n# Hello\n\n## Only\n\n```lua\nreturn tools.call('std/hello', {})\n```\n";
+
+#[tokio::test]
+async fn a_prompt_calls_a_tool_of_the_std_library_plugin() {
+    let (dir, _library) = plugin_dir("calls-hello");
+    let (host, report) = host_packs(&Registry::new(), None, Some(dir.path()));
+
+    let report = report.expect("the configured directory is read");
+    assert!(
+        report.failures().is_empty(),
+        "the library's std Pack goes in before the linked std Plugin is tried: {:?}",
+        report.failures()
+    );
+    assert_eq!(
+        run_prompt(host, CALLS_HELLO.to_owned()).await,
+        Ok(Ok("Hello from the std Plugin.".to_owned())),
+        "the run's std Pack is the library Plugin's, whose hello tool answers"
+    );
+}
+
+#[tokio::test]
+async fn without_a_plugin_directory_the_linked_std_plugin_installs_the_file_tools() {
+    let (host, report) = host_packs(&Registry::new(), None, None);
+    assert!(report.is_none(), "no directory is read");
+
+    // The linked Pack has the file tools and no hello tool, so the prompt
+    // prepares and its call names no tool of the run.
+    let result = run_prompt(host, CALLS_HELLO.to_owned()).await;
+    let Ok(Err(error)) = result else {
+        panic!("the run begins and its call fails: {result:?}");
+    };
+    assert_eq!(error.code, ErrorCode::UnboundTool, "{error:?}");
+}
+
 #[test]
 fn no_setting_reads_no_file_and_gives_no_servers() {
     assert_eq!(read_mcp_servers(None), json!({}));
