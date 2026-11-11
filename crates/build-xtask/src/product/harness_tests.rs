@@ -28,30 +28,6 @@ fn a_harness_crate_depending_on_a_gateway_crate_is_reported() {
 }
 
 #[test]
-fn a_harness_crate_depending_on_a_shared_crate_is_reported() {
-    let root = tempfile::TempDir::new().expect("tempdir");
-    write_crate(
-        root.path(),
-        "harness-internal/plugins",
-        "harness-plugins",
-        "[dependencies]\nshared-error-source = { path = \"../../shared-error-source\" }\n",
-    );
-    write_crate(
-        root.path(),
-        "shared-error-source",
-        "shared-error-source",
-        "",
-    );
-    let violations = product_boundary_violations(root.path());
-    assert_eq!(violations.len(), 1, "{violations:?}");
-    assert!(
-        violations[0].starts_with("harness-plugins depends on shared-error-source:")
-            && violations[0].contains("harness crates must not depend on shared crates"),
-        "shared-* crates are closed to harness crates: {violations:?}"
-    );
-}
-
-#[test]
 fn a_harness_crate_depending_on_the_plugin_contract_passes() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(

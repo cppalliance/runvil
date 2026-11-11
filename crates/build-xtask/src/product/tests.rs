@@ -206,24 +206,6 @@ fn a_crate_named_like_the_former_gateway_family_is_an_outside_crate() {
 }
 
 #[test]
-fn a_shared_crate_depending_on_a_product_crate_is_reported() {
-    let root = tempfile::TempDir::new().expect("tempdir");
-    write_crate(
-        root.path(),
-        "shared-crypto",
-        "shared-crypto",
-        "[dependencies]\nworkshop-protocol = { path = \"../workshop-protocol\" }\n",
-    );
-    write_crate(root.path(), "workshop-protocol", "workshop-protocol", "");
-    let violations = product_boundary_violations(root.path());
-    assert_eq!(violations.len(), 1, "{violations:?}");
-    assert!(
-        violations[0].contains("shared-crypto") && violations[0].contains("workshop-protocol"),
-        "the violation names both crates: {violations:?}"
-    );
-}
-
-#[test]
 fn dev_build_and_target_dependencies_are_checked() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
@@ -471,22 +453,21 @@ fn a_workshop_crate_depending_on_a_harness_crate_other_than_the_facade_is_report
 }
 
 #[test]
-fn engine_and_shared_crates_depending_on_the_harness_facade_are_reported() {
+fn the_engine_facade_depending_on_the_harness_facade_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
-    let dep = "[dependencies]\nrunvil = { path = \"../runvil\" }\n";
     write_crate(root.path(), "runvil", "runvil", "");
-    write_crate(root.path(), "runvil-engine", "runvil-engine", dep);
-    write_crate(root.path(), "shared-crypto", "shared-crypto", dep);
+    write_crate(
+        root.path(),
+        "runvil-engine",
+        "runvil-engine",
+        "[dependencies]\nrunvil = { path = \"../runvil\" }\n",
+    );
     let violations = product_boundary_violations(root.path());
-    assert_eq!(violations.len(), 2, "{violations:?}");
-    for package in ["runvil-engine", "shared-crypto"] {
-        assert!(
-            violations
-                .iter()
-                .any(|v| v.starts_with(&format!("{package} depends on runvil:"))),
-            "{package} depending on the harness facade is reported: {violations:?}"
-        );
-    }
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert!(
+        violations[0].starts_with("runvil-engine depends on runvil:"),
+        "the Engine facade depending on the harness facade is reported: {violations:?}"
+    );
 }
 
 #[test]
@@ -494,7 +475,6 @@ fn family_classification_follows_the_naming_rules() {
     assert_eq!(family("runvil-runtime"), Family::Engine);
     assert_eq!(family("workshop"), Family::Workshop);
     assert_eq!(family("workshop-server"), Family::Workshop);
-    assert_eq!(family("shared-crypto"), Family::Shared);
     assert_eq!(family("build-xtask"), Family::Build);
     assert_eq!(family("serde"), Family::Unaffiliated);
 }

@@ -84,8 +84,8 @@
 //!
 //! ## Invariants
 //!
-//! - May depend on: `runvil-plugin`, `shared-*` crates, and outside
-//!   libraries. `cargo test -p build-xtask` enforces the Plugin family's
+//! - May depend on: `runvil-plugin` and outside libraries.
+//!   `cargo test -p build-xtask` enforces the Plugin family's
 //!   allow-list. Only [`install`] is public.
 //! - Output to a model round is untrusted, because descriptions, schemas,
 //!   and results all come from the servers, and output to the section's

@@ -10,15 +10,14 @@
 //! - `workshop`/`workshop-*` crates must not depend on Engine crates,
 //!   which they reach through `runvil`, or on Harness crates, except
 //!   through the Harness family's two public crates.
-//! - Harness crates (`runvil` and `harness-*`) must not depend on shared
-//!   or workshop crates; outside their own family they may name only
+//! - Harness crates (`runvil` and `harness-*`) must not depend on
+//!   workshop crates; outside their own family they may name only
 //!   `runvil-engine` and `runvil-plugin`, which rules out `build-*`
 //!   and other unaffiliated crates.
-//! - `plugin-*` crates may depend only on `runvil-plugin`, `shared-*`
-//!   crates, and outside libraries. Engine and Harness crates must not
-//!   depend on `plugin-*` crates, except `harness-gateway-client`, which
-//!   implements web's `SearchProvider`.
-//! - `shared-*` crates must not depend on any product crate.
+//! - `plugin-*` crates may depend only on `runvil-plugin` and outside
+//!   libraries. Engine and Harness crates must not depend on `plugin-*`
+//!   crates, except `harness-gateway-client`, which implements web's
+//!   `SearchProvider`.
 //! - Public API: a crate outside the Engine family may depend on
 //!   the family only through its two public crates, `runvil-engine` and
 //!   `runvil-plugin`, and a crate outside the Harness family on that
@@ -53,7 +52,6 @@ enum Family {
     Workshop,
     Harness,
     Plugin,
-    Shared,
     Build,
     /// Named after no product family; has no matrix rules of its own.
     Unaffiliated,
@@ -69,8 +67,6 @@ fn family(package: &str) -> Family {
         Family::Harness
     } else if package.starts_with("plugin-") {
         Family::Plugin
-    } else if package.starts_with("shared-") {
-        Family::Shared
     } else if package.starts_with("build-") {
         Family::Build
     } else {
@@ -199,18 +195,12 @@ fn boundary_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<String> {
         (Family::Harness, Family::Workshop) => {
             Some("harness crates must not depend on workshop crates")
         }
-        (Family::Harness, Family::Shared) => {
-            Some("harness crates must not depend on shared crates")
-        }
         (Family::Harness, Family::Build) => Some(
             "harness crates must not depend on build-* crates; outside their family they may name only runvil-engine and runvil-plugin",
         ),
         (Family::Harness, Family::Unaffiliated) => Some(
             "harness crates must not depend on unaffiliated crates; outside their family they may name only runvil-engine and runvil-plugin",
         ),
-        (Family::Shared, Family::Engine | Family::Workshop | Family::Harness | Family::Plugin) => {
-            Some("shared crates must not depend on product crates")
-        }
         _ => None,
     };
     family_rule.map(str::to_owned).or_else(|| {
@@ -242,12 +232,11 @@ fn boundary_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<String> {
 /// a Plugin crate.
 fn plugin_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<&'static str> {
     let (from, to) = (family(&package.package), family(&dep.package));
-    let allowed = to == Family::Shared
-        || [PLUGIN_CONTRACT, package.package.as_str()].contains(&dep.package.as_str());
+    let allowed = [PLUGIN_CONTRACT, package.package.as_str()].contains(&dep.package.as_str());
     match (from, to) {
-        (Family::Plugin, _) if !allowed => Some(
-            "plugin crates may depend only on runvil-plugin, shared-* crates, and outside libraries",
-        ),
+        (Family::Plugin, _) if !allowed => {
+            Some("plugin crates may depend only on runvil-plugin and outside libraries")
+        }
         (Family::Engine | Family::Harness, Family::Plugin) if package.package != GATEWAY_CLIENT => {
             Some(
                 "Engine and harness crates must not depend on plugin crates; only harness-gateway-client may",

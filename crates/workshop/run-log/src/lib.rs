@@ -8,8 +8,8 @@
 //!   `workshop-registry`, `workshop-support`, and the service crates;
 //!   today it names none of them. Outside the family it may name
 //!   `runvil`, the one crate a Host depends on for the Harness and the
-//!   Engine, and `shared-*` crates. Never on `workshop-server`, an Engine
-//!   crate, or a private Harness or Gateway crate.
+//!   Engine. Never on `workshop-server`, an Engine crate, or a private
+//!   Harness or Gateway crate.
 //!   `cargo test -p build-xtask` enforces the product and container
 //!   boundaries.
 //! - The Harness holds no database and no storage path: this crate is

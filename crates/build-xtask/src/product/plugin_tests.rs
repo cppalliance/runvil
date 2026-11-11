@@ -1,6 +1,6 @@
 //! Plugin-family fixtures: a `plugin-*` crate depends only on
-//! `runvil-plugin`, `shared-*` crates, and outside libraries; Engine,
-//! Gateway, and Harness crates may not depend on a Plugin crate, except
+//! `runvil-plugin` and outside libraries; Engine, Gateway, and Harness
+//! crates may not depend on a Plugin crate, except
 //! `harness-gateway-client`.
 
 use super::product_boundary_violations;
@@ -14,7 +14,6 @@ fn plugin_web_naming(deps: &str) -> Vec<String> {
     for (dir, name) in [
         ("runvil-plugin", "runvil-plugin"),
         ("runvil-engine", "runvil-engine"),
-        ("shared-loopback", "shared-loopback"),
         ("runvil", "runvil"),
         ("plugin-user-input", "plugin-user-input"),
         ("build-ui", "build-ui"),
@@ -24,14 +23,12 @@ fn plugin_web_naming(deps: &str) -> Vec<String> {
     product_boundary_violations(root.path())
 }
 
-const PLUGIN_RULE: &str =
-    "plugin crates may depend only on runvil-plugin, shared-* crates, and outside libraries";
+const PLUGIN_RULE: &str = "plugin crates may depend only on runvil-plugin and outside libraries";
 
 #[test]
-fn a_plugin_crate_naming_the_contract_and_a_shared_crate_passes() {
+fn a_plugin_crate_naming_the_contract_passes() {
     let violations = plugin_web_naming(
         "[dependencies]\nrunvil-plugin = { path = \"../runvil-plugin\" }\n\
-         shared-loopback = { path = \"../shared-loopback\" }\n\
          [dev-dependencies]\nrunvil-plugin = { path = \"../runvil-plugin\", features = [\"test-support\"] }\n",
     );
     assert!(violations.is_empty(), "{violations:?}");
