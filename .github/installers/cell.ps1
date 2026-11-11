@@ -82,14 +82,32 @@ function Invoke-Setup([string[]]$Arguments, [switch]$DeadProxy) {
   }
 }
 
+function Get-Started {
+  @(Get-Process -Name 'runvil-workshop', 'runvil-gateway' -ErrorAction SilentlyContinue)
+}
+
+# Stops Workshop and every Gateway, and returns only when a fresh listing
+# finds neither. Workshop goes first, because it supervises its Gateway
+# and starts another when it finds none. Each round lists the processes
+# again, because one that started after a listing was never stopped, and a
+# Gateway left running keeps its download going under the checks below.
 function Stop-Started {
-  $running = @(Get-Process -Name 'runvil-workshop', 'runvil-gateway' -ErrorAction SilentlyContinue)
-  foreach ($process in $running) {
-    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+  foreach ($round in 1..10) {
+    $stopped = 0
+    foreach ($name in 'runvil-workshop', 'runvil-gateway') {
+      $running = @(Get-Process -Name $name -ErrorAction SilentlyContinue)
+      $stopped += $running.Count
+      foreach ($process in $running) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+      }
+      foreach ($process in $running) {
+        Wait-Process -Id $process.Id -Timeout 30 -ErrorAction SilentlyContinue
+      }
+    }
+    if ($stopped -eq 0) { return }
   }
-  foreach ($process in $running) {
-    Wait-Process -Id $process.Id -Timeout 30 -ErrorAction SilentlyContinue
-  }
+  $left = (Get-Started | ForEach-Object { "$($_.ProcessName) (pid $($_.Id))" }) -join ', '
+  Fail "Workshop and the Gateway must stop, but after ten rounds these still run: $left"
 }
 
 function Test-Presence([string]$Name, [bool]$Wanted, [string]$Path) {
@@ -100,6 +118,42 @@ function Test-Presence([string]$Name, [bool]$Wanted, [string]$Path) {
 
 function Get-ModelFiles {
   @(Get-ChildItem -LiteralPath (Join-Path $profileDir 'models') -Recurse -File -ErrorAction SilentlyContinue)
+}
+
+# A file's length as the file reports it, or -1 when it cannot be opened.
+# A directory listing reports the length from the last time the file was
+# closed, which is 0 for a download that is still being written.
+function Get-Length([string]$Path) {
+  try {
+    $stream = [IO.File]::Open($Path, 'Open', 'Read', 'ReadWrite, Delete')
+  } catch {
+    return -1
+  }
+  try {
+    return $stream.Length
+  } finally {
+    $stream.Dispose()
+  }
+}
+
+function Get-ModelState {
+  (@(Get-ModelFiles) | Sort-Object FullName | ForEach-Object { "$($_.FullName):$(Get-Length $_.FullName)" }) -join ','
+}
+
+# The model files and their lengths once nothing writes to them: two
+# listings half a second apart that agree. The Gateway's first start
+# begins the Speech to Text download, so a listing taken while a transfer
+# still runs would differ from a later one through no act of the setup.
+function Wait-ModelState {
+  $last = Get-ModelState
+  foreach ($attempt in 1..240) {
+    Start-Sleep -Milliseconds 500
+    $now = Get-ModelState
+    if ($now -eq $last -and $now -notmatch ':-1(,|$)') { return $now }
+    $last = $now
+  }
+  $running = (Get-Started | ForEach-Object { "$($_.ProcessName) (pid $($_.Id))" }) -join ', '
+  Fail "the model files must stop changing within 120 seconds, but they still change: [$last]; running: [$running]"
 }
 
 # The Speech to Text gate the setup writes for the Gateway's first start:
@@ -171,17 +225,19 @@ function Get-InstallState {
   $keys = @(Get-Item -Path 'HKCU:\Software\*\Runvil\Components' -ErrorAction SilentlyContinue)
   if ($keys.Count -ne 1) { Fail "exactly one HKCU:\Software\*\Runvil\Components key must hold the persisted selection; found $($keys.Count)" }
   $components = ($keys[0].GetValueNames() | Sort-Object | ForEach-Object { "$_=$($keys[0].GetValue($_))" }) -join ','
-  $models = (@(Get-ModelFiles) | Sort-Object FullName | ForEach-Object { "$($_.FullName):$($_.Length)" }) -join ','
   [pscustomobject]@{
     Config     = [Convert]::ToBase64String([IO.File]::ReadAllBytes($config))
-    Models     = $models
+    Models     = Wait-ModelState
     Components = $components
   }
 }
 
 function Assert-SameState($Before, $After, [string]$What) {
   if ($After.Config -ne $Before.Config) { Fail "$What changed $config" }
-  if ($After.Models -ne $Before.Models) { Fail "$What changed the model files from [$($Before.Models)] to [$($After.Models)]" }
+  if ($After.Models -ne $Before.Models) {
+    $running = (Get-Started | ForEach-Object { "$($_.ProcessName) (pid $($_.Id))" }) -join ', '
+    Fail "$What changed the model files from [$($Before.Models)] to [$($After.Models)]; running: [$running]"
+  }
   if ($After.Components -ne $Before.Components) { Fail "$What changed the persisted selection from [$($Before.Components)] to [$($After.Components)]" }
 }
 
@@ -366,7 +422,8 @@ try {
   }
   Write-Host "cell: $Selection passed"
 } finally {
-  Stop-Started
+  # A failure to stop here must not hide the failure that came first.
+  try { Stop-Started } catch { Write-Host $_.Exception.Message }
   $profileLogs = Join-Path $profileDir 'logs'
   if (Test-Path -LiteralPath $profileLogs) {
     Copy-Item -LiteralPath $profileLogs -Destination (Join-Path $logs 'runvil-logs') -Recurse -Force -ErrorAction SilentlyContinue
