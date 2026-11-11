@@ -257,3 +257,30 @@ fn an_absent_agents_mcp_setting_is_none() {
     let config = Config::from_toml_str(raw).expect("fixture parses");
     assert_eq!(config.agents.mcp, None, "no setting means no MCP servers");
 }
+
+#[test]
+fn the_agents_plugins_setting_parses_to_its_path_and_is_kept_verbatim() {
+    let dir = tempfile::TempDir::new().expect("tempdir");
+    let path = dir.path().join("workshop.toml");
+    std::fs::write(
+        &path,
+        "[gateway]\nbase_url = \"http://x\"\napi_key = \"k\"\n\n[agents]\nplugins = \"my-plugins\"\n",
+    )
+    .expect("write fixture");
+    let config = Config::load(&path).expect("fixture loads");
+    assert_eq!(
+        config.agents.plugins,
+        Some(PathBuf::from("my-plugins")),
+        "an explicit Plugin directory is not re-anchored beside the config file"
+    );
+}
+
+#[test]
+fn an_absent_agents_plugins_setting_is_none() {
+    let raw = "[gateway]\nbase_url = \"http://x\"\napi_key = \"k\"\n";
+    let config = Config::from_toml_str(raw).expect("fixture parses");
+    assert_eq!(
+        config.agents.plugins, None,
+        "no setting means no Plugin directory"
+    );
+}

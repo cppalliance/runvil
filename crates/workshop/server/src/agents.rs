@@ -7,7 +7,8 @@
 //!
 //! The server builds one [`Host`] at startup: its `Packs`, installed from
 //! the web, mcp, and std Plugins, mcp over the servers of the configured
-//! `mcp.json`, and the built-ins subagents and user; a finder that reads
+//! `mcp.json`, the library Plugins in the configured Plugin directory, and
+//! the built-ins subagents and user; a finder that reads
 //! each agent from the agents folder through `load_agent`; and the tokio
 //! timer. Each launch opens a conversation in `workshop-agents` and builds
 //! that conversation's one run its own [`RunSetup`]: the conversation's
@@ -51,9 +52,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use plugin_web::SEARCH_PROVIDER;
-use runvil::harness::{Packs, RunId};
+use runvil::harness::{Packs, PluginReport, RunId, insert_plugin_dir};
 use runvil::plugin::{HostServices, PackRegistry, ServiceKey};
-use runvil::{Error, ErrorCode, Host, RunSetup};
+use runvil::{Error, ErrorCode, ErrorFact, Host, RunSetup};
 use serde_json::{Map, Value};
 use workshop_agents::{
     Conversation, ConversationId, Conversations, LaunchError, TokioTimer, discover_agents,
@@ -78,11 +79,17 @@ const HARNESS_STATE_DIR: &str = "harness";
 /// tokio runtime service, as the handle it supplies.
 const RUNTIME: ServiceKey<tokio::runtime::Handle> = ServiceKey::new(runvil::plugin::TOKIO_RUNTIME);
 
-/// The server's installed Packs over its Host-wide [`services`]. `mcp` is
-/// the `[agents] mcp` setting: the mcp Pack is installed over the servers
-/// of the file it names.
-fn host_packs(registry: &Registry, mcp: Option<&Path>) -> Packs {
-    with_plugins(&services(registry), read_mcp_servers(mcp))
+/// The server's installed Packs over its Host-wide [`services`], and what
+/// its Plugin directory loaded. `mcp` is the `[agents] mcp` setting: the
+/// mcp Pack is installed over the servers of the file it names. `plugins`
+/// is the `[agents] plugins` setting: the directory whose library Plugins
+/// are loaded.
+fn host_packs(
+    registry: &Registry,
+    mcp: Option<&Path>,
+    plugins: Option<&Path>,
+) -> (Packs, Option<PluginReport>) {
+    with_plugins(&services(registry), read_mcp_servers(mcp), plugins)
 }
 
 /// The `mcpServers` object of the `mcp.json`-format file at `setting`,
@@ -142,10 +149,17 @@ fn read_mcp_servers(setting: Option<&Path>) -> Value {
 
 /// A Host after the server calls, with the Host-wide `services`, the
 /// Plugins of the Packs agents may declare: `web`, `mcp`, with the
-/// `servers` object as its configuration, and `std`, the file tools. The
-/// Host keeps those Packs and the built-ins `subagents` and `user`, and
-/// each run makes its own instances of them.
-fn with_plugins(services: &HostServices, servers: Value) -> Packs {
+/// `servers` object as its configuration, and `std`, the file tools, and
+/// then loads the library Plugins in the directory `plugins`, when the
+/// server is given one. The Host keeps those Packs and the built-ins
+/// `subagents` and `user`, and each run makes its own instances of them.
+/// The report holds each library Plugin that loaded, so the caller keeps
+/// it for as long as those Plugins should stay loaded.
+fn with_plugins(
+    services: &HostServices,
+    servers: Value,
+    plugins: Option<&Path>,
+) -> (Packs, Option<PluginReport>) {
     let mut packs = PackRegistry::new();
     if let Err(error) = plugin_web::install(&mut packs, Value::Null, services) {
         tracing::warn!(%error, "the web Plugin inserted no Pack");
@@ -157,7 +171,46 @@ fn with_plugins(services: &HostServices, servers: Value) -> Packs {
     if let Err(error) = plugin_std::install(&mut packs, Value::Null, services) {
         tracing::warn!(%error, "the std Plugin inserted no Pack");
     }
-    Packs::new(packs)
+    let report = plugins.and_then(|directory| load_plugin_dir(&mut packs, directory));
+    (Packs::new(packs), report)
+}
+
+/// Loads every library Plugin in `directory` and returns the report of
+/// what loaded, or `None` when the directory cannot be read. A directory
+/// that does not exist is a state, not a failure: an installation may
+/// ship no Plugin directory. Each Plugin that loaded is logged with its
+/// name, version, and source, and each library that did not, with its
+/// path and the reason; one failure never stops the others.
+fn load_plugin_dir(packs: &mut PackRegistry, directory: &Path) -> Option<PluginReport> {
+    let report = match insert_plugin_dir(packs, directory) {
+        Ok(report) => report,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return None,
+        Err(error) => {
+            tracing::warn!(
+                directory = %directory.display(),
+                %error,
+                "the Plugin directory could not be read; no library Plugin is loaded"
+            );
+            return None;
+        }
+    };
+    for plugin in report.plugins() {
+        tracing::info!(
+            name = plugin.name(),
+            version = plugin.version(),
+            source = ?plugin.source(),
+            "loaded a library Plugin"
+        );
+    }
+    for failure in report.failures() {
+        let path = failure
+            .facts
+            .get(&ErrorFact::Path)
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        tracing::warn!(path, error = %failure, "a library Plugin did not load");
+    }
+    Some(report)
 }
 
 /// The Host-wide services the Plugins' `install`s read: the search
@@ -233,6 +286,9 @@ struct Inner {
     /// instances of, the finder that reads each agent from the agents
     /// folder, and the tokio timer.
     host: Arc<Host>,
+    /// What the Plugin directory loaded, held so each library Plugin in it
+    /// stays loaded for as long as the launcher lives.
+    _plugins: Option<PluginReport>,
     /// The running conversations.
     conversations: Conversations,
 }
@@ -251,12 +307,18 @@ impl AgentSessions {
     /// the server's reconnect backoff. The only file this reads is the
     /// `[agents] mcp` file, when the setting names one, and the only
     /// connections it starts are the background ones to that file's MCP
-    /// servers, on the server's runtime. Nothing else is spawned and
-    /// nothing else touches the filesystem here: the run log opens under
-    /// the state directory when the first run starts.
+    /// servers, on the server's runtime. It opens each dynamic library in
+    /// the `[agents] plugins` directory, when the setting names one, and
+    /// loads its Plugin, which runs that library's code. Nothing else is
+    /// spawned and nothing else touches the filesystem here: the run log
+    /// opens under the state directory when the first run starts.
     #[must_use]
     pub fn new(config: &Config, registry: Registry, backoff: ReconnectBackoff) -> Self {
-        let packs = host_packs(&registry, config.agents.mcp.as_deref());
+        let (packs, plugins) = host_packs(
+            &registry,
+            config.agents.mcp.as_deref(),
+            config.agents.plugins.as_deref(),
+        );
         let agents_path = config.agents.path.clone();
         let host = Host {
             packs,
@@ -271,6 +333,7 @@ impl AgentSessions {
                 )),
                 broker: WorkshopBroker::new(registry.clone()),
                 host: Arc::new(host),
+                _plugins: plugins,
                 conversations: Conversations::new(),
                 registry,
                 backoff,

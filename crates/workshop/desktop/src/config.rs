@@ -1,5 +1,6 @@
-//! The desktop app's workshop-server configuration: `workshop.toml` discovery
-//! and the forced ephemeral loopback bind.
+//! The desktop app's workshop-server configuration: `workshop.toml` discovery,
+//! the forced ephemeral loopback bind, and the installation's Plugin
+//! directory.
 //!
 //! The desktop app runs the workshop server in-process, so the listener
 //! settings are the desktop app's own: the bind is always `127.0.0.1:0` (an
@@ -7,7 +8,9 @@
 //! single-instance handoff cannot close). A discovered `workshop.toml` still
 //! owns the `[gateway]` connection settings and the state and
 //! agent prompt paths; the gateway endpoint itself resolves inside the
-//! server, gateway discovery file first, explicit config second.
+//! server, gateway discovery file first, explicit config second. A config
+//! that names no Plugin directory gets the installation's own, `plugins`
+//! where the installer lays it out beside Workshop.
 
 use std::path::{Path, PathBuf};
 
@@ -32,19 +35,27 @@ const DESKTOP_BIND: &str = "127.0.0.1:0";
 /// resolution, which attaches through the gateway discovery
 /// file or fails plainly.
 ///
+/// Either way, a config that names no Plugin directory gets the
+/// installation's own.
+///
 /// # Errors
 /// Returns an error when a discovered file cannot be loaded or the
 /// executable or current directory cannot be determined.
 pub(crate) fn load() -> anyhow::Result<Config> {
-    let exe_dir = std::env::current_exe()
-        .context("locate the executable")
-        .and_then(|exe| {
-            exe.parent()
-                .map(Path::to_path_buf)
-                .context("the executable has no parent directory")
-        })?;
+    let exe = std::env::current_exe().context("locate the executable")?;
+    let exe_dir = exe
+        .parent()
+        .context("the executable has no parent directory")?;
     let cwd = std::env::current_dir().context("locate the current directory")?;
-    load_in(&exe_dir, &cwd, std::env::home_dir().as_deref())
+    let appimage = workshop_server_api::discovery::running_appimage(
+        &exe,
+        std::env::var_os("APPIMAGE").as_deref(),
+        std::env::var_os("APPDIR").as_deref(),
+    );
+    let plugins = workshop_server_api::discovery::installed_plugin_dir(&exe, appimage.as_deref());
+    let mut config = load_in(exe_dir, &cwd, std::env::home_dir().as_deref())?;
+    name_plugin_dir(&mut config, plugins);
+    Ok(config)
 }
 
 /// The testable core of [`load`], with the three base directories
@@ -61,6 +72,14 @@ fn load_in(exe_dir: &Path, cwd: &Path, home: Option<&Path>) -> anyhow::Result<Co
             Ok(config)
         }
         None => Ok(default_config(home)),
+    }
+}
+
+/// Gives `config` the installation's Plugin directory, `installed`, unless
+/// it names one of its own.
+fn name_plugin_dir(config: &mut Config, installed: Option<PathBuf>) {
+    if config.agents.plugins.is_none() {
+        config.agents.plugins = installed;
     }
 }
 
@@ -213,6 +232,29 @@ mod tests {
         assert_eq!(config.server.bind, DESKTOP_BIND);
         assert_eq!(config.server.state_dir, profile_dir(&home));
         assert_eq!(config.agents.path, profile_dir(&home).join("agents"));
+    }
+
+    #[test]
+    fn a_config_that_names_no_plugin_directory_gets_the_installations() {
+        let (_temp, exe, cwd, home) = roots();
+        let installed = exe.join("plugins");
+        let mut config = load_in(&exe, &cwd, Some(&home)).expect("the default config");
+        assert_eq!(config.agents.plugins, None);
+        name_plugin_dir(&mut config, Some(installed.clone()));
+        assert_eq!(config.agents.plugins, Some(installed.clone()));
+
+        std::fs::write(
+            exe.join(CONFIG_FILE_NAME),
+            "[gateway]\nbase_url = \"http://x\"\napi_key = \"k\"\n\n[agents]\nplugins = \"mine\"\n",
+        )
+        .expect("write fixture");
+        let mut config = load_in(&exe, &cwd, Some(&home)).expect("the discovered file loads");
+        name_plugin_dir(&mut config, Some(installed));
+        assert_eq!(
+            config.agents.plugins,
+            Some(PathBuf::from("mine")),
+            "a Plugin directory the file names is kept"
+        );
     }
 
     #[test]

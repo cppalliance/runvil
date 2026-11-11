@@ -2,8 +2,9 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use super::{
-    GATEWAY_BUNDLE_NAME, Layout, WORKSHOP_APPIMAGE_NAME, WORKSHOP_BUNDLE_NAME, app_bundle,
-    bundle_exe, first_file, gateway_candidates, installed_gateway, running_appimage,
+    GATEWAY_BUNDLE_NAME, Layout, PLUGIN_DIR_NAME, WORKSHOP_APPIMAGE_NAME, WORKSHOP_BUNDLE_NAME,
+    app_bundle, bundle_exe, first_file, gateway_candidates, installed_gateway,
+    installed_plugin_dir, plugin_dir, running_appimage,
 };
 
 /// Plants an empty executable file at `root/relative`, creating its
@@ -255,4 +256,66 @@ fn a_missing_install_directory_is_none() {
     let root = tempfile::TempDir::new().expect("tempdir");
     let absent = root.path().join("absent").join("runvil-gateway");
     assert_eq!(installed_gateway(&absent, None), None);
+}
+
+#[test]
+fn the_plugin_directory_sits_beside_an_unbundled_workshop_in_every_layout() {
+    let install = Path::new("install");
+    for layout in [Layout::Windows, Layout::MacOs, Layout::Linux] {
+        assert_eq!(
+            plugin_dir(layout, &install.join("runvil-workshop"), None),
+            Some(install.join(PLUGIN_DIR_NAME)),
+            "{layout:?}"
+        );
+    }
+}
+
+#[test]
+fn the_macos_plugin_directory_sits_beside_the_workshop_bundle() {
+    let install = Path::new("Applications").join("Runvil");
+    let workshop = bundle_exe(&install, WORKSHOP_BUNDLE_NAME, "runvil-workshop");
+    assert_eq!(
+        plugin_dir(Layout::MacOs, &workshop, None),
+        Some(install.join(PLUGIN_DIR_NAME))
+    );
+    assert_eq!(
+        plugin_dir(Layout::Windows, &workshop, None),
+        Some(
+            install
+                .join(WORKSHOP_BUNDLE_NAME)
+                .join("Contents")
+                .join("MacOS")
+                .join(PLUGIN_DIR_NAME)
+        ),
+        "only the macOS layout reads the bundle structure"
+    );
+}
+
+#[test]
+fn the_linux_plugin_directory_sits_beside_the_appimage() {
+    let install = Path::new("opt").join("Runvil");
+    let appimage = install.join(WORKSHOP_APPIMAGE_NAME);
+    let workshop = Path::new("mount")
+        .join("usr")
+        .join("bin")
+        .join("runvil-workshop");
+    assert_eq!(
+        plugin_dir(Layout::Linux, &workshop, Some(appimage.as_path())),
+        Some(install.join(PLUGIN_DIR_NAME))
+    );
+    assert_eq!(
+        plugin_dir(Layout::Windows, &workshop, Some(appimage.as_path())),
+        Some(
+            Path::new("mount")
+                .join("usr")
+                .join("bin")
+                .join(PLUGIN_DIR_NAME)
+        ),
+        "only the Linux layout reads the AppImage"
+    );
+}
+
+#[test]
+fn an_executable_without_a_directory_has_no_plugin_directory() {
+    assert_eq!(installed_plugin_dir(Path::new(""), None), None);
 }

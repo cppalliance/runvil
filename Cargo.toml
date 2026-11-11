@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "crates/runvil-internal/types", "crates/runvil-internal/runtime", "crates/runvil-internal/lua", "crates/runvil-internal/prompt", "crates/runvil-internal/vfs", "crates/runvil-internal/model-client", "crates/workshop/desktop", "crates/workshop/server", "crates/workshop/server-api", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/harness-internal/runner", "crates/harness-internal/plugin-loader", "crates/harness-internal/test-plugin"]
+members = ["crates/*", "crates/runvil-internal/types", "crates/runvil-internal/runtime", "crates/runvil-internal/lua", "crates/runvil-internal/prompt", "crates/runvil-internal/vfs", "crates/runvil-internal/model-client", "crates/workshop/desktop", "crates/workshop/server", "crates/workshop/server-api", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/workshop/plugin-std", "crates/harness-internal/runner", "crates/harness-internal/plugin-loader", "crates/harness-internal/test-plugin"]
 # crates/runvil-internal, crates/workshop, and crates/harness-internal
 # are manifestless containers holding their families' private crates.
 # Cargo prunes excluded subtrees from member globs, so a "crates/workshop/*"
@@ -31,6 +31,15 @@ runvil-plugin = { path = "crates/runvil-plugin" }
 # The C Plugin contract, version 0.2, from its own repository, pinned by
 # commit. `version` beside `git` keeps cargo-deny's wildcard check quiet.
 runvil-plugin-sys = { version = "0.2.0", git = "https://github.com/cppalliance/runvil-plugin-api", rev = "63a2403761b925b1f52bcf361c97b4fb04c04d74" }
+# The safe layer over that contract, at the same commit. Only the library
+# Plugin crate under `crates/workshop/` names it, for `export_plugin!`.
+runvil-plugin-sdk = { version = "0.2.0", git = "https://github.com/cppalliance/runvil-plugin-api", rev = "63a2403761b925b1f52bcf361c97b4fb04c04d74" }
+# The std Plugin, from its own repository, pinned by commit, which must be
+# built against the contract commit above. default-features off drops its
+# own export of `runvil_plugin`, which `workshop-plugin-std` makes instead.
+# The key is `std-plugin` because the workspace still holds a crate named
+# `plugin-std`.
+std-plugin = { package = "plugin-std", version = "0.1.0", git = "https://github.com/cppalliance/runvil-plugin-std", rev = "b8dc5b6a5ef420e7eca323fecf784462fa21f2f5", default-features = false }
 runvil-types = { path = "crates/runvil-internal/types" }
 workshop-gateway-discovery = { path = "crates/workshop/gateway-discovery" }
 shared-error-source = { path = "crates/shared-error-source" }
@@ -57,6 +66,7 @@ workshop-workspace = { path = "crates/workshop/workspace" }
 workshop-run-log = { path = "crates/workshop/run-log" }
 workshop-agents = { path = "crates/workshop/agents" }
 workshop-user-state = { path = "crates/workshop/user-state" }
+workshop-plugin-std = { path = "crates/workshop/plugin-std" }
 # default-features off: both users (the parser and build-xtask's doctest
 # scan) read only the core event stream, never the `html` renderer or the
 # `getopts` binary.

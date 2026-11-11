@@ -177,6 +177,12 @@ pub struct AgentsConfig {
     /// verbatim like other explicit paths, so `anchor_path_defaults`
     /// leaves it alone.
     pub mcp: Option<PathBuf>,
+    /// The directory whose dynamic libraries Workshop loads as Plugins.
+    /// Leaving it out loads no directory, and a directory that does not
+    /// exist loads no Plugin. The path is interpolated and kept verbatim
+    /// as `mcp` is. The desktop app fills a setting left out with the
+    /// `plugins` directory of its own installation.
+    pub plugins: Option<PathBuf>,
 }
 
 impl Default for AgentsConfig {
@@ -184,6 +190,7 @@ impl Default for AgentsConfig {
         Self {
             path: PathBuf::new(),
             mcp: None,
+            plugins: None,
         }
     }
 }

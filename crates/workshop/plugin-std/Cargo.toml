@@ -1,0 +1,23 @@
+[package]
+name = "workshop-plugin-std"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+# A dynamic library, which is the file Workshop's Plugin directory holds,
+# and an rlib, so the server's tests can depend on this crate and have
+# Cargo build the library before they run.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The std Plugin, linked in with its own export off.
+std-plugin.workspace = true
+# `export_plugin!`, which exports the Plugin's entry point from this
+# library.
+runvil-plugin-sdk.workspace = true
+
+[lints]
+workspace = true

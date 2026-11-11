@@ -1,4 +1,5 @@
-//! Installed-peer lookup: where Workshop finds the Gateway it launches.
+//! Installed-peer lookup: where Workshop finds the Gateway it launches and
+//! the Plugin directory it loads.
 //!
 //! The installers lay the two programs out three ways:
 //!
@@ -11,6 +12,9 @@
 //!   confirms Workshop runs from that AppImage, and looks there
 //!   before its own directory: a gateway inside the mount loses its files
 //!   when Workshop exits and the mount goes away.
+//!
+//! The Plugin directory, `plugins`, sits in that same directory: beside
+//! Workshop's executable, beside `Runvil.app`, or beside `Runvil.AppImage`.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -26,6 +30,10 @@ pub const GATEWAY_BUNDLE_NAME: &str = "Runvil Gateway.app";
 
 /// The Linux Workshop AppImage's file name.
 pub const WORKSHOP_APPIMAGE_NAME: &str = "Runvil.AppImage";
+
+/// The Plugin directory's name: the directory of dynamic libraries
+/// Workshop loads as Plugins.
+pub const PLUGIN_DIR_NAME: &str = "plugins";
 
 /// The installer layout a lookup searches.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -134,6 +142,29 @@ fn gateway_candidates(
         candidates.push(bundle_exe(dir, GATEWAY_BUNDLE_NAME, layout.gateway_exe()));
     }
     candidates
+}
+
+/// Names the Plugin directory of the installation the Workshop at
+/// `workshop_exe` runs from, inside `appimage` when [`running_appimage`]
+/// found one: `plugins` beside the AppImage on Linux, beside `Runvil.app`
+/// on macOS, and otherwise beside `workshop_exe`, as on Windows and in a
+/// development tree. It matches the path shape only and never touches the
+/// disk, so the directory it names may not exist. `None` when
+/// `workshop_exe` has no parent directory.
+#[must_use]
+pub fn installed_plugin_dir(workshop_exe: &Path, appimage: Option<&Path>) -> Option<PathBuf> {
+    plugin_dir(Layout::CURRENT, workshop_exe, appimage)
+}
+
+fn plugin_dir(layout: Layout, workshop_exe: &Path, appimage: Option<&Path>) -> Option<PathBuf> {
+    let payload = match layout {
+        Layout::Windows => None,
+        Layout::MacOs => bundle_dir(workshop_exe),
+        Layout::Linux => appimage.and_then(Path::parent),
+    };
+    payload
+        .or_else(|| workshop_exe.parent())
+        .map(|dir| dir.join(PLUGIN_DIR_NAME))
 }
 
 /// The `.app` bundle `exe` runs from, when `exe` sits at

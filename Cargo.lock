@@ -4081,6 +4081,14 @@ dependencies = [
 
 [[package]]
 name = "plugin-std"
+version = "0.1.0"
+source = "git+https://github.com/cppalliance/runvil-plugin-std?rev=b8dc5b6a5ef420e7eca323fecf784462fa21f2f5#b8dc5b6a5ef420e7eca323fecf784462fa21f2f5"
+dependencies = [
+ "runvil-plugin-sdk",
+]
+
+[[package]]
+name = "plugin-std"
 version = "0.3.0"
 dependencies = [
  "regex",
@@ -4816,6 +4824,14 @@ dependencies = [
  "runvil-types",
  "runvil-vfs",
  "serde_json",
+]
+
+[[package]]
+name = "runvil-plugin-sdk"
+version = "0.2.0"
+source = "git+https://github.com/cppalliance/runvil-plugin-api?rev=63a2403761b925b1f52bcf361c97b4fb04c04d74#63a2403761b925b1f52bcf361c97b4fb04c04d74"
+dependencies = [
+ "runvil-plugin-sys",
 ]
 
 [[package]]
@@ -8035,6 +8051,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "workshop-plugin-std"
+version = "0.3.0"
+dependencies = [
+ "plugin-std 0.1.0",
+ "runvil-plugin-sdk",
+]
+
+[[package]]
 name = "workshop-protocol"
 version = "0.0.0"
 dependencies = [
@@ -8075,7 +8099,7 @@ dependencies = [
  "futures-util",
  "harness-gateway-client",
  "plugin-mcp",
- "plugin-std",
+ "plugin-std 0.3.0",
  "plugin-web",
  "reqwest",
  "runvil",
@@ -8093,6 +8117,7 @@ dependencies = [
  "workshop-agents",
  "workshop-gateway",
  "workshop-menu",
+ "workshop-plugin-std",
  "workshop-protocol",
  "workshop-registry",
  "workshop-run-log",

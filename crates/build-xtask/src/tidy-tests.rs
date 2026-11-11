@@ -43,7 +43,7 @@ fn a_tiered_crate_whose_manifest_is_missing_is_reported_not_skipped() {
     let root = tempfile::TempDir::new().expect("tempdir");
     std::fs::create_dir_all(root.path().join("crates")).expect("the crates directory creates");
     let violations = tier_dependency_violations(root.path());
-    let tiered = packages(&[VOCABULARY, SERVICES, FEATURES, SERVER]);
+    let tiered = packages(&[VOCABULARY, PLUGINS, SERVICES, FEATURES, SERVER]);
     assert_eq!(
         violations.len(),
         tiered.len(),
@@ -274,7 +274,12 @@ fn tier_table_grants_each_tier_only_lower_tiers() {
     );
     assert_eq!(
         allowed_dependencies("workshop-server"),
-        Some(packages(&[VOCABULARY, SERVICES, FEATURES]))
+        Some(packages(&[VOCABULARY, SERVICES, FEATURES, PLUGINS]))
+    );
+    assert_eq!(
+        allowed_dependencies("workshop-plugin-std"),
+        Some(Vec::new()),
+        "a library Plugin names no workshop crate"
     );
     assert_eq!(allowed_dependencies("gateway"), None);
 }

@@ -55,7 +55,7 @@ async fn a_launch_hands_back_the_parse_failure_its_run_ended_on_before_any_attac
     let config = Config {
         agents: AgentsConfig {
             path: agents_dir,
-            mcp: None,
+            ..AgentsConfig::default()
         },
         ..config_for("http://127.0.0.1:1", dir.path())
     };

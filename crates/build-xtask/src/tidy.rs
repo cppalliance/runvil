@@ -30,6 +30,10 @@ const VOCABULARY: &[Tiered] = &[
     ("workshop-registry", "registry"),
     ("workshop-support", "support"),
 ];
+/// Tier 0: library Plugins, each the dynamic library of a Plugin whose
+/// code lives in another repository. No internal `workshop-*`
+/// dependencies, and only the server may name one.
+const PLUGINS: &[Tiered] = &[("workshop-plugin-std", "plugin-std")];
 /// Tier 1: domain services. Depend on vocabulary crates only.
 const SERVICES: &[Tiered] = &[
     ("workshop-gateway", "gateway"),
@@ -43,7 +47,8 @@ const FEATURES: &[Tiered] = &[
     ("workshop-user-state", "user-state"),
     ("workshop-workspace", "workspace"),
 ];
-/// Tier 3: the server. May depend on every lower tier.
+/// Tier 3: the server. May depend on every lower tier, the library
+/// Plugins included.
 const SERVER: &[Tiered] = &[("workshop-server", "server")];
 
 /// Marker in a crate's `lib.rs` (or `main.rs`) crate docs. Mandatory for
@@ -81,14 +86,14 @@ fn allowed_dependencies(name: &str) -> Option<Vec<&'static str>> {
         // The proxy slots speak the wire types: the status push-channel
         // slot holds `workshop-protocol`'s `StatusBarUpdate`.
         vec!["workshop-protocol"]
-    } else if in_tier(VOCABULARY) {
+    } else if in_tier(VOCABULARY) || in_tier(PLUGINS) {
         Vec::new()
     } else if in_tier(SERVICES) {
         packages(&[VOCABULARY])
     } else if in_tier(FEATURES) {
         packages(&[VOCABULARY, SERVICES])
     } else if in_tier(SERVER) {
-        packages(&[VOCABULARY, SERVICES, FEATURES])
+        packages(&[VOCABULARY, SERVICES, FEATURES, PLUGINS])
     } else {
         return None;
     };
@@ -109,7 +114,7 @@ fn packages(tiers: &[&[Tiered]]) -> Vec<&'static str> {
 #[must_use]
 fn tier_dependency_violations(root: &Path) -> Vec<String> {
     let mut violations = Vec::new();
-    for (name, dir) in [VOCABULARY, SERVICES, FEATURES, SERVER].concat() {
+    for (name, dir) in [VOCABULARY, PLUGINS, SERVICES, FEATURES, SERVER].concat() {
         let Some(allowed) = allowed_dependencies(name) else {
             continue;
         };

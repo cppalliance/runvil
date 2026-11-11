@@ -65,6 +65,9 @@ test-fixtures = [
 
 [dev-dependencies]
 workshop-server = { path = ".", features = ["test-fixtures"] }
+# The std Plugin's dynamic library, which Cargo builds beside the test
+# executables so a test can copy it into a Plugin directory.
+workshop-plugin-std.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 tower.workspace = true

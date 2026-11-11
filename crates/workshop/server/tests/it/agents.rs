@@ -106,7 +106,7 @@ async fn spawn_agent_server_for_gateway(base_url: String) -> (String, tempfile::
     let config = Config {
         agents: AgentsConfig {
             path: agents_dir,
-            mcp: None,
+            ..AgentsConfig::default()
         },
         ..test_config(&base_url, dir.path())
     };

@@ -28,7 +28,9 @@
 //!    `POST /shutdown`.
 //!
 //! Before any Gateway runs, Workshop finds the installed one it launches
-//! with [`installed_gateway`], which knows each installer's layout.
+//! with [`installed_gateway`], which knows each installer's layout. The
+//! same layout holds Workshop's Plugin directory, which
+//! [`installed_plugin_dir`] names.
 //!
 //! URLs normalize to a literal `127.0.0.1`, never `localhost`, and probes
 //! send the bound address as the `Host` header, matching the Gateway's
@@ -87,8 +89,8 @@ pub use crate::paths::{
     lock_file_path, run_dir,
 };
 pub use crate::peer::{
-    GATEWAY_BUNDLE_NAME, WORKSHOP_APPIMAGE_NAME, WORKSHOP_BUNDLE_NAME, installed_gateway,
-    running_appimage,
+    GATEWAY_BUNDLE_NAME, PLUGIN_DIR_NAME, WORKSHOP_APPIMAGE_NAME, WORKSHOP_BUNDLE_NAME,
+    installed_gateway, installed_plugin_dir, running_appimage,
 };
 pub use crate::shutdown::{ShutdownError, request_shutdown, request_shutdown_before};
 #[cfg(any(test, feature = "test-fixtures"))]
