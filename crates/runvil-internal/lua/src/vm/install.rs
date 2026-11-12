@@ -25,8 +25,8 @@ use crate::sys::{SYS_LIVE_POISONED, seal_sys};
 use crate::var::var_to_json;
 
 impl SectionVm {
-    /// Installs `log`, `store`, and `json` as persistent globals for the
-    /// section's whole lifecycle.
+    /// Installs `log`, `store`, `json`, and `markdown` as persistent
+    /// globals for the section's whole lifecycle.
     ///
     /// Called once after Engine injection.
     /// The closures capture owned strings, a clone of the emitter, and Arc
@@ -67,7 +67,8 @@ impl SectionVm {
             section,
             &self.store_conflict,
         )?;
-        crate::json::install(&self.lua)
+        crate::json::install(&self.lua)?;
+        crate::markdown::install(&self.lua)
     }
 
     /// Takes the claims-model conflict the direct store closures recorded

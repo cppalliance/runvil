@@ -14,7 +14,10 @@
 //! `json.decode_lines`), encodes Lua values as compact JSON text
 //! (`json.encode` and `json.encode_lines`), holds `json.null`, the value
 //! every decoded JSON null becomes, and marks a table to encode as a JSON
-//! array (`json.array`).
+//! array (`json.array`). A persistent `markdown` table parses Markdown
+//! text into plain tables (`markdown.parse`), finds a section or a block
+//! in them (`markdown.section`, `markdown.section_or`, and
+//! `markdown.select`), and writes them back as text (`markdown.render`).
 //!
 //! The chunk's top-level return value becomes the section's result (the finish
 //! case of the exit rule). The `var` table is read back afterward as JSON for
@@ -61,9 +64,9 @@
 //!
 //! ## Invariants
 //!
-//! - May depend on: `runvil-types`, `runvil-model-client`, and
-//!   `runvil-vfs`. `cargo test -p build-xtask` enforces the product and
-//!   container boundaries.
+//! - May depend on: `runvil-types`, `runvil-model-client`,
+//!   `runvil-markdown`, and `runvil-vfs`. `cargo test -p build-xtask`
+//!   enforces the product and container boundaries.
 //! - Scheduler state changes only through a typed `Request` yielded by the
 //!   installed shim; a direct or malformed yield fails the block without
 //!   changing scheduler state.
@@ -94,6 +97,7 @@ mod hardening;
 mod iteration;
 mod json;
 mod library_env;
+mod markdown;
 mod messages;
 mod models;
 mod models_loop;

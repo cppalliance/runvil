@@ -1,8 +1,11 @@
 //! The read-only proxy every seal builds on - `sys`, a frozen `argv` table,
-//! a sealed prelude global, and a prelude's `var` view - and the key
-//! formatter their refusals and field paths share.
+//! a sealed prelude global, and a prelude's `var` view - the key
+//! formatter their refusals and field paths share, and [`unseal`], which
+//! reads a table through such views without calling into Lua.
 //! `tools.stats` and `tools.packs` build on the walkable [`read_only_walk`].
 //! Tool and Pack objects share [`registry_object`] and [`add_frozen_guard`].
+
+use std::collections::HashSet;
 
 use mlua::{
     AnyUserData, Function, Lua, MaybeSend, MetaMethod, MultiValue, Table, UserDataMethods, Value,
@@ -49,6 +52,70 @@ pub(crate) fn read_only_proxy(
     let proxy = lua.create_table()?;
     proxy.set_metatable(Some(metatable))?;
     Ok(proxy)
+}
+
+/// What a table stands for once sealed views are read through.
+pub(crate) enum Unsealed {
+    /// The table that holds the data.
+    Data(Table),
+    /// A view whose data only a function can read, with the view's label
+    /// when it has one.
+    Unreadable(Option<String>),
+    /// A chain of views that leads back to one of its own views.
+    Loop,
+}
+
+/// Reads `table` through sealed views, never calling into Lua.
+///
+/// A sealed view is a table with no entries of its own whose metatable has
+/// both `__index` and `__metatable`: a table `__index` is its data, read
+/// by these same rules, and a function `__index` cannot be read, labelled
+/// by a string `__metatable`. Any other table is its own data. `hop` runs
+/// once for each view passed, so the caller can bound the work, and the
+/// views already passed sit in a set, so a long chain costs time in
+/// proportion to its length.
+///
+/// # Errors
+/// Returns the failure of `hop`, or of reading a metatable.
+pub(crate) fn unseal(
+    table: &Table,
+    mut hop: impl FnMut() -> mlua::Result<()>,
+) -> mlua::Result<Unsealed> {
+    let mut current = table.clone();
+    let mut views = HashSet::new();
+    loop {
+        let Some(metatable) = current.metatable() else {
+            return Ok(Unsealed::Data(current));
+        };
+        let label: Value = metatable.raw_get("__metatable")?;
+        if label.is_nil()
+            || current
+                .pairs::<Value, Value>()
+                .next()
+                .transpose()?
+                .is_some()
+        {
+            return Ok(Unsealed::Data(current));
+        }
+        match metatable.raw_get::<Value>("__index")? {
+            Value::Table(data) => {
+                hop()?;
+                views.insert(current.to_pointer());
+                if views.contains(&data.to_pointer()) {
+                    return Ok(Unsealed::Loop);
+                }
+                current = data;
+            }
+            Value::Function(_) => {
+                let label = match label {
+                    Value::String(label) => Some(label.to_string_lossy()),
+                    _ => None,
+                };
+                return Ok(Unsealed::Unreadable(label));
+            }
+            _ => return Ok(Unsealed::Data(current)),
+        }
+    }
 }
 
 /// An empty proxy whose metatable holds `index`, a `__pairs` that walks

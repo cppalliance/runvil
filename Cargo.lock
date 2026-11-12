@@ -4797,6 +4797,7 @@ version = "0.3.0"
 dependencies = [
  "criterion",
  "mlua",
+ "runvil-markdown",
  "runvil-model-client",
  "runvil-types",
  "runvil-vfs",

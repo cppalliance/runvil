@@ -43,6 +43,7 @@ mod engine_misuse;
 mod json;
 mod library_load;
 mod logging;
+mod markdown;
 mod prompt_reads;
 mod require;
 mod sandbox;
@@ -89,6 +90,32 @@ fn assert_identity_only(recorder: &Recorder) {
 /// no prompt block runs, as in a probe chunk, which places it on no line.
 pub(crate) fn refused(message: &str) -> String {
     format!("{message}. {}", ErrorCode::LuaRuntime.prose())
+}
+
+/// Runs `call` under `pcall` on `vm` and returns the caught error's kind and
+/// message, failing the test when the call returns.
+#[track_caller]
+fn caught(vm: &BuiltVm, call: &str) -> (String, String) {
+    let (raised, kind, message): (bool, String, String) = vm.eval(&format!(
+        "local ok, err = pcall(function() return {call} end)\n\
+         if ok then return false, '', '' end\n\
+         return true, tostring(err.kind), tostring(err)"
+    ));
+    assert!(raised, "required {call} to raise, actual a return");
+    (kind, message)
+}
+
+/// The `(kind, message)` pair of a caught `lua` error whose own text is
+/// `message`: its kind and the author prose `tostring` gives for it.
+fn lua_error(message: &str) -> (String, String) {
+    ("lua".to_owned(), refused(message))
+}
+
+/// Evaluates the Lua expression `call` on `vm` and returns the string it
+/// gives.
+#[track_caller]
+fn encoded(vm: &BuiltVm, call: &str) -> String {
+    vm.eval(&format!("return {call}"))
 }
 
 /// Returns the message of a `LuaRuntime` failure.

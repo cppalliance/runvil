@@ -13,7 +13,6 @@
 //! turn comes, and refuses a path that holds too many keys as Lua
 //! references at once.
 
-use std::collections::HashSet;
 use std::ffi::c_void;
 
 use mlua::{Lua, LuaSerdeExt, LuaString, Table, Value};
@@ -21,7 +20,7 @@ use serde_json::{Map, Number, Value as Json};
 
 use super::keys::{Entries, Shape, entries, shape};
 use crate::error::author_refusal;
-use crate::proxy::{key_path, key_text};
+use crate::proxy::{Unsealed, key_path, key_text, unseal};
 use crate::walk_budget::{HELD_KEY_LIMIT, TooLarge, WalkBudget};
 
 /// The most tables deep a value may nest, the top-level table being level
@@ -145,14 +144,6 @@ fn too_deep() -> String {
     format!("is nested more than {DEPTH_LIMIT} levels deep")
 }
 
-/// What a table stands for once sealed views are read through.
-enum Resolved {
-    Data(Table),
-    Unreadable(Option<String>),
-    /// A chain of views that leads back to one of its own views.
-    Loop,
-}
-
 /// One walk over a value: the mode, the path of keys to the current value
 /// for error messages, the tables on that path for cycle detection, what
 /// is left of the budget for values and text, and how many keys the tables
@@ -257,15 +248,15 @@ impl Encoder {
     /// data table, which counts for the cycle and depth checks instead.
     fn table(&mut self, table: &Table, level: usize) -> mlua::Result<Json> {
         let data = match self.resolve(table)? {
-            Resolved::Data(data) => data,
-            Resolved::Unreadable(label) => {
+            Unsealed::Data(data) => data,
+            Unsealed::Unreadable(label) => {
                 let placeholder = match &label {
                     Some(label) => format!("[cannot read: {label}]"),
                     None => "[cannot read]".to_owned(),
                 };
                 return self.fail(&unreadable(label.as_deref()), placeholder);
             }
-            Resolved::Loop => return self.fail(CYCLE, "[cycle]".to_owned()),
+            Unsealed::Loop => return self.fail(CYCLE, "[cycle]".to_owned()),
         };
         let pointer = data.to_pointer();
         if self.tables.contains(&pointer) {
@@ -373,11 +364,11 @@ impl Encoder {
     /// level 1 while the list stays on the cycle path.
     fn items(&mut self, list: &Table) -> mlua::Result<Vec<Json>> {
         let data = match self.resolve(list)? {
-            Resolved::Data(data) => data,
-            Resolved::Unreadable(label) => {
+            Unsealed::Data(data) => data,
+            Unsealed::Unreadable(label) => {
                 return Err(self.error(&unreadable(label.as_deref())));
             }
-            Resolved::Loop => return Err(self.error(CYCLE)),
+            Unsealed::Loop => return Err(self.error(CYCLE)),
         };
         // Only integer keys reach the list below, and they hold no
         // reference, so `held` has nothing to add for this table.
@@ -402,50 +393,10 @@ impl Encoder {
 }
 
 impl Encoder {
-    /// Reads through sealed views. A sealed view is a table with no entries
-    /// of its own whose metatable has both `__index` and `__metatable`: a
-    /// table `__index` is its data, read by these same rules, and a
-    /// function `__index` cannot be read, labelled by a string
-    /// `__metatable`. Any other table is its own data. Each hop to another
-    /// view spends one value of the budget, and the views already passed
-    /// sit in a set, so a long chain costs time in proportion to its
-    /// length.
-    fn resolve(&mut self, table: &Table) -> mlua::Result<Resolved> {
-        let mut current = table.clone();
-        let mut views = HashSet::new();
-        loop {
-            let Some(metatable) = current.metatable() else {
-                return Ok(Resolved::Data(current));
-            };
-            let label: Value = metatable.raw_get("__metatable")?;
-            if label.is_nil()
-                || current
-                    .pairs::<Value, Value>()
-                    .next()
-                    .transpose()?
-                    .is_some()
-            {
-                return Ok(Resolved::Data(current));
-            }
-            match metatable.raw_get::<Value>("__index")? {
-                Value::Table(data) => {
-                    self.charge_node()?;
-                    views.insert(current.to_pointer());
-                    if views.contains(&data.to_pointer()) {
-                        return Ok(Resolved::Loop);
-                    }
-                    current = data;
-                }
-                Value::Function(_) => {
-                    let label = match label {
-                        Value::String(label) => Some(label.to_string_lossy()),
-                        _ => None,
-                    };
-                    return Ok(Resolved::Unreadable(label));
-                }
-                _ => return Ok(Resolved::Data(current)),
-            }
-        }
+    /// Reads `table` through sealed views (see [`unseal`]). Each hop to
+    /// another view spends one value of the budget.
+    fn resolve(&mut self, table: &Table) -> mlua::Result<Unsealed> {
+        unseal(table, || self.charge_node())
     }
 }
 

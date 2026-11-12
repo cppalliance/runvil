@@ -1,5 +1,6 @@
 //! Selectors: the word that names a kind of block.
 
+use crate::index::{at_lines, position};
 use crate::{Block, Kind};
 
 /// What a selector matches.
@@ -67,10 +68,123 @@ impl Selector {
     }
 }
 
+/// Which of a selector's matches a lookup keeps.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Pick {
+    /// The match at this position, counted from 0.
+    Match(usize),
+    /// None: the block is not there. The message says what is missing.
+    Missing(String),
+}
+
+/// Picks one of the blocks a selector matched in one section.
+///
+/// `lines` holds the line of each match, in order, or `None` for a match
+/// that records none. With `n`, the pick is the `n`th match. Without it,
+/// the selector has to match exactly one block. `given` is the selector
+/// as it was written, and `place` names the section in a miss.
+///
+/// # Errors
+/// Returns the message that asks for an index when there is no `n` and
+/// the selector matched several blocks. That is a choice only the caller
+/// can make, not an absence.
+pub fn pick(
+    given: &str,
+    place: &str,
+    lines: &[Option<i64>],
+    n: Option<i64>,
+) -> Result<Pick, String> {
+    let given = given.trim();
+    let count = lines.len();
+    if count == 0 {
+        return Ok(Pick::Missing(format!(
+            "no block in {place} matches selector \"{given}\""
+        )));
+    }
+    match n {
+        Some(n) => Ok(match position(count, n) {
+            Some(at) => Pick::Match(at),
+            None => Pick::Missing(format!(
+                "selector \"{given}\" matches {count} block{} in {place}; there is no block {n}",
+                if count == 1 { "" } else { "s" }
+            )),
+        }),
+        None if count == 1 => Ok(Pick::Match(0)),
+        None => Err(format!(
+            "selector \"{given}\" matches {count} blocks{}; add an index, such as 1 for the first",
+            at_lines(lines)
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Selector;
+    use super::{Pick, Selector, pick};
     use crate::{Block, Kind};
+
+    #[test]
+    fn without_an_index_the_pick_is_the_only_match() {
+        assert_eq!(
+            pick("fence", "\"/G\"", &[Some(20)], None),
+            Ok(Pick::Match(0))
+        );
+        assert_eq!(
+            pick(" list ", "\"/Guide/Templates\"", &[], None),
+            Ok(Pick::Missing(
+                "no block in \"/Guide/Templates\" matches selector \"list\"".to_owned()
+            ))
+        );
+        assert_eq!(
+            pick("fence", "\"/G\"", &[Some(20), Some(24), Some(30)], None),
+            Err(
+                "selector \"fence\" matches 3 blocks, at lines 20, 24, and 30; add an index, \
+                 such as 1 for the first"
+                    .to_owned()
+            )
+        );
+        assert_eq!(
+            pick("prose", "\"/G\"", &[None, Some(4)], None),
+            Err(
+                "selector \"prose\" matches 2 blocks; add an index, such as 1 for the first"
+                    .to_owned()
+            )
+        );
+    }
+
+    #[test]
+    fn with_an_index_the_pick_is_that_match_or_a_miss() {
+        let lines = [Some(20), Some(24), Some(30)];
+        assert_eq!(pick("fence", "\"/G\"", &lines, Some(3)), Ok(Pick::Match(2)));
+        assert_eq!(
+            pick("fence", "\"/G\"", &lines, Some(-1)),
+            Ok(Pick::Match(2))
+        );
+        assert_eq!(
+            pick("fence", "\"/G\"", &lines, Some(-3)),
+            Ok(Pick::Match(0))
+        );
+        assert_eq!(
+            pick("fence", "\"/Guide/Templates\"", &lines, Some(4)),
+            Ok(Pick::Missing(
+                "selector \"fence\" matches 3 blocks in \"/Guide/Templates\"; there is no \
+                 block 4"
+                    .to_owned()
+            ))
+        );
+        assert_eq!(
+            pick("fence", "section `Template`", &[Some(25)], Some(2)),
+            Ok(Pick::Missing(
+                "selector \"fence\" matches 1 block in section `Template`; there is no block 2"
+                    .to_owned()
+            ))
+        );
+        assert_eq!(
+            pick("list", "section `Template`", &[], Some(1)),
+            Ok(Pick::Missing(
+                "no block in section `Template` matches selector \"list\"".to_owned()
+            ))
+        );
+    }
 
     fn fence(lang: &str) -> Block {
         Block::Fence {

@@ -2,8 +2,8 @@
 //! author writes them and drives their execution on the serial test driver
 //! without a live gateway. Split by domain - parsing contracts, section
 //! execution, fanout, control flow, the args/argv and lazy-prose surfaces,
-//! an author's own `_G` metatable, `require`, and the role map and start
-//! checks - over the run-level
+//! an author's own `_G` metatable, `require`, the `markdown` global, and
+//! the role map and start checks - over the run-level
 //! [`Scenario`](crate::test_support::scenario::Scenario). Its
 //! cases reach engine-only items (the test drivers and recorders, the store
 //! facade, the loader's Lua programs), so they run here rather than against
@@ -15,6 +15,7 @@ mod execution;
 mod fanout;
 mod global_metatable;
 mod lazy_prose;
+mod markdown;
 mod parsing;
 mod prepare;
 mod require;

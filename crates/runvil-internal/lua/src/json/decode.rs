@@ -11,12 +11,13 @@ use serde_json::Value as Json;
 
 use crate::error::author_refusal;
 
-/// The most bytes either function takes.
+/// The most bytes of text a function that parses on the Rust heap takes,
+/// because that parse runs outside the Lua memory limit.
 const INPUT_LIMIT: usize = 8_388_608;
 
 /// `json.decode(text)`: the one JSON document `text` holds, as Lua values.
 pub(super) fn decode(lua: &Lua, text: Value) -> mlua::Result<Value> {
-    let bytes = input(text, "json.decode")?;
+    let bytes = text_input(text, "json.decode")?;
     let document: Json = serde_json::from_slice(&bytes)
         .map_err(|error| author_refusal(format!("json.decode: {error}")))?;
     lua.to_value(&document)
@@ -27,7 +28,7 @@ pub(super) fn decode(lua: &Lua, text: Value) -> mlua::Result<Value> {
 /// line and one may span lines, and an error's line and column count
 /// across the whole text.
 pub(super) fn decode_lines(lua: &Lua, text: Value) -> mlua::Result<Value> {
-    let bytes = input(text, "json.decode_lines")?;
+    let bytes = text_input(text, "json.decode_lines")?;
     let values = serde_json::Deserializer::from_slice(&bytes)
         .into_iter::<Json>()
         .collect::<Result<Vec<Json>, _>>()
@@ -35,9 +36,9 @@ pub(super) fn decode_lines(lua: &Lua, text: Value) -> mlua::Result<Value> {
     lua.to_value(&values)
 }
 
-/// The bytes of `text`, checked before any parsing: a string of at most
-/// [`INPUT_LIMIT`] bytes.
-fn input(text: Value, function: &str) -> mlua::Result<BorrowedBytes> {
+/// The bytes of `text`, the argument of `function`, checked before any
+/// parsing: a string of at most [`INPUT_LIMIT`] bytes.
+pub(crate) fn text_input(text: Value, function: &str) -> mlua::Result<BorrowedBytes> {
     let text = match text {
         Value::String(text) => text,
         other => {

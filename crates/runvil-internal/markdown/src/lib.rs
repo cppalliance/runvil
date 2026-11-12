@@ -7,8 +7,8 @@
 //! writes the frontmatter; this crate only groups what they report.
 //! [`split`] is the section path grammar, which every function that names
 //! a section shares, and [`Path`] is the form that names a section of
-//! parsed text. A [`Selector`] names one kind of block, and [`nth`] is how
-//! an index counts.
+//! parsed text. A [`Selector`] names one kind of block, [`pick`] says which
+//! of its matches a lookup keeps, and [`nth`] is how an index counts.
 //!
 //! The crate holds no Lua. Its caller turns blocks into Lua tables and
 //! back.
@@ -33,8 +33,8 @@ mod selector;
 mod test_support;
 
 pub use block::{Block, Kind};
-pub use index::nth;
+pub use index::{nth, position};
 pub use parse::{parse, parse_body};
 pub use path::{Path, Step, Steps, escape_title, split};
 pub use render::render;
-pub use selector::Selector;
+pub use selector::{Pick, Selector, pick};

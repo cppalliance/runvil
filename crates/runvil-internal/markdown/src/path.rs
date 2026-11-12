@@ -8,6 +8,8 @@
 
 use std::fmt;
 
+use crate::index::at_lines;
+
 /// One step of a path: a section's title, and how the step finds it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Step {
@@ -214,6 +216,35 @@ impl Path {
     #[must_use]
     pub fn steps(&self) -> &[Step] {
         &self.steps
+    }
+
+    /// The message for a path that names no section because step `number`,
+    /// counted from 1, kept nothing. `given` is the path as it was
+    /// written.
+    #[must_use]
+    pub fn no_match(&self, given: &str, number: usize) -> String {
+        let step = number
+            .checked_sub(1)
+            .and_then(|at| self.steps.get(at))
+            .map(Step::to_string)
+            .unwrap_or_default();
+        format!(
+            "path \"{}\" matches no section; step {number}, \"{step}\", matches nothing",
+            given.trim()
+        )
+    }
+
+    /// The message for a path whose last step kept several sections, one
+    /// on each of `lines`. A match that records no line is `None`.
+    #[must_use]
+    pub fn ambiguous(given: &str, lines: &[Option<i64>]) -> String {
+        let given = given.trim();
+        format!(
+            "path \"{given}\" is ambiguous; it matches {} sections{}; add an index such as \
+             \"{given}[1]\"",
+            lines.len(),
+            at_lines(lines)
+        )
     }
 }
 
@@ -429,6 +460,42 @@ mod tests {
         assert_eq!(
             Path::parse("/Guide/"),
             Err(r#"path "/Guide/" has an empty step"#.to_owned())
+        );
+    }
+
+    #[test]
+    fn a_path_that_names_nothing_says_which_step_kept_nothing() {
+        for (given, number, message) in [
+            (
+                "/Guide/Nope",
+                2,
+                r#"path "/Guide/Nope" matches no section; step 2, "Nope", matches nothing"#,
+            ),
+            (
+                "/Log/Entry[3]",
+                2,
+                r#"path "/Log/Entry[3]" matches no section; step 2, "Entry[3]", matches nothing"#,
+            ),
+            (
+                " //Nope ",
+                1,
+                r#"path "//Nope" matches no section; step 1, "//Nope", matches nothing"#,
+            ),
+        ] {
+            let path = Path::parse(given).unwrap();
+            assert_eq!(path.no_match(given, number), message);
+        }
+    }
+
+    #[test]
+    fn a_path_that_names_several_sections_asks_for_an_index() {
+        assert_eq!(
+            Path::ambiguous("//Items", &[Some(5), Some(12)]),
+            r#"path "//Items" is ambiguous; it matches 2 sections, at lines 5 and 12; add an index such as "//Items[1]""#
+        );
+        assert_eq!(
+            Path::ambiguous("/Log/Entry", &[Some(3), None, Some(9)]),
+            r#"path "/Log/Entry" is ambiguous; it matches 3 sections; add an index such as "/Log/Entry[1]""#
         );
     }
 }
