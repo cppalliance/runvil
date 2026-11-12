@@ -159,6 +159,48 @@ async fn gate_a_conversation_round_advertises_the_file_tools() {
     socket.close().await;
 }
 
+/// GATE 14 - the shell. The chat requires the `bash` Pack and offers it
+/// between `std` and `web`, so each round's tool list holds `Shell`
+/// itself, after the file tools and before the web tools. A tool the
+/// model could only find through the discovery tools would not be in
+/// the list.
+#[tokio::test]
+async fn gate_a_conversation_round_advertises_the_shell_after_the_file_tools() {
+    let server = spawn_chat_server(&["test-model"]).await;
+    let mut socket = connect_chat(&server.ws_base).await;
+    let _session = launch_chat(&mut socket).await;
+
+    next_wait(&mut socket).await;
+    answer(&mut socket, "ping").await;
+    let turn = collect_turn(&mut socket).await;
+    assert_eq!(delta_text(&turn), "echo:ping");
+    {
+        let requests = server.captured.lock().expect("the capture lock is healthy");
+        let names: Vec<&str> = requests[0]["tools"]
+            .as_array()
+            .expect("the conversation round advertises tools")
+            .iter()
+            .filter_map(|tool| tool["function"]["name"].as_str())
+            .collect();
+        let place = |wire: &str| {
+            names
+                .iter()
+                .position(|name| *name == wire)
+                .unwrap_or_else(|| {
+                    panic!("the conversation round advertises {wire}, got {names:?}")
+                })
+        };
+        let shell = place("Shell");
+        for wire in ["Read", "ListDir", "Grep"] {
+            assert!(place(wire) < shell, "{wire} comes before Shell: {names:?}");
+        }
+        for wire in ["web_fetch", "web_search"] {
+            assert!(shell < place(wire), "Shell comes before {wire}: {names:?}");
+        }
+    }
+    socket.close().await;
+}
+
 /// GATE 12 - web tools. The chat's `## Conversation` section offers the
 /// `web` Pack, so the rounds its model loop sends advertise the
 /// Pack's fetch and search tools; an offer in the H1 would not reach

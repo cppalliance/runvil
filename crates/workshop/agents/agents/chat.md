@@ -2,10 +2,7 @@
 name: chat
 description: The built-in Workshop chat agent on the unified runtime.
 runvil: 0
-uses:
-  - user
-  - std
-  - web
+uses: [user, std, bash, web]
 models:
   default:
     min_context: 32768
@@ -19,6 +16,7 @@ The built-in chat agent: a pass-through between the operator and the selected mo
 
 ```lua
 tools.offer("std")
+tools.offer("bash")
 tools.offer("web")
 tools.offer(tools.packs.extras())
 local function compact(reason)
