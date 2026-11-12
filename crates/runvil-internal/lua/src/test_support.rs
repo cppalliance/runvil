@@ -211,8 +211,8 @@ impl SectionVm {
     fn run_loaded(&self, program: &LuaProgram) -> Result<LuaBlockResult> {
         self.clear_jump()?;
         let result = program.load(self.lua())?.call(());
-        if let Some((heading, line)) = self.take_jump()? {
-            return Ok(LuaBlockResult::Jump(heading, line));
+        if let Some((path, line)) = self.take_jump()? {
+            return Ok(LuaBlockResult::Jump(path, line));
         }
         let returned = result.map_err(|error| self.map_chunk_failure(program, &error))?;
         Ok(LuaBlockResult::Returned(scalar_return(returned)?))

@@ -21,8 +21,8 @@
 //! # Sensitivity
 //! Lifecycle variants have no payload beyond their coordinates and, for
 //! the library loads, the library's path, all author-controlled
-//! (`section` and `library` are prompt-authored heading text); the
-//! exception is
+//! (`section` is a heading's text and `library` a path made of them);
+//! the exception is
 //! `ModelMetadataDegraded`, whose message may quote values from a
 //! backend's response. Content variants hold model-, tool-, or
 //! user-authored text; task variants hold the author's spawn seeds; debug
