@@ -6,7 +6,7 @@ use std::num::NonZeroU32;
 
 use mlua::{MultiValue, Value};
 
-use crate::error::{Result, make_lua_runtime_error};
+use crate::error::{Error, Result, make_lua_runtime_error};
 
 /// Outcome of a Lua block that may invoke `jump`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,6 +69,17 @@ pub struct SectionText {
     pub markdown: String,
     /// Its pre-parsed list items; empty for a section that isn't a list.
     pub items: Vec<String>,
+}
+
+/// What a prompt read found for a well-formed path.
+#[derive(Debug, Clone)]
+pub enum SectionRead {
+    /// The section the path names.
+    Found(SectionText),
+    /// No section. The error says where the lookup looked:
+    /// `prompt.section` raises it, and `prompt.section_or` returns nil in
+    /// its place.
+    Missing(Error),
 }
 
 /// Which library a `require` resolved to, opaque to this crate.

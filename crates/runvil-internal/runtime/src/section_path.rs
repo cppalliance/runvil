@@ -91,14 +91,6 @@ impl Lookup {
             Lookup::Missing(error) => Err(error),
         }
     }
-
-    /// The section's position, or `None` for a miss.
-    pub(crate) fn found(self) -> Option<SectionPos> {
-        match self {
-            Lookup::Found(pos) => Some(pos),
-            Lookup::Missing(_) => None,
-        }
-    }
 }
 
 /// Resolves a path that names a neighbor of `origin`: `name` for a direct
@@ -117,8 +109,8 @@ pub(crate) fn resolve_neighbor(
     let path = titles(given)?;
     if path.from_top {
         return Err(error::make_lua_runtime_error(format!(
-            "section path \"{given}\" starts with \"/\"; only require and prompt.section take a \
-             path from the top"
+            "section path \"{given}\" starts with \"/\"; only require, prompt.section, and \
+             prompt.section_or take a path from the top"
         )));
     }
     neighbor(given, &path.titles, prompt, origin)?.required()
@@ -130,7 +122,8 @@ pub(crate) fn resolve_neighbor(
 /// # Errors
 /// Returns a `LuaRuntime` failure when the path is malformed, or is
 /// relative and neither relative form. A path that names no section is a
-/// [`Lookup::Missing`], not an error.
+/// [`Lookup::Missing`], not an error, so the caller decides whether a miss
+/// raises.
 pub(crate) fn find(given: &str, prompt: &Prompt, origin: Origin<'_>) -> Result<Lookup> {
     let path = titles(given)?;
     if path.from_top {

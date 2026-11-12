@@ -43,6 +43,7 @@ mod engine_misuse;
 mod json;
 mod library_load;
 mod logging;
+mod prompt_reads;
 mod require;
 mod sandbox;
 mod section_vm;

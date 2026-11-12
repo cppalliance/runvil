@@ -1,6 +1,7 @@
-//! `prompt.section` and `prompt.list`: what each returns for a relative
-//! path and for a path from the top, the only calls that raise, and the
-//! reads from H1 and a library.
+//! `prompt.section`, `prompt.section_or`, and `prompt.list`: what each
+//! returns for a relative path and for a path from the top, what each
+//! does when the path names no section, the calls that raise from all
+//! three, and the reads from H1 and a library.
 
 use super::*;
 
@@ -44,7 +45,8 @@ Other prose.\n\n\
 /// `../name` is a sibling. `prompt.section` returns the section's own raw
 /// Markdown and `prompt.list` its pre-parsed items in order. A niece, a
 /// grandchild, the caller itself, and a name no section has are no
-/// neighbor's name, so each reads as `nil` from both.
+/// neighbor's name: `prompt.section` raises for each, and
+/// `prompt.section_or` and `prompt.list` return `nil`.
 #[test]
 fn a_relative_path_reads_a_child_or_a_sibling() {
     let main = prompt(
@@ -59,8 +61,10 @@ fn a_relative_path_reads_a_child_or_a_sibling() {
             assert(#nums == 3 and nums[1] == 'one' and nums[2] == 'two' and nums[3] == 'three', 'a sibling list reads its items in order')
             assert(prompt.section('../Nums') == '1. one\\n2. two\\n3. three', 'a list section reads its raw Markdown too')
             assert(prompt.section('../Empty') == '', 'an empty section reads as the empty string')
+            assert(prompt.section_or('Kid') == prompt.section('Kid'), 'both reads return a section that is there')
             for _, path in ipairs({'Niece', 'Grand', '../Kid', 'Nums', '../Main', '../Missing', '## Nums'}) do
-              assert(prompt.section(path) == nil, path .. ' must read nil from prompt.section')
+              assert(not pcall(prompt.section, path), path .. ' must raise from prompt.section')
+              assert(prompt.section_or(path) == nil, path .. ' must read nil from prompt.section_or')
               assert(prompt.list(path) == nil, path .. ' must read nil from prompt.list')
             end
             return prompt.section('../Rules')",
@@ -76,8 +80,8 @@ fn a_relative_path_reads_a_child_or_a_sibling() {
 
 /// A path from the top names any section, and the same one from
 /// everywhere: the caller itself, its parent, a grandchild, and a section
-/// nested under another parent. A path that names no section reads as
-/// `nil`.
+/// nested under another parent. A path that names no section raises from
+/// `prompt.section` and reads as `nil` from the other two.
 #[test]
 fn a_path_from_the_top_reads_any_section_from_any_place() {
     let reads = "
@@ -90,7 +94,8 @@ fn a_path_from_the_top_reads_any_section_from_any_place() {
         assert(prompt.section('/Tree/Leaf'):find('leaf', 1, true), 'a nested section with Lua reads')
         assert(prompt.section('/Tree'):find('Leaf', 1, true), 'its parent reads')
         for _, path in ipairs({'/Kid', '/Main/Niece', '/Missing/Kid', '/Other/Niece/Deeper', '/Reads/Main'}) do
-          assert(prompt.section(path) == nil, path .. ' must read nil from prompt.section')
+          assert(not pcall(prompt.section, path), path .. ' must raise from prompt.section')
+          assert(prompt.section_or(path) == nil, path .. ' must read nil from prompt.section_or')
           assert(prompt.list(path) == nil, path .. ' must read nil from prompt.list')
         end";
     let head = PromptSource::new()
@@ -113,14 +118,15 @@ fn a_path_from_the_top_reads_any_section_from_any_place() {
     );
 }
 
-/// A read raises only when the call itself is wrong: a target that is not a
+/// Every read raises when the call itself is wrong: a target that is not a
 /// string, a malformed path, or `prompt.list` naming a section with no
 /// pre-parsed items, whose message shows the path without the whitespace
-/// around it. A path that names no section is not a mistake, so it reads
-/// as `nil`. A `call` with the same path raises, and its error says where
-/// it looked and lists no section.
+/// around it. A path that names no section is an absence, not a mistake:
+/// `prompt.section` raises the not-found error, which is the one `call`
+/// raises for the same path, says where it looked, and lists no section,
+/// and `prompt.section_or` and `prompt.list` return `nil`.
 #[test]
-fn prompt_reads_raise_only_for_mistakes_in_the_call() {
+fn every_read_raises_for_a_mistake_and_only_section_raises_for_a_miss() {
     let main = prompt(
         "",
         &[(
@@ -131,7 +137,7 @@ fn prompt_reads_raise_only_for_mistakes_in_the_call() {
               assert(not ok, 'expected a raise for ' .. tostring(target))
               assert(tostring(err):find(needle, 1, true), tostring(target) .. ' must raise with ' .. needle .. ', got: ' .. tostring(err))
             end
-            for _, read in ipairs({prompt.section, prompt.list}) do
+            for _, read in ipairs({prompt.section, prompt.section_or, prompt.list}) do
               expect_raise(read, 42, 'section target must be a string, got integer')
               expect_raise(read, '', 'section path \"\" has an empty step')
               expect_raise(read, 'Kid/', 'section path \"Kid/\" has an empty step')
@@ -139,7 +145,17 @@ fn prompt_reads_raise_only_for_mistakes_in_the_call() {
               expect_raise(read, '..', 'section path \"..\" needs a name after \"..\"')
               expect_raise(read, 'Kid[1]', 'section path \"Kid[1]\" has an index; a path in a prompt takes none')
               expect_raise(read, '/Main/../Nums', 'section path \"/Main/../Nums\" uses \"..\"; a path from the top takes none')
-              for _, path in ipairs({'../Missing', 'Niece', '/Missing'}) do
+            end
+            local misses = {
+              ['../Missing'] = 'section `../Missing` not found: `/Main` has no sibling `Missing`',
+              ['Niece'] = 'section `Niece` not found: `/Main` has no child `Niece`',
+              ['  Nums '] = 'section `Nums` not found: `/Main` has no child `Nums`',
+              ['/Missing'] = 'section `/Missing` not found: the top level has no section `Missing`',
+              ['/Other/Neice'] = 'section `/Other/Neice` not found: `/Other` has no child `Neice`',
+            }
+            for path, message in pairs(misses) do
+              expect_raise(prompt.section, path, message)
+              for _, read in ipairs({prompt.section_or, prompt.list}) do
                 local ok, value = pcall(read, path)
                 assert(ok and value == nil, path .. ' must read as nil, not raise: ' .. tostring(value))
               end
@@ -147,10 +163,10 @@ fn prompt_reads_raise_only_for_mistakes_in_the_call() {
             expect_raise(prompt.list, '  ../Rules  ', 'section `../Rules` has no pre-parsed items')
             expect_raise(prompt.list, '/Empty', 'section `/Empty` has no pre-parsed items')
             assert(prompt.section('../Rules') ~= nil, 'prompt.section reads a section prompt.list refuses')
-            local ok, err = pcall(call, '../Missing')
-            assert(not ok, 'a call to a missing section still raises')
-            local message = tostring(err)
-            assert(message:find('section `../Missing` not found: `/Main` has no sibling `Missing`', 1, true), 'the call error says where it looked: ' .. message)
+            local ok_call, err_call = pcall(call, '../Missing'); local ok_read, err_read = pcall(prompt.section, '../Missing')
+            assert(not ok_call and not ok_read, 'both raise for a missing section')
+            assert(tostring(err_call) == tostring(err_read), tostring(err_call) .. ' vs ' .. tostring(err_read))
+            local message = tostring(err_read)
             for _, other in ipairs({'Other', 'Kid', 'Nums', 'Niece', 'Grand'}) do
               assert(not message:find(other, 1, true), 'the error lists ' .. other .. ': ' .. message)
             end
@@ -161,7 +177,7 @@ fn prompt_reads_raise_only_for_mistakes_in_the_call() {
     assert_eq!(
         trace.text(),
         "ok",
-        "every raise must be caught and every miss must read nil"
+        "every raise must be caught and every lenient miss must read nil"
     );
 }
 
@@ -177,8 +193,8 @@ fn prompt_reads_work_in_h1_and_a_library() {
             "
             require '/kid_reader'
             assert(prompt.section('Main') ~= nil, 'a top-level section is a child of the H1')
-            assert(prompt.section('Kid') == nil, 'a nested section is no child of the H1')
-            assert(prompt.section('../Main') == nil, 'the H1 has no siblings')
+            assert(prompt.section_or('Kid') == nil, 'a nested section is no child of the H1')
+            assert(prompt.section_or('../Main') == nil, 'the H1 has no siblings')
             assert(kids_at_load == nil, 'the load-time read in the H1 resolves from the H1')
             assert(kid_items() == nil, 'a library function reads from the H1')
             var.nums = table.concat(prompt.list('Nums'), ',')",

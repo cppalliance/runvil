@@ -87,24 +87,44 @@ fn a_jump_from_the_h1_lands_on_a_top_level_section_and_never_descends() {
     assert!(!target.descends, "the walk already runs at the top level");
 }
 
+/// The Markdown a read of `path` from `origin` finds, or the message of
+/// its not-found error.
+fn read(prompt: &Prompt, origin: Origin<'_>, path: &str) -> std::result::Result<String, String> {
+    match read_section(path, prompt, origin).expect("the path is well-formed") {
+        SectionRead::Found(text) => Ok(text.markdown),
+        SectionRead::Missing(error) => Err(error.to_string()),
+    }
+}
+
 #[test]
-fn a_read_sees_the_named_sections_own_markdown_or_nothing() {
+fn a_read_finds_the_named_sections_own_markdown_or_the_not_found_error() {
     let prompt = library_tree();
     let own = at(&prompt, "/Grand/Parent/Self");
     let origin = Origin::Section(&own);
     for path in ["../Sibling", "/Grand/Parent/Sibling", "/Top/Helpers"] {
-        let text = read_section(path, &prompt, origin)
-            .expect("the path is well-formed")
-            .expect("the section is there");
-        assert_eq!(text.markdown, "x", "{path}");
+        assert_eq!(read(&prompt, origin, path).as_deref(), Ok("x"), "{path}");
     }
-    let lib = read_section("/Lib", &prompt, origin)
-        .expect("the path is well-formed")
-        .expect("the section is there");
-    assert!(lib.markdown.starts_with("Intro."), "{}", lib.markdown);
-    for path in ["Sibling", "../Missing", "/Grand/Missing"] {
-        let missing = read_section(path, &prompt, origin).expect("the path is well-formed");
-        assert_eq!(missing, None, "{path}");
+    let lib = read(&prompt, origin, "/Lib").expect("the section is there");
+    assert!(lib.starts_with("Intro."), "{lib}");
+    for (path, message) in [
+        (
+            "Sibling",
+            "section `Sibling` not found: `/Grand/Parent/Self` has no child `Sibling`",
+        ),
+        (
+            "../Missing",
+            "section `../Missing` not found: `/Grand/Parent/Self` has no sibling `Missing`",
+        ),
+        (
+            "/Grand/Missing",
+            "section `/Grand/Missing` not found: `/Grand` has no child `Missing`",
+        ),
+    ] {
+        assert_eq!(
+            read(&prompt, origin, path),
+            Err(message.to_owned()),
+            "{path}"
+        );
     }
 }
 

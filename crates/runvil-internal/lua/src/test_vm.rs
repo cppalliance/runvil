@@ -21,7 +21,7 @@ use serde_json::{Value as Json, json};
 use crate::error::{self, Result};
 use crate::section::scalar_return;
 use crate::tests::recording::null_emitter;
-use crate::{Argv, OfferedTool, RosterEntry, SectionText, SectionVm, ToolSet};
+use crate::{Argv, OfferedTool, RosterEntry, SectionRead, SectionVm, ToolSet};
 
 /// The one guard-nonce seed of every test VM.
 pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([0x73; 32]);
@@ -408,8 +408,10 @@ impl<'a> TestVm<'a> {
         vm.install_engine_globals(&self.emitter, self.section, &access.scope)
             .expect("the Engine globals install");
         if self.shims {
-            vm.install_control_globals(|_| {
-                Ok::<Option<SectionText>, std::convert::Infallible>(None)
+            vm.install_control_globals(|path| {
+                Ok::<SectionRead, std::convert::Infallible>(SectionRead::Missing(
+                    crate::make_lua_runtime_error(format!("section `{path}` not found")),
+                ))
             })
             .expect("the control globals install");
             vm.install_coro_shims(1)

@@ -7,35 +7,32 @@
 //! direct child. The parent, the parent's siblings, a sibling's children,
 //! and grandchildren have no relative form. The scheduler's chains resolve
 //! jumps and `call` and `tasks.spawn` targets, fanout workers included,
-//! through [`resolve_jump_target`]. The `prompt.section` and `prompt.list`
-//! reads take a path from the top as well, which names any section, and
-//! [`read_section`] resolves them. `require` takes only a path from the
+//! through [`resolve_jump_target`]. The `prompt` reads take a path from
+//! the top as well, which names any section, and [`read_section`]
+//! resolves them. `require` takes only a path from the
 //! top, and [`resolve_library`] turns the section it names into a
 //! [`Library`] keyed by the section's position.
 
-use crate::lua::{Library, LibraryBlock, LibraryKey, SectionText};
+use crate::lua::{Library, LibraryBlock, LibraryKey, SectionRead, SectionText};
 use crate::prompt::{Block, Prompt, Section};
-use crate::section_path::{self, Origin};
+use crate::section_path::{self, Lookup, Origin};
 use crate::section_pos::SectionPos;
 use crate::{Result, error};
 
 /// What a prompt read sees of the section `path` names from `origin`: its
-/// own raw Markdown and its pre-parsed list items, or `None` when the path
-/// names no section.
+/// own raw Markdown and its pre-parsed list items, or the not-found error
+/// when the path names no section.
 ///
 /// # Errors
 /// Returns a `LuaRuntime` failure when the path is malformed (see
 /// [`section_path::find`]).
-pub(super) fn read_section(
-    path: &str,
-    prompt: &Prompt,
-    origin: Origin<'_>,
-) -> Result<Option<SectionText>> {
-    let Some(pos) = section_path::find(path, prompt, origin)?.found() else {
-        return Ok(None);
+pub(super) fn read_section(path: &str, prompt: &Prompt, origin: Origin<'_>) -> Result<SectionRead> {
+    let pos = match section_path::find(path, prompt, origin)? {
+        Lookup::Found(pos) => pos,
+        Lookup::Missing(error) => return Ok(SectionRead::Missing(error)),
     };
     let section = found_section(prompt, &pos)?;
-    Ok(Some(SectionText {
+    Ok(SectionRead::Found(SectionText {
         markdown: section.markdown().to_owned(),
         items: section
             .items()

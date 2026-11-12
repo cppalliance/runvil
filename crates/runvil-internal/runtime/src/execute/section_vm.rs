@@ -24,7 +24,7 @@ use runvil_types::emitter::Emitter;
 use runvil_types::packs::Prelude;
 use runvil_vfs::{Access, ScopeHandle};
 
-use crate::lua::{Library, ProseState, SectionText, SectionVm, Uninjected};
+use crate::lua::{Library, ProseState, SectionRead, SectionVm, Uninjected};
 use crate::model::ModelBinding;
 use crate::{Error, Result, error};
 
@@ -133,7 +133,7 @@ pub(crate) fn setup_section_vm<R, L, P>(
     render: P,
 ) -> Result<SectionVm>
 where
-    R: Fn(String) -> std::result::Result<Option<SectionText>, Error> + Send + Sync + 'static,
+    R: Fn(String) -> std::result::Result<SectionRead, Error> + Send + Sync + 'static,
     L: Fn(String) -> std::result::Result<Library, Error> + Send + Sync + 'static,
     P: Fn(&str, Option<NonZeroU32>, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {
@@ -171,7 +171,7 @@ fn install_after_injection<R, L, P>(
     render: P,
 ) -> Result<()>
 where
-    R: Fn(String) -> std::result::Result<Option<SectionText>, Error> + Send + Sync + 'static,
+    R: Fn(String) -> std::result::Result<SectionRead, Error> + Send + Sync + 'static,
     L: Fn(String) -> std::result::Result<Library, Error> + Send + Sync + 'static,
     P: Fn(&str, Option<NonZeroU32>, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {

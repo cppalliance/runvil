@@ -31,7 +31,7 @@ use runvil_types::untrusted::GuardNonce;
 use serde_json::json;
 
 use crate::execute::section_vm::{SectionVmSetup, VmSeed, setup_section_vm};
-use crate::lua::{Answer, Argv, Library, Request, SectionText, SectionVm, ToolSet, YieldParse};
+use crate::lua::{Answer, Argv, Library, Request, SectionRead, SectionVm, ToolSet, YieldParse};
 use crate::model::ModelSet;
 use crate::test_support::fresh_access;
 use crate::test_support::recording::null_emitter;
@@ -142,7 +142,11 @@ fn set_up_vm(binds: &VmBinds<'_>) -> SectionVm {
         preludes: &[],
         raw_shims: false,
     };
-    let read = |_: String| -> std::result::Result<Option<SectionText>, crate::Error> { Ok(None) };
+    let read = |path: String| -> std::result::Result<SectionRead, crate::Error> {
+        Ok(SectionRead::Missing(crate::error::make_lua_runtime_error(
+            format!("section `{path}` not found"),
+        )))
+    };
     let resolve = |path: String| -> std::result::Result<Library, crate::Error> {
         Err(crate::error::make_lua_runtime_error(format!(
             "section `{path}` not found"

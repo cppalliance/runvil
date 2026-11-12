@@ -182,8 +182,8 @@ fn a_running_child_cannot_jump_to_its_parents_sibling() {
     let rendered = failure("jump('/B')");
     assert!(
         rendered.contains(
-            "section path \"/B\" starts with \"/\"; only require and prompt.section take a \
-             path from the top"
+            "section path \"/B\" starts with \"/\"; only require, prompt.section, and \
+             prompt.section_or take a path from the top"
         ),
         "a jump takes a relative path: {rendered}"
     );

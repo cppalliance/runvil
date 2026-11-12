@@ -154,7 +154,9 @@ pub use crate::protocol::{
     ToolCallOutcome, ToolCallRecord, VfsOp, VfsOutcome, YieldParse,
 };
 pub use crate::scope::{OfferMode, OfferedTool, Offers, RenderedTools, ToolCallCounts};
-pub use crate::section::{Library, LibraryBlock, LibraryKey, LuaBlockResult, SectionText};
+pub use crate::section::{
+    Library, LibraryBlock, LibraryKey, LuaBlockResult, SectionRead, SectionText,
+};
 pub use crate::vm::{
     CoroStep, InjectFailure, Injected, SectionVm, Uninjected, current_catalog_packs,
     current_dynamic_set, current_static_set,

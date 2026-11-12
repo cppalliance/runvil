@@ -259,8 +259,8 @@ fn the_functions_that_run_a_section_take_no_path_from_the_top() {
             assert_eq!(
                 run(&prompt, origin, path),
                 failed(&format!(
-                    "section path \"{path}\" starts with \"/\"; only require and \
-                     prompt.section take a path from the top"
+                    "section path \"{path}\" starts with \"/\"; only require, \
+                     prompt.section, and prompt.section_or take a path from the top"
                 ))
             );
         }
@@ -390,12 +390,4 @@ fn a_slash_and_a_trailing_bracketed_number_in_a_title_are_escaped() {
         run(&prompt, Origin::Section(&io), "Missing"),
         failed(r"section `Missing` not found: `/Input\/Output` has no child `Missing`")
     );
-}
-
-#[test]
-fn a_miss_is_none_to_a_caller_that_asks_only_whether_the_section_is_there() {
-    let prompt = prompt(NEIGHBORS);
-    let found = find("/Main", &prompt, Origin::H1).unwrap().found();
-    assert_eq!(found, Some(at(&prompt, "/Main")));
-    assert_eq!(find("/Nope", &prompt, Origin::H1).unwrap().found(), None);
 }
