@@ -184,7 +184,7 @@ fn a_tool_in_a_spawned_task_forks_from_the_task_and_the_owner_reads_its_write_af
         # Task\n\n\
         ## Main\n\n\
         ```lua\n\
-        local t = tasks.spawn('## Worker')\n\
+        local t = tasks.spawn('../Worker')\n\
         tasks.join({ t })\n\
         return store.read('out.txt')\n\
         ```\n\n\
@@ -258,7 +258,7 @@ fn a_canceled_tasks_tool_call_is_joined_and_its_later_writes_are_refused() {
         # Cancel\n\n\
         ## Main\n\n\
         ```lua\n\
-        local a = tasks.spawn('## Task')\n\
+        local a = tasks.spawn('../Task')\n\
         store.exists('p1')\n\
         store.exists('p2')\n\
         tasks.cancel(a)\n\

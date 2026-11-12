@@ -54,8 +54,8 @@ fn a_call_child_and_a_spawned_task_inherit_the_parents_switch() {
         (
             "## Main",
             "models.use('strong')\n\
-             local viaCall = call('## Child')\n\
-             local t = tasks.spawn('## Child')\n\
+             local viaCall = call('../Child')\n\
+             local t = tasks.spawn('../Child')\n\
              local _, ok, viaTask = tasks.join_any({ t })\n\
              assert(ok)\n\
              return viaCall .. '|' .. viaTask",
@@ -72,10 +72,10 @@ fn a_childs_switch_never_reaches_its_parent_or_a_sibling() {
         (
             "## Main",
             "models.use('strong')\n\
-             local viaCall = call('## Switcher')\n\
+             local viaCall = call('../Switcher')\n\
              local after = models.current().label\n\
-             local a = tasks.spawn('## Switcher')\n\
-             local b = tasks.spawn('## Reader')\n\
+             local a = tasks.spawn('../Switcher')\n\
+             local b = tasks.spawn('../Reader')\n\
              local _, okA, labelA = tasks.join_any({ a })\n\
              local _, okB, labelB = tasks.join_any({ b })\n\
              assert(okA and okB)\n\
@@ -104,7 +104,7 @@ fn a_switch_in_h1_is_the_starting_model_of_the_root_walk() {
 #[test]
 fn a_switch_in_h1_reaches_the_walk_a_jump_starts() {
     let md = sections(&[
-        ("", "models.use('strong')\njump('## Target')"),
+        ("", "models.use('strong')\njump('Target')"),
         ("## Skipped", "error('the jump must skip this section')"),
         ("## Target", "return models.current().label"),
     ]);
@@ -123,8 +123,8 @@ fn a_queued_task_keeps_the_model_its_parent_had_when_it_spawned_it() {
             "## Main",
             "tasks.concurrency(1)\n\
              models.use('strong')\n\
-             local a = tasks.spawn('## Child')\n\
-             local b = tasks.spawn('## Child')\n\
+             local a = tasks.spawn('../Child')\n\
+             local b = tasks.spawn('../Child')\n\
              models.use('fast')\n\
              local _, okA, first = tasks.join_any({ a })\n\
              local _, okB, second = tasks.join_any({ b })\n\
@@ -148,7 +148,7 @@ fn all_arms_of_one_fanout_start_on_the_same_model() {
             "## Main",
             "tasks.concurrency(1)\n\
              models.use('strong')\n\
-             local r = tasks.fanout('### Arm', {'a', 'b', 'c'})\n\
+             local r = tasks.fanout('Arm', {'a', 'b', 'c'})\n\
              return table.concat(r, ',')",
         ),
         ("### Arm", "return models.current().label"),

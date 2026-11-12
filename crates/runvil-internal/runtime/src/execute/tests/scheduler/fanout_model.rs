@@ -11,7 +11,7 @@ fn a_three_argument_fanout_runs_every_arm_on_the_given_model() {
     let md = sections(&[
         (
             "## Main",
-            "local r = tasks.fanout(models.get('fast'), '### Arm', {'a', 'b', 'c'})\n\
+            "local r = tasks.fanout(models.get('fast'), 'Arm', {'a', 'b', 'c'})\n\
              return table.concat(r, ',')",
         ),
         ("### Arm", "return models.current().model_id"),
@@ -26,7 +26,7 @@ fn the_parents_model_after_a_three_argument_fanout_is_what_it_was_before() {
         (
             "## Main",
             "models.use('strong')\n\
-             local r = tasks.fanout(models.get('fast'), '### Arm', {'a', 'b'})\n\
+             local r = tasks.fanout(models.get('fast'), 'Arm', {'a', 'b'})\n\
              return table.concat(r, ',') .. '|' .. models.current().label",
         ),
         ("### Arm", "return models.current().label"),
@@ -47,14 +47,14 @@ fn a_spawn_failure_part_way_still_restores_the_parents_model() {
              if var.n == 1 then models.use('strong') end\n\
              if var.n >= 9 then\n\
                local before = models.current().label\n\
-               local ok, err = pcall(tasks.fanout, models.get('fast'), '### Worker', {'x'})\n\
+               local ok, err = pcall(tasks.fanout, models.get('fast'), 'Worker', {'x'})\n\
                local cap = tostring(err):match('recursion exceeded cap of %d+')\n\
                return before .. '|' .. tostring(ok) .. '|' .. tostring(cap) .. '|' .. models.current().label\n\
              end\n\
-             return call('## Beta')",
+             return call('../Beta')",
         ),
         ("### Worker", "return item"),
-        ("## Beta", "var.n = var.n + 1\nreturn call('## Alpha')"),
+        ("## Beta", "var.n = var.n + 1\nreturn call('../Alpha')"),
     ]);
     let trace = chain_scenario(&md).run();
     assert_eq!(
@@ -68,7 +68,7 @@ fn a_raw_id_handle_fans_out_with_no_model_supplied() {
     let md = sections(&[
         (
             "## Main",
-            "local r = tasks.fanout(models.get('vendor/raw-model'), '### Arm', {'a', 'b'})\n\
+            "local r = tasks.fanout(models.get('vendor/raw-model'), 'Arm', {'a', 'b'})\n\
              return table.concat(r, ',')",
         ),
         ("### Arm", "return models.current().model_id"),
@@ -91,7 +91,7 @@ fn a_failing_arm_still_leaves_the_parents_model_as_it_was_before_the_call() {
             "## Main",
             "models.use('strong')\n\
              local before = models.current().label\n\
-             local ok = pcall(tasks.fanout, models.get('fast'), '### Arm', {'a'})\n\
+             local ok = pcall(tasks.fanout, models.get('fast'), 'Arm', {'a'})\n\
              return before .. '|' .. tostring(ok) .. '|' .. models.current().label",
         ),
         ("### Arm", "error('boom')"),
@@ -107,11 +107,11 @@ fn a_first_argument_that_is_not_a_model_handle_is_refused() {
             "## Main",
             "local out = {}\n\
              for _, first in ipairs({ 'fast', 5 }) do\n\
-               local ok, err = pcall(tasks.fanout, first, '### Arm', {'a'})\n\
+               local ok, err = pcall(tasks.fanout, first, 'Arm', {'a'})\n\
                assert(not ok, 'a non-handle first argument must be refused')\n\
                out[#out + 1] = tostring(err)\n\
              end\n\
-             local ok, err = pcall(tasks.fanout, nil, '### Arm', {'a'})\n\
+             local ok, err = pcall(tasks.fanout, nil, 'Arm', {'a'})\n\
              assert(not ok, 'a nil first argument must be refused')\n\
              out[#out + 1] = tostring(err)\n\
              return table.concat(out, '\\n')",
@@ -135,8 +135,8 @@ fn an_argument_count_other_than_two_or_three_is_refused() {
     let md = sections(&[(
         "## Main",
         "local ok0, err0 = pcall(tasks.fanout)\n\
-         local ok1, err1 = pcall(tasks.fanout, '### Arm')\n\
-         local ok4, err4 = pcall(tasks.fanout, models.get('fast'), '### Arm', {'a'}, 4)\n\
+         local ok1, err1 = pcall(tasks.fanout, 'Arm')\n\
+         local ok4, err4 = pcall(tasks.fanout, models.get('fast'), 'Arm', {'a'}, 4)\n\
          assert(not ok0 and not ok1 and not ok4, 'a wrong argument count must be refused')\n\
          return tostring(err0) .. '\\n' .. tostring(err1) .. '\\n' .. tostring(err4)",
     )]);
@@ -155,7 +155,7 @@ fn an_arms_own_switch_stays_inside_that_arm() {
     let md = sections(&[
         (
             "## Main",
-            "local r = tasks.fanout(models.get('fast'), '### Arm', {'a', 'b'})\n\
+            "local r = tasks.fanout(models.get('fast'), 'Arm', {'a', 'b'})\n\
              return table.concat(r, ',') .. '|' .. models.current().label",
         ),
         (
@@ -172,7 +172,7 @@ fn models_use_default_inside_an_arm_selects_the_default_role() {
     let md = sections(&[
         (
             "## Main",
-            "local r = tasks.fanout(models.get('fast'), '### Arm', {'a', 'b'})\n\
+            "local r = tasks.fanout(models.get('fast'), 'Arm', {'a', 'b'})\n\
              return table.concat(r, ',')",
         ),
         (
@@ -190,7 +190,7 @@ fn a_two_argument_fanout_gives_every_arm_the_parents_current_model() {
         (
             "## Main",
             "models.use('strong')\n\
-             local r = tasks.fanout('### Arm', {'a', 'b'})\n\
+             local r = tasks.fanout('Arm', {'a', 'b'})\n\
              return table.concat(r, ',')",
         ),
         ("### Arm", "return models.current().label"),

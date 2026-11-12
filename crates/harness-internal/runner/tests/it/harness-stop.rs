@@ -34,8 +34,8 @@ const STOPS_ALL: &str = "---\nname: stops\ndescription: d\nrunvil: 0\n\
     uses:\n  - tests/harness\n---\n\n\
     # Stops\n\n\
     ## Main\n\n```lua\n\
-    local chat = tasks.spawn('## Chat')\n\
-    local tool = tasks.spawn('## Tool')\n\
+    local chat = tasks.spawn('../Chat')\n\
+    local tool = tasks.spawn('../Tool')\n\
     local ok, err = pcall(tasks.join_any, { chat, tool }, { timeout = 30 })\n\
     local results = tasks.join({ chat, tool })\n\
     return tostring(ok) .. ':' .. err.kind .. '|' .. results[1].result .. '|' .. results[2].result\n```\n\n\

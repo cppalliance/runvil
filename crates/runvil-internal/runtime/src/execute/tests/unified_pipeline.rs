@@ -35,7 +35,7 @@ fn finite_pipeline_runs_the_unified_surface_end_to_end() {
             messages:user(var.draft)
             assert(models.loop() == nil, 'models.loop returns nil')
             assert(messages[#messages].role == 'assistant', 'the terminal record is the assistant reply')
-            return call('## Deliver', messages[#messages].content)",
+            return call('../Deliver', messages[#messages].content)",
         )
         .section("Deliver", "return 'delivered: ' .. args");
     let trace = Scenario::new(source.build())

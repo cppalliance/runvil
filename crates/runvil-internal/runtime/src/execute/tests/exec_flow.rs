@@ -1,6 +1,6 @@
 //! Tests for section walk control flow: `call`, `jump`, `fanout`, the `prompt` reads, and `var`.
 
-use runvil_prompt::test_support::{PromptSource, synthetic_section};
+use runvil_prompt::test_support::PromptSource;
 
 use super::context::arm_fanout;
 use super::*;
@@ -52,7 +52,7 @@ fn call_runs_named_section_as_subroutine() {
         .section(
             "Main",
             "
-            local by_name = call('## Research')
+            local by_name = call('../Research')
             assert(by_name == 'research-reply')
             assert(store.read('evidence.md') == 'research-reply')
             return by_name",
@@ -86,11 +86,11 @@ fn nested_call_without_input_inherits_the_chains_args() {
         .section(
             "Main",
             "
-            local r = call('## Sub', 'chain-args')
+            local r = call('../Sub', 'chain-args')
             assert(r == 'inner-reply')
             return r",
         )
-        .section("Sub", "return call('## Inner')")
+        .section("Sub", "return call('../Inner')")
         .prose(
             "Inner",
             "
@@ -118,25 +118,6 @@ fn nested_call_without_input_inherits_the_chains_args() {
         !text.contains("run-args"),
         "the run's args must not leak into the chain: {text}"
     );
-}
-
-/// Two top-level sections sharing one name error loudly as ambiguous rather
-/// than silently resolving to the first. The parser refuses such a prompt,
-/// so the jumper's visible set is built by hand.
-#[test]
-fn duplicate_top_level_section_names_error_loudly() {
-    let sections = vec![
-        synthetic_section("Main", 2, Vec::new()),
-        synthetic_section("Dup", 2, Vec::new()),
-        synthetic_section("Dup", 2, Vec::new()),
-    ];
-    let error = crate::heading_address::resolve_visible(
-        "## Dup",
-        crate::heading_address::Visible::of(&sections, crate::heading_address::SectionIndex::FIRST),
-    )
-    .expect_err("two visible sections with one name must be ambiguous");
-    let rendered = error.to_string();
-    assert!(rendered.contains("ambiguous"), "error was: {rendered}");
 }
 
 /// [`arm_fanout`] with a `### Worker` whose Lua is `worker`.

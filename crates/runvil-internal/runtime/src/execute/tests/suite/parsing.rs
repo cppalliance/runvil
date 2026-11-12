@@ -79,7 +79,7 @@ fn verify_require_library(prompt: &Prompt) {
     assert!(prepare.prologue().is_none());
     assert_eq!(
         prepare.epilog().map(LuaProgram::source),
-        Some("require '## helpers'\nvar.subject = normalize(args)")
+        Some("require '/helpers'\nvar.subject = normalize(args)")
     );
     assert_eq!(prepare.children().len(), 1);
     assert_eq!(prepare.children()[0].name(), "Author note");
@@ -94,7 +94,7 @@ fn verify_require_library(prompt: &Prompt) {
     assert_eq!(finish.prose(), "Return the normalized subject.");
     assert_eq!(
         finish.epilog().map(LuaProgram::source),
-        Some("require '## helpers'\nreturn normalize(var.subject)")
+        Some("require '/helpers'\nreturn normalize(var.subject)")
     );
     assert!(finish.children().is_empty());
 

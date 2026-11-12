@@ -173,7 +173,7 @@ pub(crate) fn run_with_child_and_cancel(main: &str, child: &str, cancel: &Cancel
 
 /// A main section that parks on a 30-second timer beside its child: the
 /// child's own tool call and the timer are two effects out at once.
-pub(crate) const TIMED_MAIN: &str = "local t = tasks.spawn('## Child')\n\
+pub(crate) const TIMED_MAIN: &str = "local t = tasks.spawn('../Child')\n\
      local _first, _ok, result = tasks.join_any({ t }, { timeout = 30 })\n\
      return result";
 

@@ -157,7 +157,7 @@ fn json_encode_of_a_fanout_result_gives_its_fields_as_an_object() {
             (
                 "Parent",
                 "
-                local r = tasks.fanout('### Worker', { 'alpha' })
+                local r = tasks.fanout('Worker', { 'alpha' })
                 return json.encode(r[1])",
             ),
             ("### Worker", "return item .. '-' .. sys.index"),

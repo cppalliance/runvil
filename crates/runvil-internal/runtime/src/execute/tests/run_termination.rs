@@ -23,7 +23,7 @@ const CHILD_PARKED_ON_ROUND: &str = "---\nname: t\ndescription: d\nrunvil: 0\n--
     # Termination\n\n\
     ## Spawner\n\n\
     ```lua\n\
-    local t = tasks.spawn('## Child')\n\
+    local t = tasks.spawn('../Child')\n\
     tasks.join_any({ t })\n\
     return 'unreachable'\n\
     ```\n\n\

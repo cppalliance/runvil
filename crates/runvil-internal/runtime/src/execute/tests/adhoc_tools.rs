@@ -177,7 +177,7 @@ fn a_handler_that_calls_jump_fails_the_run() {
         text("unreachable"),
     ]);
     let only = "tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function(args)
-                  jump('## Other')
+                  jump('../Other')
                 end))
                 messages:user('Use the tool.')
                 models.loop()
@@ -199,7 +199,7 @@ const JUMP_REFUSAL: &str = "jump is unavailable inside an adhoc tool handler";
 /// block saved before defining it.
 const SAVED_JUMP_GRAB: &str = "local j = jump\n\
      tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function(args)\n\
-       j('## Other')\n\
+       j('../Other')\n\
      end))\n";
 
 #[test]
@@ -255,13 +255,13 @@ fn jump_stays_refused_in_an_outer_handler_after_an_inner_one_returns() {
         "tools.offer(tools.adhoc({{ name = 'inner', description = 'Inner' }}, function() return 'inner' end))
          tools.offer(tools.adhoc({{ name = 'outer', description = 'Outer' }}, function()
            local inner = tools.call('adhoc/inner', {{}})
-           local ok, err = pcall(jump, '## Other')
+           local ok, err = pcall(jump, '../Other')
            assert(not ok, 'jump is still refused in the outer handler')
            assert(tostring(err):find('{JUMP_REFUSAL}', 1, true), tostring(err))
            return inner
          end))
          assert(tools.call('adhoc/outer', {{}}) == 'inner', 'the outer handler returns')
-         jump('## Other')"
+         jump('../Other')"
     );
     let trace = loop_scenario(prompt("", &[("Only", &only), OTHER])).run();
     assert_eq!(trace.text(), "jumped");
@@ -278,7 +278,7 @@ fn jump_works_in_the_same_block_after_the_loop_returns() {
                 end))
                 messages:user('Use the tool.')
                 models.loop()
-                jump('## Other')";
+                jump('../Other')";
     let trace = loop_scenario(prompt("", &[("Only", only), OTHER]))
         .chat(&gateway)
         .run();

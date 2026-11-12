@@ -1,166 +1,90 @@
-//! Walk-target resolution: the visible-set machinery every control transfer
-//! resolves against, and the wider reach `require` resolves libraries in.
+//! Walk-target resolution: where a control transfer lands, what a prompt
+//! read sees, and the library a `require` loads.
 //!
-//! A control transfer or a prompt read addresses only the running section's
-//! visible set: its home slice minus itself, plus its direct children. The
-//! parent, aunts/uncles, nieces/nephews, and grandchildren are never in the
-//! set, so a resolution error that lists the set cannot leak the rest of
-//! the document's structure. The scheduler's chains resolve jumps and
-//! `call` and `tasks.spawn` targets, fanout workers included, through these
-//! helpers, and the
-//! `prompt.section` and `prompt.list` reads resolve through them too, so
-//! every such surface agrees on what a heading may name. `require` alone
-//! also reaches the siblings of each ancestor (see [`Reachable`]), and
-//! [`resolve_library`] turns the section it names into a [`Library`] keyed
-//! by the section's position.
+//! Each of them names a section by a path and resolves it through
+//! [`section_path`]. A control transfer takes a relative path, so it
+//! reaches only a neighbor of the section it starts from: a sibling or a
+//! direct child. The parent, the parent's siblings, a sibling's children,
+//! and grandchildren have no relative form. The scheduler's chains resolve
+//! jumps and `call` and `tasks.spawn` targets, fanout workers included,
+//! through [`resolve_jump_target`]. The `prompt.section` and `prompt.list`
+//! reads take a path from the top as well, which names any section, and
+//! [`read_section`] resolves them. `require` takes only a path from the
+//! top, and [`resolve_library`] turns the section it names into a
+//! [`Library`] keyed by the section's position.
 
-use crate::heading_address::{self, Reachable, SectionIndex, SectionPos, SlicePath, Visible};
 use crate::lua::{Library, LibraryBlock, LibraryKey, SectionText};
-use crate::prompt::{Block, Prompt, Section, detail};
+use crate::prompt::{Block, Prompt, Section};
+use crate::section_path::{self, Origin};
+use crate::section_pos::SectionPos;
 use crate::{Result, error};
 
-/// The position of `target` in `slice`, matched on the parser-unique
-/// `(level, name)` pair; `None` when the slice does not contain it.
-pub(super) fn section_position(slice: &[Section], target: &Section) -> Option<SectionIndex> {
-    slice
-        .iter()
-        .position(|s| s.level() == target.level() && s.name() == target.name())
-        .map(SectionIndex::new)
-}
-
-/// The H1 pass's visible set: the whole top-level slice. H1 is
-/// section 0, so it excludes nothing and has no children.
-pub(super) fn h1_visible_sections(prompt: &Prompt) -> &[Section] {
-    detail::sections(prompt)
-}
-
-/// What a prompt read sees of the section `heading` names in a caller's
-/// visible set, read in place through `visible`: its own raw Markdown and
-/// its pre-parsed list items, or `None` when no visible section has that
-/// heading.
+/// What a prompt read sees of the section `path` names from `origin`: its
+/// own raw Markdown and its pre-parsed list items, or `None` when the path
+/// names no section.
 ///
 /// # Errors
-/// Returns a `LuaRuntime` failure when the heading is malformed or matches more
-/// than one visible section (see [`heading_address::find_visible`]).
-pub(super) fn read_visible(heading: &str, visible: Visible<'_>) -> Result<Option<SectionText>> {
-    Ok(
-        heading_address::find_visible(heading, visible)?.map(|section| SectionText {
-            markdown: section.markdown().to_owned(),
-            items: section
-                .items()
-                .iter()
-                .map(|item| item.as_str().to_owned())
-                .collect(),
-        }),
-    )
+/// Returns a `LuaRuntime` failure when the path is malformed (see
+/// [`section_path::find`]).
+pub(super) fn read_section(
+    path: &str,
+    prompt: &Prompt,
+    origin: Origin<'_>,
+) -> Result<Option<SectionText>> {
+    let Some(pos) = section_path::find(path, prompt, origin)?.found() else {
+        return Ok(None);
+    };
+    let section = found_section(prompt, &pos)?;
+    Ok(Some(SectionText {
+        markdown: section.markdown().to_owned(),
+        items: section
+            .items()
+            .iter()
+            .map(|item| item.as_str().to_owned())
+            .collect(),
+    }))
 }
 
-/// Where a jump, a `call`, or a spawn lands, resolved against the caller's
-/// visible set: the target's position, and whether reaching it descends
-/// into the caller's child slice.
+/// The section a lookup found at `pos`.
+///
+/// # Errors
+/// Returns an `Internal` failure when `pos` names no section, which a
+/// position a lookup returned never does.
+fn found_section<'p>(prompt: &'p Prompt, pos: &SectionPos) -> Result<&'p Section> {
+    pos.section(prompt).ok_or(error::make_internal_error(
+        "a resolved section path names no section",
+    ))
+}
+
+/// Where a jump, a `call`, or a spawn lands: the target's position, and
+/// whether reaching it descends into the caller's child slice.
 #[derive(Debug)]
 pub(super) struct JumpTarget {
     /// The target's position.
     pub(super) pos: SectionPos,
-    /// Whether the target is a direct child of the caller, so a jump to it
-    /// starts a child-level walk.
+    /// Whether the target is a direct child of a walked caller, so a jump
+    /// to it starts a child-level walk.
     pub(super) descends: bool,
 }
 
-/// Resolves `heading` against the visible set of the section at `jumper`
-/// (its sibling slice minus itself, plus its direct children), read in
-/// place through [`Visible::of`], and classifies the target: a direct
-/// child of the jumper starts a child-level walk; anything else is a
-/// sibling within the jumper's own slice.
-///
-/// Resolution is an exact `(level, name)` match (see
-/// [`heading_address::resolve_visible`]): two visible sections sharing an
-/// address error loudly as ambiguous instead of silently resolving to the
-/// first.
+/// Resolves the relative `path` from `origin` and classifies the target:
+/// a direct child of a walked section starts a child-level walk, and
+/// anything else is a section of the caller's own slice. The H1's
+/// children are the top-level sections, where the walk already runs, so
+/// its targets never descend.
 ///
 /// # Errors
-/// Returns a `LuaRuntime` failure when the heading is malformed, matches no visible
-/// section, or matches more than one.
+/// Returns a `LuaRuntime` failure when the path is malformed, is not one
+/// of the two relative forms, or names no section (see
+/// [`section_path::resolve_neighbor`]).
 pub(super) fn resolve_jump_target(
-    heading: &str,
+    path: &str,
     prompt: &Prompt,
-    jumper: &SectionPos,
+    origin: Origin<'_>,
 ) -> Result<JumpTarget> {
-    let siblings = jumper.siblings(prompt);
-    let jumper_section = jumper.section(prompt).ok_or(error::make_internal_error(
-        "a jumping section is absent from its sibling slice",
-    ))?;
-    let target = heading_address::resolve_visible(heading, Visible::of(siblings, jumper.index))?;
-    if let Some(index) = section_position(jumper_section.children(), target) {
-        return Ok(JumpTarget {
-            pos: jumper.child(index),
-            descends: true,
-        });
-    }
-    // `target` was resolved out of the visible set read from exactly these
-    // two slices, so a miss here is an internal invariant violation, not a
-    // user-facing Lua error.
-    let index = section_position(siblings, target).ok_or(error::make_internal_error(
-        "resolved jump target is absent from the jumper's sibling slice",
-    ))?;
-    Ok(JumpTarget {
-        pos: SectionPos {
-            slice: jumper.slice.clone(),
-            index,
-        },
-        descends: false,
-    })
-}
-
-/// Where a `require` resolves from: the H1 pass, or a walked section.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum RequireOrigin {
-    /// The H1 pass, which reaches every top-level section.
-    H1,
-    /// The walked section at this position.
-    Section(SectionPos),
-}
-
-impl RequireOrigin {
-    /// The position `key` names: its library section's own.
-    ///
-    /// # Errors
-    /// Returns an `Internal` failure when `key` is not one [`library_key`]
-    /// built.
-    fn from_key(key: &LibraryKey) -> Result<Self> {
-        let mut indices = key
-            .identity()
-            .split('.')
-            .map(str::parse)
-            .collect::<std::result::Result<Vec<usize>, _>>()
-            .map_err(|cause| {
-                error::make_internal_with_cause_error(
-                    "a library key names no section position",
-                    &cause,
-                )
-            })?;
-        let index = indices.pop().ok_or(error::make_internal_error(
-            "a library key names no section position",
-        ))?;
-        let slice = indices
-            .into_iter()
-            .fold(SlicePath::root(), |path, ancestor| {
-                path.child(SectionIndex::new(ancestor))
-            });
-        Ok(Self::Section(SectionPos {
-            slice,
-            index: SectionIndex::new(index),
-        }))
-    }
-
-    /// What a `require` from here can name in `prompt`.
-    fn reach<'p>(&'p self, prompt: &'p Prompt) -> Reachable<'p> {
-        let root = detail::sections(prompt);
-        match self {
-            Self::H1 => Reachable::top(root),
-            Self::Section(pos) => Reachable::of(root, pos),
-        }
-    }
+    let pos = section_path::resolve_neighbor(path, prompt, origin)?;
+    let descends = matches!(origin, Origin::Section(caller) if caller.slice != pos.slice);
+    Ok(JumpTarget { pos, descends })
 }
 
 /// The key naming the section at `pos`: every index along its path, then
@@ -177,36 +101,32 @@ fn library_key(pos: &SectionPos) -> LibraryKey {
     LibraryKey::new(indices.join("."))
 }
 
-/// Resolves `heading` for a `require` and builds the library it names:
-/// from the position `key` names when a library is loading, otherwise from
-/// `origin`.
+/// Resolves `path` for a `require` and builds the library it names. The
+/// path starts at the top of the prompt, so it names the same library
+/// wherever the `require` is written.
 ///
 /// # Errors
-/// Returns a `LuaRuntime` failure when the heading is malformed or names no
-/// section in the reach, the miss listing the reach and nothing else, and
-/// an `Internal` failure for a key [`library_key`] did not build or a block
-/// kind the Engine cannot run.
-pub(super) fn resolve_library(
-    prompt: &Prompt,
-    origin: &RequireOrigin,
-    heading: &str,
-    key: Option<&LibraryKey>,
-) -> Result<Library> {
-    let keyed = key.map(RequireOrigin::from_key).transpose()?;
-    let from = keyed.as_ref().unwrap_or(origin);
-    let reached = heading_address::resolve_reachable(heading, from.reach(prompt))?;
-    build_library(reached.section, library_key(&reached.pos))
+/// Returns a `LuaRuntime` failure when the path is malformed, does not
+/// start with `/`, or names no section, and an `Internal` failure for a
+/// block kind the Engine cannot run.
+pub(super) fn resolve_library(prompt: &Prompt, path: &str) -> Result<Library> {
+    let pos = section_path::resolve_from_top(path, prompt)?;
+    build_library(
+        found_section(prompt, &pos)?,
+        library_key(&pos),
+        section_path::path_from_top(prompt, &pos),
+    )
 }
 
-/// The library `section` makes under `key`: each Lua block in order,
-/// paired with the prose block right before it and the line that prose
-/// starts on, or with an empty template and no line when no prose block
-/// comes right before it. Prose after the last Lua block pairs with
-/// nothing.
+/// The library `section` makes under `key`, reported by `path`: each Lua
+/// block in order, paired with the prose block right before it and the
+/// line that prose starts on, or with an empty template and no line when
+/// no prose block comes right before it. Prose after the last Lua block
+/// pairs with nothing.
 ///
 /// # Errors
 /// Returns an `Internal` failure for a block kind the Engine cannot run.
-fn build_library(section: &Section, key: LibraryKey) -> Result<Library> {
+fn build_library(section: &Section, key: LibraryKey, path: String) -> Result<Library> {
     let mut blocks = Vec::new();
     let mut pending = None;
     for block in section.blocks() {
@@ -229,11 +149,7 @@ fn build_library(section: &Section, key: LibraryKey) -> Result<Library> {
             }
         }
     }
-    Ok(Library {
-        key,
-        heading: heading_address::section_heading(section),
-        blocks,
-    })
+    Ok(Library { key, path, blocks })
 }
 
 #[cfg(test)]

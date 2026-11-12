@@ -6,11 +6,11 @@ use serde_json::{Value, json};
 use super::support::{Scenario, TestResult, prompt, shout, text};
 
 const GREET: &str = "
-    local ask = tasks.spawn('## Ask')
-    local shout = tasks.spawn('## Shout')
+    local ask = tasks.spawn('../Ask')
+    local shout = tasks.spawn('../Shout')
     store.write('note.md', 'hello')
     local results = tasks.join({ ask, shout })
-    tasks.join_any({ tasks.spawn('## Quick') }, { timeout = 0.01 })
+    tasks.join_any({ tasks.spawn('../Quick') }, { timeout = 0.01 })
     return results[1].result .. ' / ' .. results[2].result
 ";
 

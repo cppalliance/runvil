@@ -51,7 +51,7 @@ struct PromptFile {
 }
 
 /// A condition the prompt author caused and can fix in Lua, such as an
-/// empty `messages` list or a heading that names no section, as a
+/// empty `messages` list or a path that names no section, as a
 /// `LuaRuntime` failure. The message is the specific failure as a noun
 /// phrase, with no `lua error:` label, since a failed run classifies it as
 /// a Lua failure.

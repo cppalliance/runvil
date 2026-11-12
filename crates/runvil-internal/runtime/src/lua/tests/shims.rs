@@ -34,9 +34,9 @@ fn models_infer_yields_a_well_formed_request() {
 fn call_yields_target_input_and_the_var_snapshot() {
     let var = json!({ "k": 1 });
     let vm = scheduler_vm(&ModelSet::default(), Some(&var));
-    match yielded_request(&vm, r###"return call("## Child", "override")"###) {
+    match yielded_request(&vm, r#"return call("../Child", "override")"#) {
         Request::Call { target, input, var } => {
-            assert_eq!(target, "## Child");
+            assert_eq!(target, "../Child");
             assert_eq!(input.as_deref(), Some("override"));
             assert_eq!(var, json!({ "k": 1 }));
         }
@@ -51,10 +51,7 @@ fn fanout_yields_a_spawn_per_member_starting_with_the_first() {
     // member as the `item` seed, its 1-based position as `index`, and the
     // caller's `var` snapshot.
     let vm = scheduler_vm(&ModelSet::default(), None);
-    match yielded_request(
-        &vm,
-        r####"return tasks.fanout("### Worker", {"a", "b"})"####,
-    ) {
+    match yielded_request(&vm, r#"return tasks.fanout("Worker", {"a", "b"})"#) {
         Request::Spawn {
             target,
             input,
@@ -62,7 +59,7 @@ fn fanout_yields_a_spawn_per_member_starting_with_the_first() {
             index,
             var,
         } => {
-            assert_eq!(target, "### Worker");
+            assert_eq!(target, "Worker");
             assert_eq!(input, None);
             assert_eq!(item, Some(json!("a")));
             assert_eq!(index, Some(1));
@@ -81,7 +78,7 @@ fn fanout_rejects_an_empty_collection_before_any_spawn() {
     let (kind, message): (String, String) = vm
         .lua()
         .load(
-            "local ok, err = pcall(tasks.fanout, '### Worker', {})\n\
+            "local ok, err = pcall(tasks.fanout, 'Worker', {})\n\
              assert(not ok, 'an empty collection must fail')\n\
              return err.kind, tostring(err)",
         )
@@ -99,7 +96,7 @@ fn tasks_spawn_yields_the_target_seeds_and_var() {
     let var = json!({ "k": 1 });
     let vm = scheduler_vm(&ModelSet::default(), Some(&var));
     let source =
-        r###"return tasks.spawn("## Child", { input = "in", item = { name = "a" }, index = 2 })"###;
+        r#"return tasks.spawn("../Child", { input = "in", item = { name = "a" }, index = 2 })"#;
     match yielded_request(&vm, source) {
         Request::Spawn {
             target,
@@ -108,7 +105,7 @@ fn tasks_spawn_yields_the_target_seeds_and_var() {
             index,
             var,
         } => {
-            assert_eq!(target, "## Child");
+            assert_eq!(target, "../Child");
             assert_eq!(input.as_deref(), Some("in"));
             assert_eq!(item, Some(json!({ "name": "a" })));
             assert_eq!(index, Some(2));
@@ -126,7 +123,7 @@ fn tasks_spawn_resumes_with_a_methodless_task_table() {
     let vm = scheduler_vm(&ModelSet::default(), None);
     let (thread, _yielded) = start(
         &vm,
-        "local t = tasks.spawn('## Child')\n\
+        "local t = tasks.spawn('../Child')\n\
          return t.task, getmetatable(t) == nil, next(t, 'task') == nil",
     );
     let (id, methodless, single_field): (String, bool, bool) = thread
@@ -143,7 +140,7 @@ fn tasks_spawn_rejects_non_table_options_at_the_call_site() {
     let (kind, message): (String, String) = vm
         .lua()
         .load(
-            "local ok, err = pcall(tasks.spawn, '## Child', 5)\n\
+            "local ok, err = pcall(tasks.spawn, '../Child', 5)\n\
              assert(not ok, 'a non-table opts argument must fail')\n\
              return err.kind, tostring(err)",
         )
@@ -184,7 +181,7 @@ fn an_adhoc_tool_handler_runs_inside_the_block_coroutine() {
         &vm,
         "local withheld\n\
          tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function(args)\n\
-           local ok, err = pcall(jump, '## Other')\n\
+           local ok, err = pcall(jump, '../Other')\n\
            withheld = not ok\n\
              and tostring(err):find('jump is unavailable inside an adhoc tool handler', 1, true) ~= nil\n\
            store.write('grab.txt', args.value)\n\

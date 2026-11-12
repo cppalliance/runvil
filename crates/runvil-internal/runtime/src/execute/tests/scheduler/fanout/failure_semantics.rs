@@ -15,7 +15,7 @@ fn fanout_empty_collection_errors_before_any_scheduling() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Fanout\n\n\
         ## Parent\n\n\
-        ```lua\ntasks.fanout('### Worker', {})\n```\n\n\
+        ```lua\ntasks.fanout('Worker', {})\n```\n\n\
         ### Worker\n\n\
         ```lua\nstore.write('ran.txt', 'yes')\n```\n";
     let trace = scheduler_scenario(md).run();
@@ -45,7 +45,7 @@ fn fanout_worker_that_is_a_list_section_errors() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Fanout\n\n\
         ## Parent\n\n\
-        ```lua\ntasks.fanout('### Items', {'x'})\n```\n\n\
+        ```lua\ntasks.fanout('Items', {'x'})\n```\n\n\
         ### Items\n\n\
         - a\n\
         - b\n";
@@ -68,15 +68,15 @@ const DEPTH_FANOUT: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     ## Alpha\n\n\
     ```lua\n\
     var.n = (var.n or 0) + 1\n\
-    if var.n >= 9 then return tasks.fanout('### Worker', {'x'}) end\n\
-    return call('## Beta')\n\
+    if var.n >= 9 then return tasks.fanout('Worker', {'x'}) end\n\
+    return call('../Beta')\n\
     ```\n\n\
     ### Worker\n\n\
     ```lua\nreturn item\n```\n\n\
     ## Beta\n\n\
     ```lua\n\
     var.n = var.n + 1\n\
-    return call('## Alpha')\n\
+    return call('../Alpha')\n\
     ```\n";
 
 #[test]
@@ -140,7 +140,7 @@ fn an_exhausted_arm_becomes_the_incomplete_stub_and_its_sibling_still_lands() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Worker', {{'loop', 'plain'}})\n\
+        local r = tasks.fanout('Worker', {{'loop', 'plain'}})\n\
         assert(#r == 2, 'both slots are filled')\n\
         assert(r[1].ok == false and r[1].exhausted == true, 'the exhausted arm is flagged')\n\
         assert(r[1].item == 'loop', 'the stub keeps its item')\n\
@@ -220,7 +220,7 @@ fn two_arms_writing_one_path_terminate_the_run_with_a_determinism_violation() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Worker', {'alpha', 'beta'})\n\
+        local r = tasks.fanout('Worker', {'alpha', 'beta'})\n\
         return r[1].text\n\
         ```\n\n\
         ### Worker\n\n\
@@ -285,7 +285,7 @@ fn two_live_arms_appending_one_path_terminate_with_a_determinism_violation() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Worker', {'alpha', 'beta'})\n\
+        local r = tasks.fanout('Worker', {'alpha', 'beta'})\n\
         return r[1].text\n\
         ```\n\n\
         ### Worker\n\n\

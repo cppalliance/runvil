@@ -16,7 +16,7 @@ fn fanout_returns_structured_results() {
         .section(
             "Parent",
             "
-            local r = tasks.fanout('### Worker', prompt.list('### Items'))
+            local r = tasks.fanout('Worker', prompt.list('Items'))
             assert(r[1].text == 'alpha-1')
             assert(r[1].ok == true)
             assert(r[1].item == 'alpha')
@@ -49,7 +49,7 @@ fn off_walk_worker_runs_as_a_fanout_arm() {
         .section(
             "Parent",
             "
-            local r = tasks.fanout('### Worker', prompt.list('### Items'))
+            local r = tasks.fanout('Worker', prompt.list('Items'))
             return r[1].text .. ',' .. r[2].text",
         )
         .prose("### Worker", "---\n\n```lua\nreturn item .. '-done'\n```")
@@ -69,7 +69,7 @@ fn fanout_accepts_a_prompt_built_collection_over_the_old_default_cap() {
         "
         local members = {}
         for i = 1, 1025 do members[i] = 'm' .. i end
-        local r = tasks.fanout('### Worker', members)
+        local r = tasks.fanout('Worker', members)
         assert(#r == 1025, 'every member ran')
         return r[1025].text",
     );
@@ -86,7 +86,7 @@ fn fanout_collection_array_members_arrive_as_themselves_in_order() {
             (
                 "Parent",
                 "
-                local r = tasks.fanout('### Worker', {'b', 2, true, {nested='x'}})
+                local r = tasks.fanout('Worker', {'b', 2, true, {nested='x'}})
                 assert(#r == 4)
                 assert(r[1].text == 'string:b')
                 assert(r[2].text == 'number:2')
@@ -115,7 +115,7 @@ fn fanout_collection_hash_members_arrive_as_pair_tables() {
             (
                 "Parent",
                 "
-                local r = tasks.fanout('### Worker', {alpha=1, beta='two'})
+                local r = tasks.fanout('Worker', {alpha=1, beta='two'})
                 assert(#r == 2)
                 local seen = {}
                 for i = 1, #r do
@@ -140,7 +140,7 @@ fn fanout_collection_hash_members_arrive_as_pair_tables() {
 /// any scheduling rather than returning zero results.
 #[test]
 fn fanout_collection_empty_errors() {
-    let trace = Scenario::new(item_worker("tasks.fanout('### Worker', {})")).run();
+    let trace = Scenario::new(item_worker("tasks.fanout('Worker', {})")).run();
     let rendered = trace.error().to_string();
     assert!(
         rendered.contains("empty collection"),
@@ -157,7 +157,7 @@ fn fanout_collection_item_round_trips_members() {
             (
                 "Parent",
                 "
-                local r = tasks.fanout('### Worker', {1, 'two', {n=3}})
+                local r = tasks.fanout('Worker', {1, 'two', {n=3}})
                 assert(r[1].item == 1)
                 assert(r[2].item == 'two')
                 assert(type(r[3].item) == 'table' and r[3].item.n == 3)
@@ -179,7 +179,7 @@ fn fanout_over_a_json_null_member_runs_one_arm_whose_item_is_json_null() {
             (
                 "Parent",
                 "
-                local r = tasks.fanout('### Worker', { json.null })
+                local r = tasks.fanout('Worker', { json.null })
                 assert(#r == 1, 'one arm ran')
                 return r[1].text",
             ),
@@ -203,7 +203,7 @@ fn fanout_worker_resolves_as_a_sibling() {
         .section(
             "Main",
             "
-            local r = tasks.fanout('## Worker', {'x'})
+            local r = tasks.fanout('../Worker', {'x'})
             return r[1].text",
         )
         .prose("Worker", "---\n\n```lua\nreturn item .. '-done'\n```");
@@ -217,13 +217,13 @@ fn fanout_worker_shared_by_two_sibling_callers() {
         .section(
             "A",
             "
-            local r = tasks.fanout('## Worker', {'a'})
+            local r = tasks.fanout('../Worker', {'a'})
             store.write('a.txt', r[1].text)",
         )
         .section(
             "B",
             "
-            local r = tasks.fanout('## Worker', {'b'})
+            local r = tasks.fanout('../Worker', {'b'})
             return store.read('a.txt') .. ',' .. r[1].text",
         )
         .prose("Worker", "---\n\n```lua\nreturn item .. '-done'\n```");
@@ -237,7 +237,7 @@ fn fanout_niece_worker_is_not_visible() {
     let source = prompt(
         "",
         &[
-            ("Main", "tasks.fanout('### Niece', {'x'})"),
+            ("Main", "tasks.fanout('Niece', {'x'})"),
             ("Other", "local x = 1"),
             ("### Niece", "return item"),
         ],
@@ -254,7 +254,7 @@ fn fanout_niece_worker_is_not_visible() {
 #[test]
 fn fanout_string_second_parameter_errors_pointing_at_prompt_list() {
     let source = PromptSource::new()
-        .section("Parent", "tasks.fanout('### Worker', '### Items')")
+        .section("Parent", "tasks.fanout('Worker', 'Items')")
         .section("### Worker", "return item")
         .prose("### Items", "- alpha");
     let trace = Scenario::new(source.build()).run();
@@ -264,7 +264,7 @@ fn fanout_string_second_parameter_errors_pointing_at_prompt_list() {
         "error was: {rendered}"
     );
     assert!(
-        rendered.contains("prompt.list(heading)"),
+        rendered.contains("prompt.list(path)"),
         "the error must point at prompt.list: {rendered}"
     );
 }
@@ -274,9 +274,9 @@ fn fanout_string_second_parameter_errors_pointing_at_prompt_list() {
 fn fanout_number_and_boolean_second_parameters_error() {
     let source = item_worker(
         "
-        local ok_n, err_n = pcall(tasks.fanout, '### Worker', 5)
+        local ok_n, err_n = pcall(tasks.fanout, 'Worker', 5)
         assert(not ok_n and tostring(err_n):find('collection'), tostring(err_n))
-        local ok_b, err_b = pcall(tasks.fanout, '### Worker', true)
+        local ok_b, err_b = pcall(tasks.fanout, 'Worker', true)
         assert(not ok_b and tostring(err_b):find('collection'), tostring(err_b))
         return 'ok'",
     );
@@ -286,7 +286,7 @@ fn fanout_number_and_boolean_second_parameters_error() {
 /// A function member cannot cross into an arm; the error names its index.
 #[test]
 fn fanout_function_member_errors_naming_the_index() {
-    let source = item_worker("tasks.fanout('### Worker', {'a', function() end})");
+    let source = item_worker("tasks.fanout('Worker', {'a', function() end})");
     let trace = Scenario::new(source).run();
     let rendered = trace.error().to_string();
     assert!(rendered.contains("index 2"), "error was: {rendered}");
@@ -300,7 +300,7 @@ fn fanout_table_keyed_member_errors() {
         "
         local t = {}
         t[{}] = 'x'
-        tasks.fanout('### Worker', t)",
+        tasks.fanout('Worker', t)",
     );
     let trace = Scenario::new(source).run();
     let error = trace.error();
@@ -316,7 +316,7 @@ fn fanout_table_keyed_member_errors() {
 #[test]
 fn fanout_worker_that_is_a_list_section_errors() {
     let source = PromptSource::new()
-        .section("Parent", "tasks.fanout('### Items', {'x'})")
+        .section("Parent", "tasks.fanout('Items', {'x'})")
         .prose("### Items", "- a\n- b");
     let trace = Scenario::new(source.build()).run();
     let error = trace.error();

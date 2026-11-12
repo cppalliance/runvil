@@ -112,7 +112,7 @@ async fn call_dynamic_tool_runs_a_model_only_tool_the_render_put_in_the_dynamic_
 const ON_TWO_MODELS: [(&str, &str); 3] = [
     (
         "Main",
-        "local on_m = tasks.spawn('## OnM')\nlocal on_n = tasks.spawn('## OnN')\n\
+        "local on_m = tasks.spawn('../OnM')\nlocal on_n = tasks.spawn('../OnN')\n\
          local ended = tasks.join({ on_m, on_n })\n\
          return ended[1].result .. '|' .. ended[2].result",
     ),

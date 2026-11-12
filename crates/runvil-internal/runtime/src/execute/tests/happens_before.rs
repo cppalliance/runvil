@@ -34,7 +34,7 @@ const SEVEN_ARM_FANOUT: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n
     ## Parent\n\n\
     ```lua\n\
     local topics = { 'a', 'b', 'c', 'd', 'e', 'f', 'g' }\n\
-    local results = tasks.fanout('### Worker', topics)\n\
+    local results = tasks.fanout('Worker', topics)\n\
     local parts = {}\n\
     for i = 1, #results do parts[i] = store.read('research/' .. i .. '.md') end\n\
     store.write('research.md', table.concat(parts, '\\n\\n'))\n\
@@ -60,7 +60,7 @@ const FREE_FORM: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     local topics = { 'a', 'b', 'c', 'd', 'e', 'f', 'g' }\n\
     local set = {}\n\
     for i, topic in ipairs(topics) do\n\
-      set[i] = tasks.spawn('### Worker', { item = topic, index = i })\n\
+      set[i] = tasks.spawn('Worker', { item = topic, index = i })\n\
     end\n\
     tasks.join(set)\n\
     local parts = {}\n\
@@ -81,9 +81,9 @@ const PIPELINE: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     # Pipeline\n\n\
     ## Parent\n\n\
     ```lua\n\
-    local g = tasks.spawn('### Gather')\n\
+    local g = tasks.spawn('Gather')\n\
     tasks.join({ g })\n\
-    local s = tasks.spawn('### Summarize')\n\
+    local s = tasks.spawn('Summarize')\n\
     tasks.join({ s })\n\
     return store.read('summary.md')\n\
     ```\n\n\
@@ -106,8 +106,8 @@ const TRACE_5_PASS: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     # Waits\n\n\
     ## Main\n\n\
     ```lua\n\
-    local a = tasks.spawn('## Arm', { item = 'a' })\n\
-    local b = tasks.spawn('## Arm', { item = 'b' })\n\
+    local a = tasks.spawn('../Arm', { item = 'a' })\n\
+    local b = tasks.spawn('../Arm', { item = 'b' })\n\
     local first, ok, result = tasks.join_any({ a, b })\n\
     assert(ok, tostring(result))\n\
     if first.task == a.task then return store.read('a.txt') end\n\
@@ -127,8 +127,8 @@ const TRACE_5_FAIL: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     # Waits\n\n\
     ## Main\n\n\
     ```lua\n\
-    local a = tasks.spawn('## Arm', { item = 'a' })\n\
-    local b = tasks.spawn('## Arm', { item = 'b' })\n\
+    local a = tasks.spawn('../Arm', { item = 'a' })\n\
+    local b = tasks.spawn('../Arm', { item = 'b' })\n\
     local first, ok, result = tasks.join_any({ a, b })\n\
     assert(ok, tostring(result))\n\
     if first.task == a.task then return store.read('b.txt') end\n\
@@ -148,7 +148,7 @@ const TRACE_7: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     # Trace 7\n\n\
     ```lua\n\
     store.write('config.md', 'configured')\n\
-    var.t = tasks.spawn('## Task')\n\
+    var.t = tasks.spawn('Task')\n\
     ```\n\n\
     ## Result\n\n\
     ```lua\n\
@@ -172,11 +172,11 @@ const TRACE_10_PASS: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     # Timed\n\n\
     ## Main\n\n\
     ```lua\n\
-    local b = tasks.spawn('## Quick')\n\
+    local b = tasks.spawn('../Quick')\n\
     local _, ok, result = tasks.join_any({ b })\n\
     assert(ok and result == 'quick arm', tostring(result))\n\
     local btext = store.read('b.txt')\n\
-    local a = tasks.spawn('## Slow')\n\
+    local a = tasks.spawn('../Slow')\n\
     tasks.join({ a }, { timeout = 0.05 })\n\
     local ok2 = pcall(tasks.join_any, { a })\n\
     local atext = store.read('a.txt')\n\
@@ -201,7 +201,7 @@ const TRACE_10_FAIL: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     # Timed\n\n\
     ## Main\n\n\
     ```lua\n\
-    local a = tasks.spawn('## Slow')\n\
+    local a = tasks.spawn('../Slow')\n\
     tasks.join({ a }, { timeout = 0.05 })\n\
     return store.read('a.txt')\n\
     ```\n\n\
@@ -217,7 +217,7 @@ const TRACE_11: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     # Cancel\n\n\
     ## Main\n\n\
     ```lua\n\
-    local a = tasks.spawn('## Task')\n\
+    local a = tasks.spawn('../Task')\n\
     store.exists('p1')\n\
     store.exists('p2')\n\
     tasks.cancel(a)\n\

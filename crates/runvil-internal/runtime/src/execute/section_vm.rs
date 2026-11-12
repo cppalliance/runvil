@@ -6,9 +6,9 @@
 //! (both take the chain's next entry `id`; a task's first entry adds its
 //! `index`), picks the [`VmSeed`] (the chain's `var`, plus the item seeded
 //! into this section on a task's first entry), and supplies the `read`
-//! callback behind the `prompt` reads, resolved over its own visible set,
-//! the library resolver behind `require`, resolved over its own reach, and
-//! the renderer for library prose templates.
+//! callback behind the `prompt` reads, resolved from its own section, the
+//! library resolver behind `require`, and the renderer for library prose
+//! templates.
 //!
 //! VM construction and the Lua limits install stay with the frame
 //! constructor. A construction or limits failure propagates as a bare
@@ -24,7 +24,7 @@ use runvil_types::emitter::Emitter;
 use runvil_types::packs::Prelude;
 use runvil_vfs::{Access, ScopeHandle};
 
-use crate::lua::{Library, LibraryKey, ProseState, SectionText, SectionVm, Uninjected};
+use crate::lua::{Library, ProseState, SectionText, SectionVm, Uninjected};
 use crate::model::ModelBinding;
 use crate::{Error, Result, error};
 
@@ -134,10 +134,7 @@ pub(crate) fn setup_section_vm<R, L, P>(
 ) -> Result<SectionVm>
 where
     R: Fn(String) -> std::result::Result<Option<SectionText>, Error> + Send + Sync + 'static,
-    L: Fn(String, Option<LibraryKey>) -> std::result::Result<Library, Error>
-        + Send
-        + Sync
-        + 'static,
+    L: Fn(String) -> std::result::Result<Library, Error> + Send + Sync + 'static,
     P: Fn(&str, Option<NonZeroU32>, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {
     vm.set_prompt_file(setup.file);
@@ -175,10 +172,7 @@ fn install_after_injection<R, L, P>(
 ) -> Result<()>
 where
     R: Fn(String) -> std::result::Result<Option<SectionText>, Error> + Send + Sync + 'static,
-    L: Fn(String, Option<LibraryKey>) -> std::result::Result<Library, Error>
-        + Send
-        + Sync
-        + 'static,
+    L: Fn(String) -> std::result::Result<Library, Error> + Send + Sync + 'static,
     P: Fn(&str, Option<NonZeroU32>, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {
     vm.install_engine_globals(setup.emitter, setup.section_name, setup.scope)?;

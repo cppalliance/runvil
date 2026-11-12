@@ -20,7 +20,7 @@
 //!
 //! # Sensitivity
 //! Lifecycle variants have no payload beyond their coordinates and, for
-//! the library loads, the library's heading, all author-controlled
+//! the library loads, the library's path, all author-controlled
 //! (`section` and `library` are prompt-authored heading text); the
 //! exception is
 //! `ModelMetadataDegraded`, whose message may quote values from a
@@ -181,19 +181,19 @@ events! {
         /// A section VM began loading a library section into the reporting
         /// section's environment.
         LuaLibraryLoadStarted {
-            /// The library section's heading with its markers, such as
-            /// `## shared_stuff`.
+            /// The library section's path from the top of the prompt,
+            /// such as `/shared_stuff`.
             library: String,
         },
         /// A section VM loaded a library section and ran its blocks
         /// successfully.
         LuaLibraryLoadSucceeded {
-            /// The library section's heading with its markers.
+            /// The library section's path from the top of the prompt.
             library: String,
         },
         /// A section VM failed to load a library section or run its blocks.
         LuaLibraryLoadFailed {
-            /// The library section's heading with its markers.
+            /// The library section's path from the top of the prompt.
             library: String,
         },
         /// A section VM began executing a Lua chunk.

@@ -352,7 +352,7 @@ fn section_lifecycle_failures_report_their_phase() {
 fn call_with_a_non_string_target_errors() {
     // The control callback resolves its target through the same
     // `resolve_section_target` boundary as the Engine: a number is not a
-    // heading, and the error says so.
+    // section path, and the error says so.
     let vm = TestVm::new().build();
     vm.install_test_control_globals(
         |target, _, _| resolve_section_target(target).map_err(crate::error::make_lua_error),

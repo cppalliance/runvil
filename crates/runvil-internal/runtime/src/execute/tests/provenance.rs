@@ -57,7 +57,7 @@ fn provenance_seq_is_strictly_increasing_within_one_task_across_a_fanout() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Worker', {'a', 'b', 'c'})\n\
+        local r = tasks.fanout('Worker', {'a', 'b', 'c'})\n\
         return r[1].text .. r[2].text .. r[3].text\n\
         ```\n\n\
         ### Worker\n\n\
@@ -128,7 +128,7 @@ fn a_call_child_reports_under_its_callers_task() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Call\n\n\
         ## Outer\n\n\
-        ```lua\nreturn call('## Inner')\n```\n\n\
+        ```lua\nreturn call('../Inner')\n```\n\n\
         ## Inner\n\n\
         ```lua\nlog('inner ran')\nreturn 'hello'\n```\n";
     let trace = scheduler_scenario(md).run();

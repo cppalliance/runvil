@@ -16,15 +16,15 @@ const TRACE_6: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     # Nested\n\n\
     ## Main\n\n\
     ```lua\n\
-    local arm = tasks.spawn('### Arm')\n\
+    local arm = tasks.spawn('Arm')\n\
     local _, ok, result = tasks.join_any({ arm })\n\
     assert(ok and result == 'arm done', tostring(result))\n\
     return store.read('sub-one.md') .. '/' .. store.read('sub-two.md')\n\
     ```\n\n\
     ### Arm\n\n\
     ```lua\n\
-    local a = tasks.spawn('#### Sub', { item = 'one' })\n\
-    local b = tasks.spawn('#### Sub', { item = 'two' })\n\
+    local a = tasks.spawn('Sub', { item = 'one' })\n\
+    local b = tasks.spawn('Sub', { item = 'two' })\n\
     tasks.join({ a, b })\n\
     return 'arm done'\n\
     ```\n\n\
@@ -45,7 +45,7 @@ const TRACE_12: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     # Concurrency\n\n\
     ## Main\n\n\
     ```lua\n\
-    local arm = tasks.spawn('### Arm')\n\
+    local arm = tasks.spawn('Arm')\n\
     local _, ok, result = tasks.join_any({ arm })\n\
     assert(ok, tostring(result))\n\
     return result\n\
@@ -56,7 +56,7 @@ const TRACE_12: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     assert(n == 2, 'the effective limit is 2, got ' .. n)\n\
     local items = {}\n\
     for i = 1, 10 do items[i] = tostring(i) end\n\
-    local r = tasks.fanout('#### Sub', items)\n\
+    local r = tasks.fanout('Sub', items)\n\
     return table.concat(r, '|')\n\
     ```\n\n\
     #### Sub\n\n\

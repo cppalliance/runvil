@@ -72,7 +72,7 @@ fn an_owners_send_returns_true_resumes_its_tasks_receive_and_reports_under_the_t
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              store.exists('busy')\n\
              local sent = tasks.send(t, 'also cover the tests')\n\
              local _, ok, result = tasks.join_any({ t })\n\
@@ -107,8 +107,8 @@ fn a_non_owner_sending_by_id_string_raises_task_not_owned() {
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local a = tasks.spawn('## A')\n\
-             local b = tasks.spawn('## B', { input = a.task })\n\
+            "local a = tasks.spawn('../A')\n\
+             local b = tasks.spawn('../B', { input = a.task })\n\
              local _, _, from_b = tasks.join_any({ b })\n\
              local _, own = pcall(tasks.send, sys.taskid, 'x')\n\
              local _, unknown = pcall(tasks.send, '0.9', 'x')\n\
@@ -135,7 +135,7 @@ fn a_send_to_a_task_that_returned_returns_false_and_queues_nothing() {
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              tasks.join({ t })\n\
              return tostring(tasks.send(t, 'too late'))",
         ),
@@ -156,7 +156,7 @@ fn a_send_to_a_task_waiting_for_admission_is_reported_right_after_its_start() {
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              tasks.send(t, 'one')\n\
              tasks.send(t, 'two')\n\
              local _, _, result = tasks.join_any({ t })\n\
@@ -198,7 +198,7 @@ fn a_task_canceled_before_admission_reports_neither_its_start_nor_a_message_sent
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              local sent = tasks.send(t, 'never read')\n\
              tasks.cancel(t)\n\
              return tostring(sent) .. ' ' .. tasks.status(t).state",
@@ -229,8 +229,8 @@ fn a_task_that_stops_being_live_drops_the_messages_left_in_its_inbox() {
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local a = tasks.spawn('## Returns')\n\
-             local b = tasks.spawn('## Canceled')\n\
+            "local a = tasks.spawn('../Returns')\n\
+             local b = tasks.spawn('../Canceled')\n\
              store.exists('main')\n\
              tasks.send(a, 'unread by a')\n\
              tasks.send(b, 'unread by b')\n\
@@ -285,7 +285,7 @@ fn a_send_whose_text_is_not_a_string_raises_a_lua_error() {
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              local ok, err = pcall(tasks.send, t, 42)\n\
              tasks.cancel(t)\n\
              return tostring(ok) .. '|' .. err.kind .. '|' .. tostring(err)",
@@ -307,7 +307,7 @@ fn a_task_waiting_on_its_inbox_reads_blocked_inbox_and_reports_its_wait_under_it
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Waiter')\n\
+            "local t = tasks.spawn('../Waiter')\n\
              store.exists('busy')\n\
              local blocked = tasks.status(t).blocked\n\
              tasks.send(t, 'go')\n\
@@ -341,8 +341,8 @@ fn a_task_waiting_on_its_inbox_frees_its_slot_so_a_queued_spawn_starts() {
         (
             "Main",
             "tasks.concurrency(1)\n\
-             local waiter = tasks.spawn('## Waiter')\n\
-             local worker = tasks.spawn('## Worker')\n\
+             local waiter = tasks.spawn('../Waiter')\n\
+             local worker = tasks.spawn('../Worker')\n\
              local _, _, worked = tasks.join_any({ worker })\n\
              tasks.send(waiter, 'woken')\n\
              local _, _, woken = tasks.join_any({ waiter })\n\
@@ -363,7 +363,7 @@ fn a_main_chain_joining_a_task_that_waits_on_its_inbox_with_nothing_else_to_run_
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              tasks.join({ t })\n\
              return 'unreachable'",
         ),

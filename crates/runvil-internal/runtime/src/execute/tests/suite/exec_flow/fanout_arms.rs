@@ -17,7 +17,7 @@ fn prompt_list_inside_a_fanout_arm_reads_items() {
         .section(
             "### Worker",
             "
-            local items = prompt.list('### Items')
+            local items = prompt.list('../Items')
             return item .. ':' .. table.concat(items, ',')",
         )
         .prose("### Items", "- x\n- y");
@@ -42,14 +42,14 @@ fn call_inside_a_fanout_arm_runs_a_contained_chain() {
                 "Parent",
                 "
                 tasks.concurrency(1)
-                local r = tasks.fanout('### Worker', {'alpha'})
+                local r = tasks.fanout('Worker', {'alpha'})
                 return r[1].text",
             ),
             (
                 "### Worker",
                 "
                 assert(sys.section_count == 1, 'the arm sees the run top-level section count')
-                local got = call('### Sub')
+                local got = call('../Sub')
                 return 'worker:' .. got .. ':' .. item",
             ),
             (
@@ -58,7 +58,7 @@ fn call_inside_a_fanout_arm_runs_a_contained_chain() {
                 assert(sys.id == '0.0.0.0', 'a contained chain is the arm chain child and starts at entry 0')
                 assert(item == nil, 'a contained chain runs as a plain section')
                 assert(sys.section_count == 1, 'a contained chain sees the run section count')
-                local leaves = tasks.fanout('#### Leaf', {'x', 'y'})
+                local leaves = tasks.fanout('Leaf', {'x', 'y'})
                 var.leaves = leaves[1].text .. leaves[2].text",
             ),
             ("#### Leaf", "return item .. '!'"),
@@ -80,13 +80,13 @@ fn fanout_inside_a_fanout_arm_maps_over_a_collection() {
             (
                 "Parent",
                 "
-                local r = tasks.fanout('### Outer', {'a', 'b'})
+                local r = tasks.fanout('Outer', {'a', 'b'})
                 return table.concat({r[1].text, r[2].text}, ';')",
             ),
             (
                 "### Outer",
                 "
-                local inner = tasks.fanout('### Inner', {item .. '1', item .. '2'})
+                local inner = tasks.fanout('../Inner', {item .. '1', item .. '2'})
                 assert(inner[1].ok and inner[2].ok)
                 return item .. ':' .. inner[1].text .. ',' .. inner[2].text",
             ),
@@ -113,7 +113,7 @@ fn jump_inside_a_fanout_arm_drives_a_child_walk() {
         .section(
             "### Worker",
             "
-            jump('### Target')
+            jump('../Target')
             error('the arm remaining blocks are skipped')",
         )
         .section(
@@ -147,7 +147,7 @@ fn jump_inside_a_fanout_arm_to_a_worker_child_walks_the_child_slice() {
         .section(
             "### Worker",
             "
-            jump('#### Child')
+            jump('Child')
             error('the arm remaining blocks are skipped')",
         )
         .section(
@@ -177,7 +177,7 @@ fn jump_inside_a_fanout_arm_to_a_worker_child_walks_the_child_slice() {
 #[test]
 fn jump_inside_a_fanout_arm_to_a_silent_chain_returns_empty_text() {
     let source = arm_fanout()
-        .section("### Worker", "jump('### Target')")
+        .section("### Worker", "jump('../Target')")
         .section("### Target", "store.append('order.txt', 'Target\\n')");
     let trace = Scenario::new(source.build()).run();
     assert_eq!(
@@ -188,13 +188,13 @@ fn jump_inside_a_fanout_arm_to_a_silent_chain_returns_empty_text() {
     assert_eq!(trace.read("order.txt").expect("order log"), "Target\n");
 }
 
-/// A jump from an arm to a heading outside the worker's visible set (the
-/// top-level parent) resolves as not-found, and the error lists only the
-/// worker's visible set.
+/// A relative path in an arm starts at the worker, so the worker's parent
+/// is no neighbor: a jump that names it as a sibling is not found, and
+/// the error names the worker as the section it searched.
 #[test]
-fn jump_inside_a_fanout_arm_to_a_non_visible_heading_errors() {
+fn jump_inside_a_fanout_arm_to_the_workers_parent_errors() {
     let source = arm_fanout()
-        .section("### Worker", "jump('## Parent')")
+        .section("### Worker", "jump('../Parent')")
         .prose("### Items", "- x");
     let trace = Scenario::new(source.build()).run();
     let error = trace.error();
@@ -205,28 +205,34 @@ fn jump_inside_a_fanout_arm_to_a_non_visible_heading_errors() {
     );
     let rendered = error.to_string();
     assert!(
-        rendered.contains("not found"),
-        "a non-visible heading must not resolve: {rendered}"
+        rendered
+            .contains("section `../Parent` not found: `/Parent/Worker` has no sibling `Parent`"),
+        "the error says where it looked: {rendered}"
     );
     assert!(
-        rendered.contains("### Items"),
-        "the error lists the worker's visible set: {rendered}"
+        !rendered.contains("Items"),
+        "the error lists no other section: {rendered}"
     );
 }
 
-/// `call` and `prompt.list` inside an arm naming a section outside the
-/// worker's visible set both reject it: `call` errors not-found, which the
-/// arm catches with `pcall` and asserts on, and `prompt.list` reads `nil`.
+/// `call` and `prompt.list` inside an arm naming the worker's parent as a
+/// neighbor both miss: `call` errors not-found, which the arm catches with
+/// `pcall` and asserts on, and `prompt.list` reads `nil`. A path from the
+/// top reads the parent.
 #[test]
-fn call_raises_and_list_reads_nil_for_non_visible_sections_in_a_fanout_arm() {
+fn call_raises_and_list_reads_nil_for_the_workers_parent_in_a_fanout_arm() {
     let source = arm_fanout()
         .section(
             "### Worker",
             "
-            local ok_call, err_call = pcall(call, '## Parent')
-            assert(not ok_call, 'call of a non-visible section must fail')
-            assert(tostring(err_call):find('not found', 1, true), 'call error must be not-found: ' .. tostring(err_call))
-            assert(prompt.list('## Parent') == nil, 'prompt.list of a non-visible section must read nil')
+            for _, path in ipairs({ '../Parent', 'Parent' }) do
+              local ok_call, err_call = pcall(call, path)
+              assert(not ok_call, 'call of the parent must fail')
+              assert(tostring(err_call):find('not found', 1, true), 'call error must be not-found: ' .. tostring(err_call))
+              assert(prompt.list(path) == nil, 'prompt.list of the parent must read nil')
+            end
+            assert(prompt.section('/Parent') ~= nil, 'a path from the top reads the parent')
+            assert(prompt.list('../Items')[1] == 'x', 'a sibling reads')
             return item .. ':rejected'",
         )
         .prose("### Items", "- x");
@@ -251,11 +257,11 @@ fn fanout_recursion_across_the_boundary_trips_the_depth_cap() {
             local n = tonumber(ok and v or '0') + 1
             store.write('n.txt', tostring(n))
             if n >= 5 then
-              return tasks.fanout('## W', {'x'})
+              return tasks.fanout('../W', {'x'})
             end
-            return call('## B')",
+            return call('../B')",
         )
-        .section("B", "return call('## A')")
+        .section("B", "return call('../A')")
         .prose("W", "---\n\n```lua\nreturn item\n```");
     let trace = Scenario::new(source.build()).run();
     let error = trace.error();
@@ -286,7 +292,7 @@ fn call_inside_an_arm_spawned_near_the_cap_trips_the_depth_cap() {
     // at depth 8, and the arm's own `call` would need depth 9 - past
     // MAX_CALL_DEPTH (8).
     let source = PromptSource::new()
-        .section("A", "return call('## B')")
+        .section("A", "return call('../B')")
         .section(
             "B",
             "
@@ -294,12 +300,12 @@ fn call_inside_an_arm_spawned_near_the_cap_trips_the_depth_cap() {
             local n = tonumber(ok and v or '0') + 1
             store.write('n.txt', tostring(n))
             if n >= 4 then
-              local r = tasks.fanout('## W', {'x'})
+              local r = tasks.fanout('../W', {'x'})
               return r[1].text
             end
-            return call('## A')",
+            return call('../A')",
         )
-        .prose("W", "---\n\n```lua\nreturn call('## C')\n```")
+        .prose("W", "---\n\n```lua\nreturn call('../C')\n```")
         .prose("C", "---\n\n```lua\nreturn 'c-reply'\n```");
     let trace = Scenario::new(source.build()).run();
     let error = trace.error();
@@ -330,7 +336,7 @@ fn fanout_arm_without_output_and_no_incoming_reply_yields_empty_text() {
             (
                 "Parent",
                 "
-                local r = tasks.fanout('### Worker', {'alpha'})
+                local r = tasks.fanout('Worker', {'alpha'})
                 assert(r[1].ok, 'the arm succeeded')
                 assert(r[1].text == '', 'a no-reply arm yields empty text')
                 return 'ok'",

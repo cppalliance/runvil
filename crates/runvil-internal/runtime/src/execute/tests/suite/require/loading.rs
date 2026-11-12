@@ -13,7 +13,7 @@ fn a_section_uses_the_table_of_functions_a_sibling_library_returns() {
             (
                 "Main",
                 "
-                local shared = require '## shared_stuff'
+                local shared = require '/shared_stuff'
                 return shared.search_all(argv.prose)",
             ),
             (
@@ -39,10 +39,10 @@ fn a_second_require_returns_the_saved_value_without_rerunning_it() {
             (
                 "Main",
                 "
-                local first = require '## counted'
-                local second = require '## counted'
-                local no_first = require '## falsy'
-                local no_second = require '## falsy'
+                local first = require '/counted'
+                local second = require '/counted'
+                local no_first = require '/falsy'
+                local no_second = require '/falsy'
                 return table.concat({ tostring(first == second), var.counted, tostring(no_first),
                   tostring(no_second), var.falsy }, '|')",
             ),
@@ -76,9 +76,9 @@ fn a_first_load_reports_its_start_and_end_naming_the_library() {
             (
                 "Main",
                 "
-                require '## lib'
-                require '## lib'
-                assert(not pcall(require, '## broken'), 'the broken library raises')
+                require '/lib'
+                require '/lib'
+                assert(not pcall(require, '/broken'), 'the broken library raises')
                 return 'done'",
             ),
             ("lib", "loaded = true"),
@@ -90,10 +90,10 @@ fn a_first_load_reports_its_start_and_end_naming_the_library() {
     assert_eq!(
         library_loads(&trace.records()),
         [
-            load("Main", "Lua library load started: ## lib"),
-            load("Main", "Lua library load succeeded: ## lib"),
-            load("Main", "Lua library load started: ## broken"),
-            load("Main", "Lua library load failed: ## broken"),
+            load("Main", "Lua library load started: /lib"),
+            load("Main", "Lua library load succeeded: /lib"),
+            load("Main", "Lua library load started: /broken"),
+            load("Main", "Lua library load failed: /broken"),
         ],
         "a saved library reports nothing on its second require"
     );
@@ -107,14 +107,14 @@ fn load_time_code_runs_once_in_each_requiring_section() {
             (
                 "First",
                 "
-                require '## lib'
-                require '## lib'",
+                require '/lib'
+                require '/lib'",
             ),
             (
                 "Second",
                 "
-                require '## lib'
-                require '## lib'
+                require '/lib'
+                require '/lib'
                 return tostring(var.loads)",
             ),
             ("lib", "var.loads = (var.loads or 0) + 1"),
@@ -129,10 +129,10 @@ fn load_time_code_runs_once_in_each_requiring_section() {
     assert_eq!(
         library_loads(&trace.records()),
         [
-            load("First", "Lua library load started: ## lib"),
-            load("First", "Lua library load succeeded: ## lib"),
-            load("Second", "Lua library load started: ## lib"),
-            load("Second", "Lua library load succeeded: ## lib"),
+            load("First", "Lua library load started: /lib"),
+            load("First", "Lua library load succeeded: /lib"),
+            load("Second", "Lua library load started: /lib"),
+            load("Second", "Lua library load succeeded: /lib"),
         ]
     );
 }
@@ -145,15 +145,15 @@ fn a_child_section_starts_without_its_parents_libraries_and_loads_its_own() {
             (
                 "Parent",
                 "
-                require '## lib'
+                require '/lib'
                 assert(greet, 'the parent sees the library global')
-                return call('### Child')",
+                return call('Child')",
             ),
             (
                 "### Child",
                 "
                 local before = tostring(greet)
-                require '## lib'
+                require '/lib'
                 return before .. '|' .. greet('child')",
             ),
             ("lib", "function greet(name) return 'hello ' .. name end"),
@@ -168,10 +168,10 @@ fn a_child_section_starts_without_its_parents_libraries_and_loads_its_own() {
     assert_eq!(
         library_loads(&trace.records()),
         [
-            load("Parent", "Lua library load started: ## lib"),
-            load("Parent", "Lua library load succeeded: ## lib"),
-            load("Child", "Lua library load started: ## lib"),
-            load("Child", "Lua library load succeeded: ## lib"),
+            load("Parent", "Lua library load started: /lib"),
+            load("Parent", "Lua library load succeeded: /lib"),
+            load("Child", "Lua library load started: /lib"),
+            load("Child", "Lua library load succeeded: /lib"),
         ]
     );
 }

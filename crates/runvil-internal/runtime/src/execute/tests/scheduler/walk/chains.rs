@@ -13,7 +13,7 @@ fn a_return_inside_a_child_walk_ends_the_whole_chain() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Return\n\n\
         ## A\n\n\
-        ```lua\njump('### X')\n```\n\n\
+        ```lua\njump('X')\n```\n\n\
         ### X\n\n\
         ```lua\nreturn 'x-value'\n```\n\n\
         ## B\n\n\
@@ -37,11 +37,11 @@ fn jump_inside_call_is_contained_in_the_chain() {
         # Contained\n\n\
         ## Main\n\n\
         ```lua\n\
-        local r = call('## Sub')\n\
+        local r = call('../Sub')\n\
         return 'main:' .. r\n\
         ```\n\n\
         ## Sub\n\n\
-        ```lua\njump('## Peer')\n```\n\n\
+        ```lua\njump('../Peer')\n```\n\n\
         ## Skipped\n\n\
         ```lua\nerror('the chain jump must move past me')\n```\n\n\
         ## Peer\n\n\
@@ -64,11 +64,11 @@ fn jump_inside_a_call_chain_moves_within_the_chain() {
         # Move\n\n\
         ## A\n\n\
         ```lua\n\
-        local r = call('## Sub')\n\
+        local r = call('../Sub')\n\
         return 'A:' .. r\n\
         ```\n\n\
         ## Sub\n\n\
-        ```lua\njump('## Peer')\n```\n\n\
+        ```lua\njump('../Peer')\n```\n\n\
         ## Peer\n\n\
         ```lua\nstore.append('order.txt', 'Peer\\n')\n```\n\n\
         ## Tail\n\n\
@@ -100,7 +100,7 @@ fn call_chain_jumps_to_a_child_and_returns_the_chain_result() {
         ## A\n\n\
         ```lua\n\
         store.append('order.txt', 'A1\\n')\n\
-        local r = call('## Sub')\n\
+        local r = call('../Sub')\n\
         assert(r == 's2-result', 'the chain final text returns to A')\n\
         store.append('order.txt', 'A2\\n')\n\
         ```\n\n\
@@ -112,7 +112,7 @@ fn call_chain_jumps_to_a_child_and_returns_the_chain_result() {
         ## Sub\n\n\
         ```lua\n\
         store.append('order.txt', 'Sub\\n')\n\
-        jump('### S1')\n\
+        jump('S1')\n\
         ```\n\n\
         ### S1\n\n\
         ```lua\nstore.append('order.txt', 'S1\\n')\n```\n\n\
@@ -139,7 +139,7 @@ fn the_outer_walk_never_moves_during_a_contained_chain() {
         # Outer\n\n\
         ## A\n\n\
         ```lua\n\
-        call('## Sub')\n\
+        call('../Sub')\n\
         store.append('order.txt', 'A-done\\n')\n\
         ```\n\n\
         ## B\n\n\
@@ -148,7 +148,7 @@ fn the_outer_walk_never_moves_during_a_contained_chain() {
         return store.read('order.txt')\n\
         ```\n\n\
         ## Sub\n\n\
-        ```lua\njump('## Peer')\n```\n\n\
+        ```lua\njump('../Peer')\n```\n\n\
         ## Peer\n\n\
         ```lua\n\
         store.append('order.txt', 'Peer\\n')\n\
@@ -172,7 +172,7 @@ fn a_return_inside_a_chain_ends_the_chain_not_the_run() {
         # Scoped\n\n\
         ## A\n\n\
         ```lua\n\
-        local r = call('## Sub')\n\
+        local r = call('../Sub')\n\
         store.append('order.txt', 'A:' .. r .. '\\n')\n\
         ```\n\n\
         ## B\n\n\
@@ -202,7 +202,7 @@ fn call_to_a_child_starts_a_contained_chain() {
         # ChildExecute\n\n\
         ## Main\n\n\
         ```lua\n\
-        local r = call('### Sub')\n\
+        local r = call('Sub')\n\
         return 'got:' .. r\n\
         ```\n\n\
         ### Sub\n\n\
@@ -236,16 +236,16 @@ fn a_jump_descent_does_not_consume_call_depth() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Depth\n\n\
         ## Main\n\n\
-        ```lua\njump('### X')\n```\n\n\
+        ```lua\njump('X')\n```\n\n\
         ### X\n\n\
         ```lua\n\
         store.append('depth.txt', 'x\\n')\n\
-        return call('### Y')\n\
+        return call('../Y')\n\
         ```\n\n\
         ### Y\n\n\
         ```lua\n\
         store.append('depth.txt', 'y\\n')\n\
-        return call('### X')\n\
+        return call('../X')\n\
         ```\n";
     let rig = Rig::run(scheduler_scenario(md));
 

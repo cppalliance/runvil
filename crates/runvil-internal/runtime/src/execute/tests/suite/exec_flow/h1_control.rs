@@ -11,15 +11,18 @@ fn h1_failure(lua: &str) -> String {
     Scenario::new(source).run().error().to_string()
 }
 
-/// The control globals work in H1 (section 0): a `call` naming no
-/// top-level section fails the run with the resolution error naming the
-/// target.
+/// What the H1 searched for a name no top-level section has.
+const NO_SUCH_SECTION: &str = "section `Nope` not found: the top level has no section `Nope`";
+
+/// The control globals work in H1 (section 0), where a name is a
+/// top-level section: a `call` naming none fails the run with the
+/// resolution error.
 #[test]
 fn call_from_h1_to_an_unknown_section_fails_the_run() {
-    let rendered = h1_failure("call('## Nope')");
+    let rendered = h1_failure("call('Nope')");
     assert!(
-        rendered.contains("## Nope"),
-        "the resolution error names the missing section: {rendered}"
+        rendered.contains(NO_SUCH_SECTION),
+        "the resolution error says where it looked: {rendered}"
     );
 }
 
@@ -27,10 +30,10 @@ fn call_from_h1_to_an_unknown_section_fails_the_run() {
 /// run with the resolution error.
 #[test]
 fn jump_from_h1_to_an_unknown_section_fails_the_run() {
-    let rendered = h1_failure("jump('## Nope')");
+    let rendered = h1_failure("jump('Nope')");
     assert!(
-        rendered.contains("## Nope"),
-        "the resolution error names the missing section: {rendered}"
+        rendered.contains(NO_SUCH_SECTION),
+        "the resolution error says where it looked: {rendered}"
     );
 }
 
@@ -38,9 +41,19 @@ fn jump_from_h1_to_an_unknown_section_fails_the_run() {
 /// unknown worker fails the run with the resolution error.
 #[test]
 fn fanout_from_h1_to_an_unknown_section_fails_the_run() {
-    let rendered = h1_failure("tasks.fanout('## Nope', {'a'})");
+    let rendered = h1_failure("tasks.fanout('Nope', {'a'})");
     assert!(
-        rendered.contains("## Nope"),
-        "the resolution error names the missing section: {rendered}"
+        rendered.contains(NO_SUCH_SECTION),
+        "the resolution error says where it looked: {rendered}"
+    );
+}
+
+/// The H1 has no siblings, so `../name` names nothing there.
+#[test]
+fn a_sibling_path_from_h1_names_nothing() {
+    let rendered = h1_failure("jump('../Nope')");
+    assert!(
+        rendered.contains("section `../Nope` not found: the H1 has no siblings"),
+        "the resolution error says where it looked: {rendered}"
     );
 }

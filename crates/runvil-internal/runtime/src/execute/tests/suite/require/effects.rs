@@ -25,7 +25,7 @@ fn effect_source() -> PromptSource {
 #[test]
 fn library_code_makes_store_model_and_tool_calls_while_it_loads() {
     let source = effect_source()
-        .section("Main", "return require '## loader'")
+        .section("Main", "return require '/loader'")
         .section(
             "loader",
             "
@@ -44,11 +44,11 @@ fn library_code_makes_store_model_and_tool_calls_while_it_loads() {
 #[test]
 fn an_h1_library_sets_prompt_wide_state_every_later_section_sees() {
     let source = effect_source()
-        .h1("require '## setup'")
+        .h1("require '/setup'")
         .section(
             "Main",
             "
-            require '## offers'
+            require '/offers'
             messages:user('ping')
             models.loop()
             return var.tag .. ':' .. messages[#messages].content",

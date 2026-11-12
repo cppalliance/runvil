@@ -230,7 +230,7 @@ fn a_required_helper_survives_prologue_model_and_epilog() {
             "Only",
             "
             ```lua
-            require '## helpers'
+            require '/helpers'
             var.question = decorate(args)
             ```
 
@@ -259,11 +259,11 @@ fn a_required_helper_survives_prologue_model_and_epilog() {
             ("Only".to_owned(), detail::LUA_CHUNK_STARTED.to_string()),
             (
                 "Only".to_owned(),
-                "Lua library load started: ## helpers".to_owned(),
+                "Lua library load started: /helpers".to_owned(),
             ),
             (
                 "Only".to_owned(),
-                "Lua library load succeeded: ## helpers".to_owned(),
+                "Lua library load succeeded: /helpers".to_owned(),
             ),
             ("Only".to_owned(), detail::LUA_CHUNK_SUCCEEDED.to_string(),),
             ("Only".to_owned(), detail::LUA_CHUNK_STARTED.to_string()),

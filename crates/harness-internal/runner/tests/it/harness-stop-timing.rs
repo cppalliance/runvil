@@ -26,7 +26,7 @@ const STOPS_TIMED_JOIN: &str = "---\nname: timed\ndescription: d\nrunvil: 0\n\
     ---\n\n\
     # Timed\n\n\
     ## Main\n\n```lua\n\
-    local child = tasks.spawn('## Child')\n\
+    local child = tasks.spawn('../Child')\n\
     local ok, err = pcall(tasks.join_any, { child }, { timeout = 30 })\n\
     local after = models.infer('after')\n\
     tasks.send(child, 'kept')\n\
@@ -41,7 +41,7 @@ const STOPS_BEFORE_A_STEP: &str = "---\nname: before-step\ndescription: d\nrunvi
     ---\n\n\
     # BeforeStep\n\n\
     ## Main\n\n```lua\n\
-    local child = tasks.spawn('## Child')\n\
+    local child = tasks.spawn('../Child')\n\
     store.write('note.md', 'kept')\n\
     local _t, _ok, report = tasks.join_any({ child })\n\
     return report\n```\n\n\

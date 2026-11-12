@@ -14,9 +14,9 @@ use runvil_vfs::Access;
 use crate::execute::context::ChainState;
 use crate::execute::run::EffectId;
 use crate::execute::section_context::TaskSeed;
-use crate::heading_address::SectionPos;
 use crate::lua::Answer;
 use crate::model::ModelBinding;
+use crate::section_pos::SectionPos;
 use crate::{Result, error};
 
 use super::chain_record::{CallDepth, ChainKind, Walk};

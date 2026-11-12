@@ -7,7 +7,7 @@ use super::*;
 #[test]
 fn jump_to_off_walk_section_runs_it() {
     let source = PromptSource::new()
-        .section("A", "jump('## B')")
+        .section("A", "jump('../B')")
         .prose("B", "---\n\n```lua\nreturn 'b-ran'\n```")
         .section("C", "return 'c-ran'");
     assert_eq!(Scenario::new(source.build()).run().text(), "b-ran");
@@ -26,7 +26,7 @@ fn jump_to_a_child_starts_the_child_level_walk() {
                 "A",
                 "
                 store.append('order.txt', 'A\\n')
-                jump('### X')",
+                jump('X')",
             ),
             ("### X", "store.append('order.txt', 'X\\n')"),
             ("### Y", "store.append('order.txt', 'Y\\n')"),
@@ -53,13 +53,13 @@ fn child_walk_recurses_to_h4() {
                 "A",
                 "
                 store.append('order.txt', 'A\\n')
-                jump('### X')",
+                jump('X')",
             ),
             (
                 "### X",
                 "
                 store.append('order.txt', 'X\\n')
-                jump('#### P')",
+                jump('P')",
             ),
             ("#### P", "store.append('order.txt', 'P\\n')"),
             ("#### Q", "store.append('order.txt', 'Q\\n')"),
@@ -80,7 +80,7 @@ fn child_walk_recurses_to_h4() {
 #[test]
 fn jump_to_an_off_walk_child_runs_it() {
     let source = PromptSource::new()
-        .section("A", "jump('### Off')")
+        .section("A", "jump('Off')")
         .section("### X", "store.append('order.txt', 'X\\n')")
         .prose(
             "### Off",
@@ -102,7 +102,7 @@ fn call_to_a_child_starts_a_contained_chain() {
             (
                 "Main",
                 "
-                local r = call('### Sub')
+                local r = call('Sub')
                 return 'got:' .. r",
             ),
             ("### Sub", "store.append('order.txt', 'Sub\\n')"),
@@ -146,13 +146,13 @@ fn running_child_addresses_its_own_siblings_and_children() {
     let source = prompt(
         "",
         &[
-            ("A", "jump('### X')"),
+            ("A", "jump('X')"),
             (
                 "### X",
                 "
-                local r = call('#### Grand')
+                local r = call('Grand')
                 store.append('order.txt', 'X:' .. r .. '\\n')
-                jump('### Y')",
+                jump('../Y')",
             ),
             ("#### Grand", "return 'grand-ran'"),
             ("### Y", "store.append('order.txt', 'Y\\n')"),
@@ -162,23 +162,30 @@ fn running_child_addresses_its_own_siblings_and_children() {
     assert_eq!(Scenario::new(source).run().text(), "X:grand-ran\nY\n");
 }
 
-/// A running child cannot address a top-level section: the parent level is
-/// not in its visible set, so the jump resolves as not-found.
+/// A running child cannot jump to a top-level section: its parent's
+/// sibling is not its own sibling, so the jump resolves as not-found, and
+/// `jump` takes no path from the top.
 #[test]
-fn running_child_cannot_address_a_top_level_section() {
-    let source = prompt(
-        "",
-        &[
-            ("A", "jump('### X')"),
-            ("### X", "jump('## B')"),
-            ("B", "return 'b-ran'"),
-        ],
-    );
-    let trace = Scenario::new(source).run();
-    let rendered = trace.error().to_string();
+fn a_running_child_cannot_jump_to_its_parents_sibling() {
+    let failure = |jump: &str| {
+        let source = prompt(
+            "",
+            &[("A", "jump('X')"), ("### X", jump), ("B", "return 'b-ran'")],
+        );
+        Scenario::new(source).run().error().to_string()
+    };
+    let rendered = failure("jump('../B')");
     assert!(
-        rendered.contains("not found"),
+        rendered.contains("section `../B` not found: `/A/X` has no sibling `B`"),
         "a top-level section is not in a child's visible set: {rendered}"
+    );
+    let rendered = failure("jump('/B')");
+    assert!(
+        rendered.contains(
+            "section path \"/B\" starts with \"/\"; only require and prompt.section take a \
+             path from the top"
+        ),
+        "a jump takes a relative path: {rendered}"
     );
 }
 
@@ -187,7 +194,7 @@ fn running_child_cannot_address_a_top_level_section() {
 #[test]
 fn jump_to_a_niece_errors() {
     let source = PromptSource::new()
-        .section("A", "jump('### Niece')")
+        .section("A", "jump('Niece')")
         .prose("B", "")
         .section("### Niece", "return 'niece-ran'");
     let trace = Scenario::new(source.build()).run();
@@ -210,7 +217,7 @@ fn sys_id_counts_the_sections_one_chain_enters_across_a_jump_into_a_child_level(
                 "A",
                 "
                 store.append('ids.txt', tostring(sys.id) .. '\\n')
-                jump('### X')",
+                jump('X')",
             ),
             (
                 "### X",
@@ -231,7 +238,7 @@ fn sys_id_counts_the_sections_one_chain_enters_across_a_jump_into_a_child_level(
     assert_eq!(Scenario::new(source).run().text(), "0.1\n0.2\n0.3\n0.4\n");
 }
 
-/// `call()` on a child heading resolves the target's index within the
+/// `call()` on a child resolves the target's index within the
 /// caller's CHILD slice, not the sibling slice: earlier children do not run,
 /// and the chain falls through to the target's following child siblings.
 #[test]
@@ -242,7 +249,7 @@ fn call_to_a_later_child_runs_the_child_slice_from_that_index() {
             (
                 "Main",
                 "
-                local r = call('### Sub2')
+                local r = call('Sub2')
                 return 'got:' .. r",
             ),
             ("### Sub1", "error('an earlier child must not run')"),

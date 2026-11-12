@@ -26,7 +26,7 @@ fn join_any_returns_nil_when_the_timer_wins_and_the_member_keeps_running() {
     // end.
     let gateway = ScriptedChat::new(vec![text("slow answer")]);
     let md = tasks_prompt(
-        "local t = tasks.spawn('## Child')\n\
+        "local t = tasks.spawn('../Child')\n\
          local first, ok, result = tasks.join_any({ t }, { timeout = 0.05 })\n\
          log('timed out first=' .. tostring(first) .. ' ok=' .. tostring(ok) .. ' result=' .. tostring(result))\n\
          local s = tasks.status(t)\n\
@@ -75,7 +75,7 @@ fn join_any_cancels_the_timer_when_a_member_wins() {
     // fires: the shim cancels it, its entry is `Canceled`, and the run
     // ends without waiting on it or leaking it.
     let md = tasks_prompt(
-        "local t = tasks.spawn('## Child')\n\
+        "local t = tasks.spawn('../Child')\n\
          local first, ok, result = tasks.join_any({ t }, { timeout = 30 })\n\
          assert(first.task == t.task and ok and result == 'quick', tostring(result))\n\
          assert(#tasks.pending() == 0, 'nothing is pending')\n\
@@ -108,7 +108,7 @@ fn a_send_to_the_internal_timer_of_a_timed_join_any_raises_task_not_owned() {
     let send = "local ok, err = pcall(tasks.send, '0.1', 'x')\n";
     let md = tasks_prompt(
         &format!(
-            "local t = tasks.spawn('## Child')\n\
+            "local t = tasks.spawn('../Child')\n\
              tasks.join_any({{ t }}, {{ timeout = 30 }})\n\
              {send}\
              return tostring(ok) .. ' ' .. err.kind"
@@ -129,7 +129,7 @@ fn a_send_to_the_internal_timer_of_a_timed_join_any_raises_task_not_owned() {
     let gateway = ScriptedChat::new(vec![text("slow answer")]);
     let md = tasks_prompt(
         &format!(
-            "local t = tasks.spawn('## Child')\n\
+            "local t = tasks.spawn('../Child')\n\
              tasks.join_any({{ t }}, {{ timeout = 0.05 }})\n\
              {send}\
              tasks.join_any({{ t }})\n\
@@ -165,8 +165,8 @@ fn join_returns_timed_out_with_the_unfinished_members_absent() {
     // `timed_out = false`.
     let gateway = ScriptedChat::new(vec![text("slow answer")]);
     let md = tasks_prompt(
-        "local q = tasks.spawn('## Quick')\n\
-         local s = tasks.spawn('## Slow')\n\
+        "local q = tasks.spawn('../Quick')\n\
+         local s = tasks.spawn('../Slow')\n\
          local results, timed_out = tasks.join({ q, s }, { timeout = 0.05 })\n\
          log('timed_out=' .. tostring(timed_out) .. ' n=' .. #results\n\
            .. ' quick=' .. tostring(results[1] and results[1].result)\n\
@@ -204,8 +204,8 @@ fn join_cancels_the_timer_when_every_member_finishes() {
     // present, `timed_out` is false, and the timer (the owner's third
     // child) is canceled rather than waited out or leaked.
     let md = tasks_prompt(
-        "local a = tasks.spawn('## Alpha')\n\
-         local b = tasks.spawn('## Beta')\n\
+        "local a = tasks.spawn('../Alpha')\n\
+         local b = tasks.spawn('../Beta')\n\
          local results, timed_out = tasks.join({ a, b }, { timeout = 30 })\n\
          assert(timed_out == false, 'no timeout')\n\
          assert(#results == 2 and results[1].result == 'alpha' and results[2].result == 'beta')\n\
@@ -235,7 +235,7 @@ fn the_timer_is_invisible_to_pending_and_to_a_status_tasks_list() {
     // win.
     let gateway = ScriptedChat::new(vec![text("slow answer")]);
     let md = tasks_prompt(
-        "local c = tasks.spawn('## Child')\n\
+        "local c = tasks.spawn('../Child')\n\
          store.write('park', 'x')\n\
          local s = tasks.status(c)\n\
          log('child blocked=' .. tostring(s.blocked) .. ' tasks=' .. #s.tasks .. ' first=' .. tostring(s.tasks[1]))\n\
@@ -245,7 +245,7 @@ fn the_timer_is_invisible_to_pending_and_to_a_status_tasks_list() {
         &[
             (
                 "Child",
-                "local g = tasks.spawn('## Grandchild')\n\
+                "local g = tasks.spawn('../Grandchild')\n\
                  local first = tasks.join_any({ g }, { timeout = 30 })\n\
                  assert(first.task == g.task, 'the grandchild wins')\n\
                  return 'child done'",
@@ -273,7 +273,7 @@ fn the_timer_is_invisible_to_pending_and_to_a_status_tasks_list() {
 #[test]
 fn the_timeout_option_is_validated_at_the_call_site() {
     let md = tasks_prompt(
-        "local t = tasks.spawn('## Child')\n\
+        "local t = tasks.spawn('../Child')\n\
          local ok1, e1 = pcall(tasks.join_any, { t }, { timeout = 'soon' })\n\
          assert(not ok1 and e1.kind == 'lua', tostring(e1))\n\
          local ok2, e2 = pcall(tasks.join, { t }, { timeout = -1 })\n\

@@ -64,10 +64,10 @@ fn a_wait_on_a_task_that_replied_returns_the_reply_and_the_task_parks_on_its_inb
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              local _, ok, reply = tasks.join_any({ t })\n\
              tasks.cancel(t)\n\
-             local u = tasks.spawn('## Worker')\n\
+             local u = tasks.spawn('../Worker')\n\
              local joined = tasks.join({ u })[1]\n\
              tasks.cancel(u)\n\
              return tostring(ok) .. ' ' .. reply .. ' ' .. tostring(joined.ok) .. ' ' .. joined.result",
@@ -94,7 +94,7 @@ fn after_a_send_a_second_wait_returns_the_tasks_next_reply() {
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              local _, _, first = tasks.join_any({ t })\n\
              tasks.send(t, 'shorten it')\n\
              local _, _, second = tasks.join_any({ t })\n\
@@ -121,7 +121,7 @@ fn a_wait_on_an_idle_task_whose_reply_was_taken_with_no_message_since_raises_tas
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              tasks.join_any({ t })\n\
              local state = tasks.status(t).state\n\
              local ok, err = pcall(tasks.join_any, { t })\n\
@@ -143,7 +143,7 @@ fn a_reply_that_finds_a_message_queued_returns_it_at_once_and_the_next_wait_wait
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              tasks.send(t, 'early')\n\
              local _, _, first = tasks.join_any({ t })\n\
              local _, _, second = tasks.join_any({ t })\n\
@@ -167,7 +167,7 @@ fn an_idle_tasks_status_reads_running_blocked_on_its_inbox_with_no_ok_in_its_sec
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              tasks.join_any({ t })\n\
              local status = tasks.status(t)\n\
              tasks.cancel(t)\n\
@@ -189,8 +189,8 @@ fn an_idle_task_frees_its_slot_so_a_queued_spawn_starts() {
         (
             "Main",
             "tasks.concurrency(1)\n\
-             local replier = tasks.spawn('## Replier')\n\
-             local worker = tasks.spawn('## Worker')\n\
+             local replier = tasks.spawn('../Replier')\n\
+             local worker = tasks.spawn('../Worker')\n\
              local _, _, ready = tasks.join_any({ replier })\n\
              local _, _, worked = tasks.join_any({ worker })\n\
              tasks.send(replier, 'more')\n\
@@ -212,15 +212,15 @@ fn an_owner_that_ends_with_an_idle_task_keeps_its_own_result_and_abandons_the_ta
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local owner = tasks.spawn('## Owner')\n\
+            "local owner = tasks.spawn('../Owner')\n\
              local _, ok, result = tasks.join_any({ owner })\n\
-             local t = tasks.spawn('## Worker')\n\
+             local t = tasks.spawn('../Worker')\n\
              tasks.join_any({ t })\n\
              return tostring(ok) .. ' ' .. result",
         ),
         (
             "Owner",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              tasks.join_any({ t })\n\
              return 'owner result'",
         ),
@@ -256,8 +256,8 @@ fn an_owner_that_ends_with_a_running_task_beside_an_idle_one_names_only_the_runn
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local idle = tasks.spawn('## Replier')\n\
-             local running = tasks.spawn('## Receiver')\n\
+            "local idle = tasks.spawn('../Replier')\n\
+             local running = tasks.spawn('../Receiver')\n\
              tasks.join_any({ idle })\n\
              return 'leaked'",
         ),
@@ -291,7 +291,7 @@ fn canceling_an_idle_task_ends_it_canceled() {
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              tasks.join_any({ t })\n\
              tasks.cancel(t)\n\
              local status = tasks.status(t)\n\
@@ -323,7 +323,7 @@ fn a_reply_on_the_main_chain_or_its_call_child_raises_a_lua_error() {
         (
             "Main",
             "local ok, err = pcall(tasks.reply, 'x')\n\
-             return tostring(ok) .. ' ' .. err.kind .. '|' .. call('## Helper') .. '|' .. tostring(err)",
+             return tostring(ok) .. ' ' .. err.kind .. '|' .. call('../Helper') .. '|' .. tostring(err)",
         ),
         (
             "Helper",
@@ -344,7 +344,7 @@ fn a_reply_in_a_call_child_of_a_task_replies_for_that_task() {
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              local _, _, reply = tasks.join_any({ t })\n\
              local status = tasks.status(t)\n\
              tasks.send(t, 'next')\n\
@@ -352,7 +352,7 @@ fn a_reply_in_a_call_child_of_a_task_replies_for_that_task() {
              return reply .. '|' .. status.state .. ' ' .. tostring(status.blocked) .. ' ' \
              .. tostring(status.ok) .. ' ' .. tostring(status.section) .. '|' .. result",
         ),
-        ("Worker", "return 'worker returned ' .. call('## Helper')"),
+        ("Worker", "return 'worker returned ' .. call('../Helper')"),
         (
             "Helper",
             "return 'helper got ' .. tasks.reply('from the helper')",
@@ -377,9 +377,9 @@ fn past_the_idle_cap_a_reply_closes_the_task_idle_longest_as_done_with_its_reply
         &[
             (
                 "Main",
-                "local first = tasks.spawn('## First')\n\
+                "local first = tasks.spawn('../First')\n\
                  local _, _, one = tasks.join_any({ first })\n\
-                 local second = tasks.spawn('## Second')\n\
+                 local second = tasks.spawn('../Second')\n\
                  local _, _, two = tasks.join_any({ second })\n\
                  local status = tasks.status(first)\n\
                  local sent = tasks.send(first, 'too late')\n\
@@ -428,8 +428,8 @@ fn a_wait_on_a_task_the_cap_closed_delivers_its_undelivered_reply_once() {
         &[
             (
                 "Main",
-                "local first = tasks.spawn('## First')\n\
-                 local second = tasks.spawn('## Second')\n\
+                "local first = tasks.spawn('../First')\n\
+                 local second = tasks.spawn('../Second')\n\
                  local _, _, two = tasks.join_any({ second })\n\
                  local closed = tasks.status(first).state\n\
                  local ready = tasks.ready(first)\n\
@@ -476,11 +476,11 @@ fn past_the_idle_cap_a_reply_passes_over_the_task_idle_longest_when_it_owns_a_li
         &[
             (
                 "Main",
-                "local owner = tasks.spawn('## Owner')\n\
+                "local owner = tasks.spawn('../Owner')\n\
                  local _, _, one = tasks.join_any({ owner })\n\
-                 local idle = tasks.spawn('## Idle')\n\
+                 local idle = tasks.spawn('../Idle')\n\
                  local _, _, two = tasks.join_any({ idle })\n\
-                 local third = tasks.spawn('## Third')\n\
+                 local third = tasks.spawn('../Third')\n\
                  local _, _, three = tasks.join_any({ third })\n\
                  local states = tasks.status(owner).state .. ' ' .. tasks.status(idle).state \
                  .. ' ' .. tasks.status(third).state\n\
@@ -490,7 +490,7 @@ fn past_the_idle_cap_a_reply_passes_over_the_task_idle_longest_when_it_owns_a_li
             ),
             (
                 "Owner",
-                "tasks.spawn('## Worker')\ntasks.reply('a')\nreturn 'unreachable'",
+                "tasks.spawn('../Worker')\ntasks.reply('a')\nreturn 'unreachable'",
             ),
             ("Worker", "return tasks.receive()"),
             ("Idle", "tasks.reply('b')\nreturn 'unreachable'"),
@@ -523,11 +523,11 @@ fn past_the_idle_cap_a_reply_passes_over_a_task_whose_call_child_owns_a_live_tas
         &[
             (
                 "Main",
-                "local owner = tasks.spawn('## Owner')\n\
+                "local owner = tasks.spawn('../Owner')\n\
                  local _, _, one = tasks.join_any({ owner })\n\
-                 local idle = tasks.spawn('## Idle')\n\
+                 local idle = tasks.spawn('../Idle')\n\
                  local _, _, two = tasks.join_any({ idle })\n\
-                 local third = tasks.spawn('## Third')\n\
+                 local third = tasks.spawn('../Third')\n\
                  local _, _, three = tasks.join_any({ third })\n\
                  local states = tasks.status(owner).state .. ' ' .. tasks.status(idle).state \
                  .. ' ' .. tasks.status(third).state\n\
@@ -535,10 +535,10 @@ fn past_the_idle_cap_a_reply_passes_over_a_task_whose_call_child_owns_a_live_tas
                  tasks.cancel(third)\n\
                  return one .. two .. three .. ' ' .. states",
             ),
-            ("Owner", "return call('## Helper')"),
+            ("Owner", "return call('../Helper')"),
             (
                 "Helper",
-                "tasks.spawn('## Worker')\ntasks.reply('a')\nreturn 'unreachable'",
+                "tasks.spawn('../Worker')\ntasks.reply('a')\nreturn 'unreachable'",
             ),
             ("Worker", "return tasks.receive()"),
             ("Idle", "tasks.reply('b')\nreturn 'unreachable'"),
@@ -571,7 +571,7 @@ fn past_the_idle_cap_closing_the_owner_of_the_replier_abandons_the_replier_as_ow
         &[
             (
                 "Main",
-                "local a = tasks.spawn('## A')\n\
+                "local a = tasks.spawn('../A')\n\
                  local _, _, reply = tasks.join_any({ a })\n\
                  store.exists('busy')\n\
                  local status = tasks.status(a)\n\
@@ -579,7 +579,7 @@ fn past_the_idle_cap_closing_the_owner_of_the_replier_abandons_the_replier_as_ow
             ),
             (
                 "A",
-                "tasks.spawn('## B')\ntasks.reply('a')\nreturn 'unreachable'",
+                "tasks.spawn('../B')\ntasks.reply('a')\nreturn 'unreachable'",
             ),
             ("B", "tasks.reply('b')\nreturn 'unreachable'"),
         ],
@@ -609,10 +609,10 @@ fn past_the_idle_cap_closing_a_running_workers_owner_withdraws_its_effect_and_le
         &[
             (
                 "Main",
-                "local owner = tasks.spawn('## Owner')\n\
+                "local owner = tasks.spawn('../Owner')\n\
                  local _, _, one = tasks.join_any({ owner })\n\
                  store.exists('main')\n\
-                 local replier = tasks.spawn('## Replier')\n\
+                 local replier = tasks.spawn('../Replier')\n\
                  local _, _, two = tasks.join_any({ replier })\n\
                  local status = tasks.status(owner)\n\
                  tasks.cancel(replier)\n\
@@ -620,7 +620,7 @@ fn past_the_idle_cap_closing_a_running_workers_owner_withdraws_its_effect_and_le
             ),
             (
                 "Owner",
-                "tasks.spawn('## Worker')\ntasks.reply('a')\nreturn 'unreachable'",
+                "tasks.spawn('../Worker')\ntasks.reply('a')\nreturn 'unreachable'",
             ),
             ("Worker", "store.exists('worker')\nreturn 'never'"),
             ("Replier", "tasks.reply('b')\nreturn 'unreachable'"),
@@ -670,18 +670,18 @@ fn past_the_idle_cap_closing_a_task_abandons_its_call_childs_worker_as_owner_ret
         &[
             (
                 "Main",
-                "local owner = tasks.spawn('## Owner')\n\
+                "local owner = tasks.spawn('../Owner')\n\
                  local _, _, one = tasks.join_any({ owner })\n\
-                 local replier = tasks.spawn('## Replier')\n\
+                 local replier = tasks.spawn('../Replier')\n\
                  local _, _, two = tasks.join_any({ replier })\n\
                  local status = tasks.status(owner)\n\
                  tasks.cancel(replier)\n\
                  return one .. ' ' .. two .. ' ' .. status.state .. ' ' .. tostring(status.ok)",
             ),
-            ("Owner", "return call('## Helper')"),
+            ("Owner", "return call('../Helper')"),
             (
                 "Helper",
-                "tasks.spawn('## Worker')\ntasks.reply('a')\nreturn 'unreachable'",
+                "tasks.spawn('../Worker')\ntasks.reply('a')\nreturn 'unreachable'",
             ),
             ("Worker", "return tasks.receive()"),
             ("Replier", "tasks.reply('b')\nreturn 'unreachable'"),
@@ -710,7 +710,7 @@ fn ready_is_true_while_a_reply_waits_undelivered_and_false_once_a_wait_takes_it(
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              local before = tasks.ready(t)\n\
              store.exists('busy')\n\
              local waiting = tasks.ready(t)\n\
@@ -737,7 +737,7 @@ fn pending_lists_an_idle_task() {
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              tasks.join_any({ t })\n\
              local listed = tasks.pending()\n\
              tasks.cancel(t)\n\
@@ -754,7 +754,7 @@ fn a_reply_converts_its_value_as_a_section_return_does_with_nil_as_empty_text() 
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              local replies = {}\n\
              for _, word in ipairs({ 'a', 'b', 'c' }) do\n\
                local _, _, reply = tasks.join_any({ t })\n\

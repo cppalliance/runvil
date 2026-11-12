@@ -387,7 +387,7 @@ fn a_traceback_through_a_shim_shows_unmapped_impl_frames() {
     // The var_snapshot capture fails on a reassigned `var` global: an
     // unexpected shim error, whose frames must render verbatim.
     let program = LuaProgram::compile(
-        "var = 5\ncall(\"## Child\")",
+        "var = 5\ncall(\"../Child\")",
         "prompt",
         "section `Test` prologue",
         NonZeroU32::new(40).expect("40 is non-zero"),

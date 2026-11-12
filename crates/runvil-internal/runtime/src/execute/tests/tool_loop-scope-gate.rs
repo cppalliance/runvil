@@ -309,7 +309,7 @@ fn the_gate_reads_the_sections_frozen_sets_after_a_handler_runs_model_rounds_of_
     ]);
     let only = "tools.offer('tools/echo')\n\
                 tools.offer(tools.adhoc({ name = 'grab', description = 'Grab' }, function()\n\
-                  return models.infer('aside') .. '+' .. call('## Helper')\n\
+                  return models.infer('aside') .. '+' .. call('../Helper')\n\
                 end))\n\
                 messages:user('go')\n\
                 models.loop()\n\

@@ -10,7 +10,7 @@ fn call_from_h1_runs_the_target_as_a_contained_chain() {
     // exactly as in any section.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Test prompt\n\n\
-        ```lua\nvar.answer = call('## Answer')\n```\n\n\
+        ```lua\nvar.answer = call('Answer')\n```\n\n\
         ## Result\n\n\
         ```lua\nreturn var.answer\n```\n\n\
         ## Answer\n\n\
@@ -30,11 +30,11 @@ fn a_call_from_h1_and_a_call_from_the_first_walked_section_take_consecutive_chil
     // counter continues too: its first section is still `0.1`.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Test prompt\n\n\
-        ```lua\nvar.first = call('## Answer')\n```\n\n\
+        ```lua\nvar.first = call('Answer')\n```\n\n\
         ## Result\n\n\
         ```lua\n\
         assert(sys.id == '0.1', 'the first walked section takes root entry 1')\n\
-        return var.first .. ',' .. call('## Answer')\n\
+        return var.first .. ',' .. call('../Answer')\n\
         ```\n\n\
         ## Answer\n\n\
         ```lua\nreturn sys.id\n```\n";
@@ -54,13 +54,14 @@ fn call_from_h1_to_an_unknown_section_is_a_catchable_error() {
     // uncaught, it ends the run as the H1 gate failure.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Test prompt\n\n\
-        ```lua\nlocal ok, err = pcall(call, '## Nope'); return tostring(ok) .. ':' .. tostring(err)\n```\n";
+        ```lua\nlocal ok, err = pcall(call, 'Nope'); return tostring(ok) .. ':' .. tostring(err)\n```\n";
     let trace = h1_scenario(md).run();
 
     let out = trace.text();
     assert!(
-        out.starts_with("false:") && out.contains("## Nope"),
-        "the caught error names the missing section: {out}"
+        out.starts_with("false:")
+            && out.contains("section `Nope` not found: the top level has no section `Nope`"),
+        "the caught error says where it looked: {out}"
     );
 }
 
@@ -70,7 +71,7 @@ fn jump_from_h1_starts_the_walk_at_the_target() {
     // top-level target, skipping the sections before it.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Test prompt\n\n\
-        ```lua\njump('## Target')\n```\n\n\
+        ```lua\njump('Target')\n```\n\n\
         ## Skipped\n\n\
         ```lua\nerror('the jump target must skip this section')\n```\n\n\
         ## Target\n\n\
@@ -84,25 +85,27 @@ fn jump_from_h1_starts_the_walk_at_the_target() {
 fn jump_from_h1_to_an_unknown_section_fails_the_run() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Test prompt\n\n\
-        ```lua\njump('## Nope')\n```\n";
+        ```lua\njump('Nope')\n```\n";
     let trace = h1_scenario(md).run();
 
     let error = trace.error();
     assert!(
-        error.to_string().contains("## Nope"),
-        "the failure names the missing section: {error}"
+        error
+            .to_string()
+            .contains("section `Nope` not found: the top level has no section `Nope`"),
+        "the failure says where it looked: {error}"
     );
 }
 
 #[test]
-fn a_jump_from_h1_to_a_missing_heading_fails_on_the_jump_line() {
+fn a_jump_from_h1_to_a_missing_section_fails_on_the_jump_line() {
     // Jump-target resolution is the machinery around the chunk, not the
     // failed gate, so it keeps its own kind on the `jump` call's line.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Test prompt\n\n\
         ```lua\n\
         var.before = true\n\
-        jump('## Nope')\n\
+        jump('Nope')\n\
         ```\n\n\
         ## Result\n\n\
         ```lua\nreturn 'unexpected'\n```\n";
@@ -124,7 +127,7 @@ fn fanout_from_h1_runs_the_worker_over_the_collection() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Test prompt\n\n\
         ```lua\n\
-        local r = tasks.fanout('## Worker', {'a', 'b'})\n\
+        local r = tasks.fanout('Worker', {'a', 'b'})\n\
         var.answer = r[1].text .. '|' .. r[2].text\n\
         ```\n\n\
         ## Result\n\n\

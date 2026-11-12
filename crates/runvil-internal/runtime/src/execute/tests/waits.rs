@@ -42,8 +42,8 @@ fn join_reports_a_failed_member_without_raising() {
     // input order and the caller decides; the failed member's result is
     // the error table, and nothing leaks at chain end.
     let md = tasks_prompt(
-        "local a = tasks.spawn('## Alpha')\n\
-         local b = tasks.spawn('## Beta')\n\
+        "local a = tasks.spawn('../Alpha')\n\
+         local b = tasks.spawn('../Beta')\n\
          local results = tasks.join({ b, a })\n\
          assert(#results == 2, 'two results')\n\
          assert(results[1].task == b.task, 'input order: beta first')\n\
@@ -70,8 +70,8 @@ fn join_fills_every_position_of_a_member_named_twice() {
     // and `#results` is the input's length; the second wait would have
     // raised `make_task_consumed_error` had the shim waited twice.
     let md = tasks_prompt(
-        "local a = tasks.spawn('## Alpha')\n\
-         local b = tasks.spawn('## Beta')\n\
+        "local a = tasks.spawn('../Alpha')\n\
+         local b = tasks.spawn('../Beta')\n\
          local results = tasks.join({ a, b, a })\n\
          assert(#results == 3, 'three positions, got ' .. #results)\n\
          local count = 0\n\
@@ -99,8 +99,8 @@ fn join_any_returns_the_first_finished_member_and_the_rest_keep_running() {
     // both delivers Alpha and leaves Beta live, so the caller must still
     // wait on Beta before it ends - which it does.
     let md = tasks_prompt(
-        "local a = tasks.spawn('## Alpha')\n\
-         local b = tasks.spawn('## Beta')\n\
+        "local a = tasks.spawn('../Alpha')\n\
+         local b = tasks.spawn('../Beta')\n\
          local first, ok, result = tasks.join_any({ a, b })\n\
          assert(first.task == a.task, 'alpha finishes first, got ' .. first.task)\n\
          assert(ok and result == 'alpha', tostring(result))\n\
@@ -135,7 +135,7 @@ fn status_reports_a_parked_task_and_then_a_finished_one() {
            table.sort(names)\n\
            return table.concat(names, ',')\n\
          end\n\
-         local t = tasks.spawn('## Child')\n\
+         local t = tasks.spawn('../Child')\n\
          local fresh = tasks.status(t)\n\
          log('fresh state=' .. fresh.state .. ' section=' .. tostring(fresh.section)\n\
            .. ' blocked=' .. tostring(fresh.blocked))\n\
@@ -190,7 +190,7 @@ fn a_non_owner_is_refused_with_task_not_owned() {
     // but waiting on or canceling it is the owner's alone, and a task id
     // the caller never spawned is refused the same way.
     let md = tasks_prompt(
-        "local t = tasks.spawn('## Child')\n\
+        "local t = tasks.spawn('../Child')\n\
          local ok, err = pcall(tasks.cancel, '9.9')\n\
          assert(not ok and err.kind == 'task_not_owned', tostring(err))\n\
          assert(err.task == '9.9', tostring(err.task))\n\
@@ -225,7 +225,7 @@ fn a_non_owner_is_refused_with_task_not_owned() {
 #[test]
 fn waiting_on_a_delivered_task_raises_task_consumed() {
     let md = tasks_prompt(
-        "local t = tasks.spawn('## Child')\n\
+        "local t = tasks.spawn('../Child')\n\
          local _, ok, result = tasks.join_any({ t })\n\
          assert(ok and result == 'once', tostring(result))\n\
          assert(tasks.ready(t), 'a delivered task is ready')\n\
@@ -260,7 +260,7 @@ fn cancel_ends_a_parked_task_idempotently_and_reports_task_canceled_once() {
     // cancels.
     let child_write = |effect: &Effect| matches!(effect, Effect::Vfs { op: VfsOp::Write { path, .. }, .. } if path == "child-park");
     let md = tasks_prompt(
-        "local t = tasks.spawn('## Child')\n\
+        "local t = tasks.spawn('../Child')\n\
          store.exists('park')\n\
          tasks.cancel(t)\n\
          tasks.cancel(t)\n\
@@ -337,9 +337,9 @@ fn pending_lists_the_callers_live_tasks_in_spawn_order() {
     // after a leading nil are each the call's error, naming the argument's
     // type.
     let md = tasks_prompt(
-        "local a = tasks.spawn('## Parked')\n\
-         local b = tasks.spawn('## Quick')\n\
-         local c = tasks.spawn('## Parked')\n\
+        "local a = tasks.spawn('../Parked')\n\
+         local b = tasks.spawn('../Quick')\n\
+         local c = tasks.spawn('../Parked')\n\
          tasks.join_any({ b })\n\
          local live = tasks.pending()\n\
          assert(#live == 2, 'two live tasks, got ' .. #live)\n\
@@ -377,8 +377,8 @@ fn the_waits_old_names_are_not_defined() {
     // The spawned children are canceled, so nothing stays live at chain
     // end.
     let md = tasks_prompt(
-        "local a = tasks.spawn('## Child')\n\
-         local b = tasks.spawn('## Child')\n\
+        "local a = tasks.spawn('../Child')\n\
+         local b = tasks.spawn('../Child')\n\
          local ok1, e1 = pcall(tasks.when_any, { a })\n\
          local ok2, e2 = pcall(tasks.when_all, { b })\n\
          tasks.cancel(a)\n\

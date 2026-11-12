@@ -133,7 +133,7 @@ fn after_the_render_every_offer_raises_even_an_identical_one_while_defining_stil
                    function() tools.offer('tools') end,
                    function() tools.offer(tools.adhoc({ name = 'late', description = 'Late' }, function() return '' end)) end,
                    function() tools.offer_dynamic('tools') end,
-                   function() require '## offers' end,
+                   function() require '/offers' end,
                  }) do
                    local _, err = pcall(offer)
                    out[#out + 1] = err.kind .. ':' .. tostring(err)

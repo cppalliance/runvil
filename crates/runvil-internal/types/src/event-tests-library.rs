@@ -1,15 +1,15 @@
 //! Tests for the library-load variants' serialized form: each carries the
-//! library's heading beside the two coordinates, on one line.
+//! library's path beside the two coordinates, on one line.
 
 use super::*;
 
-/// The coordinates and library of loading `## shared_stuff` into `Main`'s
+/// The coordinates and library of loading `/shared_stuff` into `Main`'s
 /// environment, stamped `seq`.
 fn coordinates(seq: u32) -> (String, Provenance, String) {
     (
         "Main".to_owned(),
         provenance("0", seq),
-        "## shared_stuff".to_owned(),
+        "/shared_stuff".to_owned(),
     )
 }
 
@@ -48,7 +48,7 @@ fn a_library_load_serializes_its_library_beside_the_coordinates() {
         assert_eq!(
             serde_json::to_string(event).expect("an event serializes"),
             format!(
-                r###"{{"kind":"{kind}","section":"Main","provenance":{{"task":"0","seq":{seq}}},"library":"## shared_stuff"}}"###
+                r#"{{"kind":"{kind}","section":"Main","provenance":{{"task":"0","seq":{seq}}},"library":"/shared_stuff"}}"#
             )
         );
         round_trips(event);

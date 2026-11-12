@@ -1,5 +1,6 @@
-//! What raises: a cycle, a heading out of reach or misspelled, a `jump`
-//! during a load, and a Pack prelude that defines or calls `require`.
+//! What raises: a cycle, a path that names no section or does not start
+//! at the top, a `jump` during a load, and a Pack prelude that defines or
+//! calls `require`.
 //! A library that raises while loading runs again on the next `require`,
 //! and a raise in library code reports the library's location and
 //! prompt-file line.
@@ -33,45 +34,72 @@ fn a_cycle_raises_naming_its_sections_in_order() {
     let source = prompt(
         "",
         &[
-            ("Main", "require '## a'"),
-            ("a", "require '## b'"),
-            ("b", "require '## a'"),
+            ("Main", "require '/a'"),
+            ("a", "require '/b'"),
+            ("b", "require '/a'"),
         ],
     );
     let message = lua_failure(&require_case(source).run());
     assert!(
-        message.contains("require cycle: ## a -> ## b -> ## a"),
+        message.contains("require cycle: /a -> /b -> /a"),
         "the cycle names both libraries: {message}"
     );
 }
 
 #[test]
-fn an_out_of_reach_or_misspelled_heading_parses_and_raises_when_the_call_runs() {
+fn a_section_that_requires_itself_meets_the_cycle_error() {
+    let source = prompt("", &[("Main", "require '/Main'")]);
+    let message = lua_failure(&require_case(source).run());
+    assert!(
+        message.contains("require cycle: /Main -> /Main"),
+        "the load of Main requires Main again: {message}"
+    );
+}
+
+#[test]
+fn a_path_that_names_no_section_or_is_not_from_the_top_raises_when_the_call_runs() {
     let source = PromptSource::new()
         .section(
             "Main",
             "
-            local _, far = pcall(require, '### deep')
-            local _, typo = pcall(require, '## helpres')
-            return tostring(far) .. '\\n' .. tostring(typo)",
+            local messages = {}
+            for _, path in ipairs({ '/helpres', '/other/deeper', 'helpers', '../helpers', '## helpers' }) do
+              local ok, err = pcall(require, path)
+              assert(not ok, path .. ' must raise')
+              messages[#messages + 1] = tostring(err)
+            end
+            return table.concat(messages, '\\n')",
         )
         .prose("other", "")
         .section("### deep", "return 'deep'")
         .section("helpers", "return 'helpers'");
     let trace = require_case(source.build()).run();
-    let (far, typo) = trace.text().split_once('\n').expect("two messages");
+    let text = trace.text();
+    let messages: Vec<&str> = text.lines().collect();
+    let [typo, deeper, child, sibling, marks] = messages.as_slice() else {
+        panic!("five messages: {messages:?}");
+    };
     assert!(
-        far.contains(
-            "section heading `### deep` not found; available sections: ## other, ## helpers"
-        ),
-        "a sibling's child is out of reach: {far}"
+        typo.contains("section `/helpres` not found: the top level has no section `helpres`"),
+        "a misspelled title names where the walk stopped: {typo}"
     );
     assert!(
-        typo.contains(
-            "section heading `## helpres` not found; available sections: ## other, ## helpers"
-        ),
-        "a misspelled heading names the reach: {typo}"
+        deeper.contains("section `/other/deeper` not found: `/other` has no child `deeper`"),
+        "a miss below the top names the section that was searched: {deeper}"
     );
+    for (path, message) in [
+        ("helpers", child),
+        ("../helpers", sibling),
+        ("## helpers", marks),
+    ] {
+        assert!(
+            message.contains(&format!(
+                "section path \"{path}\" does not start with \"/\"; require takes a path \
+                 from the top, such as \"/helpers\""
+            )),
+            "a relative path is refused: {message}"
+        );
+    }
 }
 
 #[test]
@@ -79,8 +107,8 @@ fn a_jump_during_a_load_raises() {
     let source = prompt(
         "",
         &[
-            ("Main", "require '## jumper'"),
-            ("jumper", "jump('## Last')"),
+            ("Main", "require '/jumper'"),
+            ("jumper", "jump('../Last')"),
             ("Last", "return 'jumped'"),
         ],
     );
@@ -100,8 +128,8 @@ fn a_library_that_raises_while_loading_runs_again_on_the_next_require() {
                 "Main",
                 "
                 var.attempts = 0
-                local first_ok = pcall(require, '## flaky')
-                local second = require '## flaky'
+                local first_ok = pcall(require, '/flaky')
+                local second = require '/flaky'
                 return tostring(first_ok) .. '|' .. second .. '|' .. var.attempts",
             ),
             (
@@ -134,7 +162,7 @@ fn a_prelude_cannot_define_require_or_call_it_while_it_installs() {
     );
     let calls = lua_failure(&run_with_preludes(
         &source,
-        vec![prelude("eager", "require '## lib'")],
+        vec![prelude("eager", "require '/lib'")],
     ));
     assert!(
         calls.contains("Pack `eager`: its prelude failed to load")
@@ -157,7 +185,7 @@ fn a_raise_during_the_load_reports_the_library_line() {
         ## Main\n\
         \n\
         ```lua\n\
-        require '## lib'\n\
+        require '/lib'\n\
         ```\n\
         \n\
         ## lib\n\
@@ -187,7 +215,7 @@ fn a_raise_while_a_long_titled_library_loads_reports_the_library_line() {
         ## Main\n\
         \n\
         ```lua\n\
-        require '## Shared Research Helper Functions'\n\
+        require '/Shared Research Helper Functions'\n\
         ```\n\
         \n\
         ## Shared Research Helper Functions\n\
@@ -217,7 +245,7 @@ fn a_raise_from_a_library_function_called_later_reports_the_library_line() {
         ## Main\n\
         \n\
         ```lua\n\
-        require '## lib'\n\
+        require '/lib'\n\
         boom()\n\
         ```\n\
         \n\

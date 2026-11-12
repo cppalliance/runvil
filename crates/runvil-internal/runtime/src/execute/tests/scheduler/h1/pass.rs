@@ -247,7 +247,7 @@ fn a_failing_library_required_from_h1_ends_the_run_as_requirements_unmet() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Gate\n\n\
         ```lua\n\
-        require '## broken'\n\
+        require '/broken'\n\
         var.ok = true\n\
         ```\n\n\
         ## broken\n\n\

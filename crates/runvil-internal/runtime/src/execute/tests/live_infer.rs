@@ -72,7 +72,7 @@ fn unread_h1_prose_stays_inert_and_explicit_infer_requires_a_model() {
 #[test]
 fn a_library_function_resolves_engine_globals_when_called() {
     let source = PromptSource::new()
-        .section("Result", "require '## helpers'\nreturn read_args()")
+        .section("Result", "require '/helpers'\nreturn read_args()")
         .section("helpers", "function read_args() return args end");
     let trace = Scenario::new(source.build())
         .args("later canned value")
@@ -90,7 +90,7 @@ fn a_library_calls_engine_globals_at_load_time() {
     let source = PromptSource::new()
         .section(
             "Result",
-            "require '## loader'\nreturn store.read('loaded.txt')",
+            "require '/loader'\nreturn store.read('loaded.txt')",
         )
         .section(
             "loader",
@@ -120,18 +120,18 @@ fn tool_objects_and_roles_reach_section_call_and_fanout_vms() {
         .section(
             "Parent",
             "
-            require '## bindings'
+            require '/bindings'
             local direct = binding_names()
-            local called = call('## Called')
-            local arms = tasks.fanout('### Worker', prompt.list('### Items'))
+            local called = call('../Called')
+            local arms = tasks.fanout('Worker', prompt.list('Items'))
             return direct .. '|' .. called .. '|' .. table.concat(arms, ',')",
         )
         .section(
             "### Worker",
-            "require '## bindings'\nreturn binding_names() .. ':' .. item",
+            "require '/bindings'\nreturn binding_names() .. ':' .. item",
         )
         .prose("### Items", "- one\n- two")
-        .section("Called", "require '## bindings'\nreturn binding_names()")
+        .section("Called", "require '/bindings'\nreturn binding_names()")
         .section(
             "bindings",
             "function binding_names() return tools.get('tools/echo').id .. ':' .. models.get('default').name end",

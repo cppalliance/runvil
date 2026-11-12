@@ -24,17 +24,16 @@ use runvil_types::ids::TaskId;
 use runvil_types::tools::ToolId;
 use runvil_vfs::{Access, ScopeHandle};
 
-use crate::heading_address::{SectionPos, Visible};
-use crate::lua::{
-    Library, LibraryKey, ProseState, ScriptReport, SectionVm, ToolCallCounts, Uninjected,
-};
+use crate::lua::{Library, ProseState, ScriptReport, SectionVm, ToolCallCounts, Uninjected};
 use crate::model::ModelBinding;
 use crate::prompt::Prompt;
+use crate::section_path::Origin;
+use crate::section_pos::SectionPos;
 use crate::{Result, error, subst};
 
 use super::context::{ChainState, ReportingHandles};
 use super::section_vm::{self, VmSeed};
-use super::walk_target::{self, RequireOrigin};
+use super::walk_target;
 
 /// The seeds a spawned task chain's first section entry receives beyond the
 /// shared Engine values: `tasks.spawn`'s `opts.item` (installed as the
@@ -154,13 +153,13 @@ impl SectionContext {
     /// preamble: the section's `sys`, the section-started observation, VM
     /// construction and limits, and the shared setup half
     /// ([`section_vm::setup_section_vm`]), with the `prompt` reads resolved
-    /// over the section's visible set.
+    /// from the section.
     ///
     /// `pos` is the section's place in the caller's walk. Each `prompt`
-    /// read resolves its sibling slice from the shared prompt and reads
-    /// the section's visible set (its siblings minus itself, plus its
-    /// direct children) in place, and `require` resolves from the same
-    /// position over its wider reach. `section_id`
+    /// read resolves its path against the shared prompt: a relative path
+    /// from `pos`, which names a sibling or a direct child, and a path
+    /// from the top from the top-level sections. `require` takes only a
+    /// path from the top, so it needs no position. `section_id`
     /// is the section's `sys.id`: the entering chain's hierarchical id extended
     /// by its local entry counter, allocated by the scheduler; `task_id`
     /// is the entering chain's `sys.taskid`. `var` is the walk's current
@@ -199,19 +198,15 @@ impl SectionContext {
         ctx.emitter()
             .report(section.name(), event_lifecycle::SECTION_STARTED);
         let vm = limited_vm(ctx, section.name())?;
-        let resolve = library_resolver(
-            Arc::clone(ctx.prompt()),
-            RequireOrigin::Section(pos.clone()),
-        );
+        let resolve = library_resolver(Arc::clone(ctx.prompt()));
         let render = prose_renderer(ctx, seed.item.clone());
-        // The `prompt` reads resolve over the section's visible set; the
-        // suspending calls (`call`, `tasks.fanout`, `models.infer`) are the
-        // yield shims the setup half installs.
+        // The `prompt` reads resolve from the section; the suspending
+        // calls (`call`, `tasks.fanout`, `models.infer`) are the yield
+        // shims the setup half installs.
         let prompt = Arc::clone(ctx.prompt());
         let pos = pos.clone();
-        let read = move |heading: String| {
-            walk_target::read_visible(&heading, Visible::of(pos.siblings(&prompt), pos.index))
-        };
+        let read =
+            move |path: String| walk_target::read_section(&path, &prompt, Origin::Section(&pos));
         // The shared setup half ([`section_vm::setup_section_vm`]) follows;
         // only the seed, the `sys` extras, and the callbacks' position are
         // the walk's own.
@@ -246,10 +241,9 @@ impl SectionContext {
     /// observation, and no `SECTION_FINISHED` since the scheduler never arms
     /// the pass's completion (the pass is not a walked section), an empty
     /// `var` seed (it runs first and is never re-entered), `argv` installed
-    /// writable so the repair pattern can assign it,
-    /// [`walk_target::h1_visible_sections`] as the visible set behind the
-    /// `prompt` reads, and [`RequireOrigin::H1`], which reaches every
-    /// top-level section, behind `require`.
+    /// writable so the repair pattern can assign it, and [`Origin::H1`]
+    /// behind the `prompt` reads, so a relative path names a top-level
+    /// section.
     ///
     /// # Errors
     /// Returns the failure of whichever step failed (see [`section_vm`]
@@ -265,15 +259,10 @@ impl SectionContext {
         let title = ctx.prompt().title();
         let sys = ctx.section_sys(section_id, task_id, title);
         let vm = limited_vm(ctx, title)?;
-        let resolve = library_resolver(Arc::clone(ctx.prompt()), RequireOrigin::H1);
+        let resolve = library_resolver(Arc::clone(ctx.prompt()));
         let render = prose_renderer(ctx, None);
         let prompt = Arc::clone(ctx.prompt());
-        let read = move |heading: String| {
-            walk_target::read_visible(
-                &heading,
-                Visible::all(walk_target::h1_visible_sections(&prompt)),
-            )
-        };
+        let read = move |path: String| walk_target::read_section(&path, &prompt, Origin::H1);
         // `argv` installs writable, the H1 delta `SectionVmSetup::argv`
         // describes; the executor reads the value back at the freeze (see
         // the scheduler's H1-to-walk handoff).
@@ -445,16 +434,12 @@ fn live_vm(vm: Option<&SectionVm>) -> &SectionVm {
     vm.expect("a live frame holds its VM until drop")
 }
 
-/// The resolver behind a frame's `require`: each heading resolves in
-/// `prompt` from the position a loading library's key names, or from
-/// `origin` when no library is loading.
+/// The resolver behind a frame's `require`: each path resolves from the
+/// top of `prompt`, so every frame's resolver is the same.
 fn library_resolver(
     prompt: Arc<Prompt>,
-    origin: RequireOrigin,
-) -> impl Fn(String, Option<LibraryKey>) -> Result<Library> + Send + Sync + 'static {
-    move |heading: String, key: Option<LibraryKey>| {
-        walk_target::resolve_library(&prompt, &origin, &heading, key.as_ref())
-    }
+) -> impl Fn(String) -> Result<Library> + Send + Sync + 'static {
+    move |path: String| walk_target::resolve_library(&prompt, &path)
 }
 
 /// Builds the section VM for `name` over the run's shared sets, with the

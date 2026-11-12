@@ -18,14 +18,14 @@ fn two_tasks_whose_call_children_finish_in_any_order_both_complete() {
         ## Main\n\n\
         ```lua\n\
         var.who = 'a'\n\
-        local a = tasks.spawn('### Caller')\n\
+        local a = tasks.spawn('Caller')\n\
         var.who = 'b'\n\
-        local b = tasks.spawn('### Caller')\n\
+        local b = tasks.spawn('Caller')\n\
         local results = tasks.join({ a, b })\n\
         return results[1].result .. '|' .. results[2].result\n\
         ```\n\n\
         ### Caller\n\n\
-        ```lua\nreturn call('#### Leaf')\n```\n\n\
+        ```lua\nreturn call('Leaf')\n```\n\n\
         #### Leaf\n\n\
         ```lua\nreturn models.infer(var.who)\n```\n";
     for batching in [
@@ -58,7 +58,7 @@ fn a_queued_task_that_can_never_be_admitted_is_reported_as_a_stall() {
         ## Main\n\n\
         ```lua\n\
         store.write('park', 'x')\n\
-        local t = tasks.spawn('## Child')\n\
+        local t = tasks.spawn('../Child')\n\
         tasks.join_any({ t })\n\
         return 'never'\n\
         ```\n\n\

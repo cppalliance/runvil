@@ -14,7 +14,7 @@ fn the_walk_runs_a_globals_only_library_harmlessly() {
             (
                 "Main",
                 "
-                require '## helpers'
+                require '/helpers'
                 var.greeting = greet('main')",
             ),
             (
@@ -37,7 +37,7 @@ fn the_walk_fails_the_run_on_a_library_that_returns_a_table() {
     let source = prompt(
         "",
         &[
-            ("Main", "var.name = (require '## lib').name"),
+            ("Main", "var.name = (require '/lib').name"),
             ("lib", "return { name = 'lib' }"),
         ],
     );
@@ -57,7 +57,7 @@ fn the_walk_ends_the_chain_with_a_library_that_returns_a_scalar() {
     let source = prompt(
         "",
         &[
-            ("Main", "var.from_main = require '## lib'"),
+            ("Main", "var.from_main = require '/lib'"),
             ("lib", "return 'from lib'"),
             ("Last", "error('the chain ends at the library')"),
         ],
@@ -75,14 +75,14 @@ fn a_returning_library_after_a_return_or_under_its_user_stays_off_the_walk() {
     let after = prompt(
         "",
         &[
-            ("Main", "return (require '## lib').name"),
+            ("Main", "return (require '/lib').name"),
             ("lib", "return { name = 'after' }"),
         ],
     );
     let nested = prompt(
         "",
         &[
-            ("Main", "var.name = (require '### lib').name"),
+            ("Main", "var.name = (require '/Main/lib').name"),
             ("### lib", "return { name = 'nested' }"),
             ("Last", "return var.name"),
         ],

@@ -1,6 +1,6 @@
 //! Runvil's `require`: a section VM's loader for library sections.
 //!
-//! `require '## heading'` asks the caller's resolver for a [`Library`],
+//! `require '/path'` asks the caller's resolver for a [`Library`],
 //! loads its compiled blocks into the VM's one environment, and runs them
 //! in order inside the calling block's coroutine, so a library block's
 //! suspending calls are ordinary yields of that block. The loader is Lua
@@ -26,7 +26,7 @@ use crate::error::{self, Error, Result};
 use crate::error_value::install_error_value;
 use crate::program::LuaProgram;
 use crate::prose::ProseState;
-use crate::section::{Library, LibraryKey};
+use crate::section::Library;
 
 /// The loader chunk's name.
 const REQUIRE_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/__impl_require.lua";
@@ -38,10 +38,9 @@ const REQUIRE_SOURCE: &str = include_str!("__impl_require.lua");
 static REQUIRE_PROGRAM: LazyLock<Result<LuaProgram>> =
     LazyLock::new(|| LuaProgram::compile_internal(REQUIRE_SOURCE, REQUIRE_CHUNK_NAME));
 
-/// The loads under way on one VM, outermost first: each library's key,
-/// which a `require` made during its load passes to the resolver, and its
-/// heading, which its reports name.
-type Loading = Arc<Mutex<Vec<(LibraryKey, String)>>>;
+/// The loads under way on one VM, outermost first: each library's path
+/// from the top, which its reports name.
+type Loading = Arc<Mutex<Vec<String>>>;
 
 /// The section VM's state `require` works on.
 pub(crate) struct VmShare<'a> {
@@ -71,12 +70,12 @@ pub(crate) fn install<R, E, P>(
     vm: &VmShare<'_>,
 ) -> Result<()>
 where
-    R: Fn(String, Option<LibraryKey>) -> std::result::Result<Library, E> + Send + Sync + 'static,
+    R: Fn(String) -> std::result::Result<Library, E> + Send + Sync + 'static,
     E: std::error::Error + Send + Sync + 'static,
     P: Fn(&str, Option<NonZeroU32>, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {
     let loading = Loading::default();
-    let resolve = resolve_capture(lua, resolver, &loading)?;
+    let resolve = resolve_capture(lua, resolver)?;
     let begin_load = begin_load_capture(lua, &loading, vm, emitter, section)?;
     let end_load = end_load_capture(lua, &loading, vm.depth, emitter, section)?;
     let (swap_prose, restore_prose) = prose_captures(lua, render, vm.sys_live)?;
@@ -99,32 +98,28 @@ where
         .map_err(error::make_lua_error)
 }
 
-/// Builds `resolve(heading)`: the resolver's library for `heading`, asked
-/// with the key of the library loading now, if any, and handed back as
-/// its identity, its heading, and the library itself for `begin_load`.
-fn resolve_capture<R, E>(lua: &Lua, resolver: R, loading: &Loading) -> Result<Function>
+/// Builds `resolve(path)`: the resolver's library for `path`, handed back
+/// as its identity, its path from the top, and the library itself for
+/// `begin_load`.
+fn resolve_capture<R, E>(lua: &Lua, resolver: R) -> Result<Function>
 where
-    R: Fn(String, Option<LibraryKey>) -> std::result::Result<Library, E> + Send + Sync + 'static,
+    R: Fn(String) -> std::result::Result<Library, E> + Send + Sync + 'static,
     E: std::error::Error + Send + Sync + 'static,
 {
-    let loading = Arc::clone(loading);
-    lua.create_function(move |lua, heading: Value| {
-        let heading = match heading {
-            Value::String(heading) => heading.to_str()?.to_owned(),
+    lua.create_function(move |lua, path: Value| {
+        let path = match path {
+            Value::String(path) => path.to_str()?.to_owned(),
             other => {
                 return Err(mlua::Error::external(format!(
-                    "require takes a section heading string such as '## helpers', got {}",
+                    "require takes a section path such as '/helpers', got {}",
                     other.type_name()
                 )));
             }
         };
-        let from = lock(&loading, "library-load state")?
-            .last()
-            .map(|(key, _)| key.clone());
-        let library = resolver(heading, from).map_err(mlua::Error::external)?;
+        let library = resolver(path).map_err(mlua::Error::external)?;
         let identity = library.key.identity().to_owned();
-        let library_heading = library.heading.clone();
-        Ok((identity, library_heading, lua.create_any_userdata(library)?))
+        let library_path = library.path.clone();
+        Ok((identity, library_path, lua.create_any_userdata(library)?))
     })
     .map_err(error::make_lua_error)
 }
@@ -148,7 +143,7 @@ fn begin_load_capture(
     let section = section.to_owned();
     lua.create_function(move |lua, library: AnyUserData| {
         let library = library.take::<Library>()?;
-        emitter.library_load(&section, &library.heading, LibraryLoad::Started);
+        emitter.library_load(&section, &library.path, LibraryLoad::Started);
         let blocks = library
             .blocks
             .iter()
@@ -157,7 +152,7 @@ fn begin_load_capture(
         let blocks = match blocks {
             Ok(blocks) => blocks,
             Err(error) => {
-                emitter.library_load(&section, &library.heading, LibraryLoad::Failed);
+                emitter.library_load(&section, &library.path, LibraryLoad::Failed);
                 return Err(mlua::Error::external(error));
             }
         };
@@ -175,11 +170,11 @@ fn begin_load_capture(
         let mut loading = match lock(&loading, "library-load state") {
             Ok(loading) => loading,
             Err(error) => {
-                emitter.library_load(&section, &library.heading, LibraryLoad::Failed);
+                emitter.library_load(&section, &library.path, LibraryLoad::Failed);
                 return Err(error);
             }
         };
-        loading.push((library.key, library.heading));
+        loading.push(library.path);
         depth.fetch_add(1, Ordering::Relaxed);
         Ok((blocks, templates, lines))
     })
@@ -230,7 +225,7 @@ fn end_load_capture(
     let emitter = emitter.clone();
     let section = section.to_owned();
     lua.create_function(move |_, finished: bool| {
-        let Some((_, heading)) = lock(&loading, "library-load state")?.pop() else {
+        let Some(path) = lock(&loading, "library-load state")?.pop() else {
             return Err(mlua::Error::external(error::make_internal_error(
                 "require ended a library load that never began",
             )));
@@ -241,7 +236,7 @@ fn end_load_capture(
         } else {
             LibraryLoad::Failed
         };
-        emitter.library_load(&section, &heading, phase);
+        emitter.library_load(&section, &path, phase);
         Ok(())
     })
     .map_err(error::make_lua_error)

@@ -14,8 +14,8 @@ use runvil_vfs::{MemoryBackend, Origin, VfsRef};
 
 use crate::Result;
 use crate::execute::run::EffectId;
-use crate::heading_address::{SectionIndex, SectionPos};
 use crate::lua::{Answer, Request, ToolSet, VfsOp};
+use crate::section_pos::{SectionIndex, SectionPos};
 
 use super::chain::ChainStart;
 use super::chain_record::{CallDepth, ChainKind};

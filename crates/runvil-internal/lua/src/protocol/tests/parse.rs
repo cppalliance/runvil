@@ -46,12 +46,12 @@ fn call_parses_target_input_and_var_snapshot() {
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'call', target = '## Child', input = 'override', var = { k = 1 } }",
+        "{ op = 'call', target = '../Child', input = 'override', var = { k = 1 } }",
     );
     let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
     match request {
         Request::Call { target, input, var } => {
-            assert_eq!(target, "## Child");
+            assert_eq!(target, "../Child");
             assert_eq!(input.as_deref(), Some("override"));
             assert_eq!(var, json!({ "k": 1 }));
         }
@@ -64,7 +64,7 @@ fn call_without_input_yields_none() {
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'call', target = '## Child', var = { k = 1 } }",
+        "{ op = 'call', target = '../Child', var = { k = 1 } }",
     );
     let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
     match request {
@@ -80,7 +80,7 @@ fn a_fanout_op_is_no_longer_a_request() {
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'fanout', worker = '### Worker', collection = {}, var = { k = 1 } }",
+        "{ op = 'fanout', worker = 'Worker', collection = {}, var = { k = 1 } }",
     );
     assert_direct_yield(Request::from_yield(&lua, &Value::Table(table)));
 }
@@ -300,7 +300,7 @@ fn a_call_with_a_non_string_target_keeps_the_resolve_error() {
 #[test]
 fn a_request_without_a_var_snapshot_is_rejected() {
     let lua = Lua::new();
-    let table = lua_table(&lua, "{ op = 'call', target = '## Child' }");
+    let table = lua_table(&lua, "{ op = 'call', target = '../Child' }");
     assert_direct_yield(Request::from_yield(&lua, &Value::Table(table)));
 }
 

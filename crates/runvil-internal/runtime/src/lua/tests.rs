@@ -143,9 +143,9 @@ fn set_up_vm(binds: &VmBinds<'_>) -> SectionVm {
         raw_shims: false,
     };
     let read = |_: String| -> std::result::Result<Option<SectionText>, crate::Error> { Ok(None) };
-    let resolve = |heading: String, _| -> std::result::Result<Library, crate::Error> {
+    let resolve = |path: String| -> std::result::Result<Library, crate::Error> {
         Err(crate::error::make_lua_runtime_error(format!(
-            "no library `{heading}` in reach"
+            "section `{path}` not found"
         )))
     };
     setup_section_vm(vm, &setup, read, resolve, |template, _, _| {

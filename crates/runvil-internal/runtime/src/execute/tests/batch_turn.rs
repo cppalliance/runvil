@@ -269,7 +269,7 @@ fn a_later_result_keeps_the_batch_turn_after_a_handler_calls_an_inferring_sectio
     let source = prompt(
         "",
         &[
-            ("Only", &grab_block(OFFER_ECHO, "return call('## Helper')")),
+            ("Only", &grab_block(OFFER_ECHO, "return call('../Helper')")),
             ("Helper", "return models.infer('helper prompt')"),
         ],
     );

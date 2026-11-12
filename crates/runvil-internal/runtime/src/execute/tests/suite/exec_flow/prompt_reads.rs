@@ -1,10 +1,10 @@
-//! `prompt.section` and `prompt.list`: what each returns over the caller's
-//! visible set, the only calls that raise, and the reads from H1 and a
-//! library.
+//! `prompt.section` and `prompt.list`: what each returns for a relative
+//! path and for a path from the top, the only calls that raise, and the
+//! reads from H1 and a library.
 
 use super::*;
 
-/// The raw Markdown `## Rules` holds: an indented first line, inline markup,
+/// The raw Markdown `Rules` holds: an indented first line, inline markup,
 /// a `lua` fence, a thematic break, and a template, all of which
 /// `prompt.section` returns verbatim, neither run nor rendered. The break
 /// resets the section's prose and list capture but not its Markdown.
@@ -16,10 +16,10 @@ var.never = 'run'\n\
 ---\n\n\
 Closing line with {{ args }}.";
 
-/// The sections every test joins after its own `## Main`: a child list
-/// `### Kid` with a grandchild `#### Grand`, a numbered `## Nums`, the raw
-/// `## Rules`, an empty `## Empty`, and `## Other` with a niece `### Niece`.
-/// It stays literal because `## Rules` must come back byte for byte.
+/// The sections every test joins after its own `Main`: a child list `Kid`
+/// with a grandchild `Grand`, a numbered `Nums`, the raw `Rules`, an empty
+/// `Empty`, and `Other` with a niece `Niece`. It stays literal because
+/// `Rules` must come back byte for byte.
 const DOCUMENT: [&str; 3] = [
     "\n### Kid\n\n\
 - kid-one\n\
@@ -40,30 +40,30 @@ Other prose.\n\n\
 - niece-item\n",
 ];
 
-/// Both reads search only the caller's visible set (its siblings minus
-/// itself, plus its direct children): `prompt.section` returns a visible
-/// section's own raw Markdown, `prompt.list` its pre-parsed items in order,
-/// and a niece, a grandchild, the caller itself, and a heading no section
-/// has all read as `nil` from both.
+/// A relative path names a neighbor: `name` is a direct child and
+/// `../name` is a sibling. `prompt.section` returns the section's own raw
+/// Markdown and `prompt.list` its pre-parsed items in order. A niece, a
+/// grandchild, the caller itself, and a name no section has are no
+/// neighbor's name, so each reads as `nil` from both.
 #[test]
-fn prompt_reads_resolve_over_the_visible_set() {
+fn a_relative_path_reads_a_child_or_a_sibling() {
     let main = prompt(
         "",
         &[(
             "Main",
             "
-            assert(prompt.section('### Kid') == '- kid-one\\n- kid-two', 'a child reads its own Markdown, without its children')
-            local kids = prompt.list('### Kid')
+            assert(prompt.section('Kid') == '- kid-one\\n- kid-two', 'a child reads its own Markdown, without its children')
+            local kids = prompt.list('Kid')
             assert(#kids == 2 and kids[1] == 'kid-one' and kids[2] == 'kid-two', 'a child list reads its items')
-            local nums = prompt.list('## Nums')
+            local nums = prompt.list('../Nums')
             assert(#nums == 3 and nums[1] == 'one' and nums[2] == 'two' and nums[3] == 'three', 'a sibling list reads its items in order')
-            assert(prompt.section('## Nums') == '1. one\\n2. two\\n3. three', 'a list section reads its raw Markdown too')
-            assert(prompt.section('## Empty') == '', 'an empty section reads as the empty string')
-            for _, heading in ipairs({'### Niece', '#### Grand', '## Main', '## Missing'}) do
-              assert(prompt.section(heading) == nil, heading .. ' must read nil from prompt.section')
-              assert(prompt.list(heading) == nil, heading .. ' must read nil from prompt.list')
+            assert(prompt.section('../Nums') == '1. one\\n2. two\\n3. three', 'a list section reads its raw Markdown too')
+            assert(prompt.section('../Empty') == '', 'an empty section reads as the empty string')
+            for _, path in ipairs({'Niece', 'Grand', '../Kid', 'Nums', '../Main', '../Missing', '## Nums'}) do
+              assert(prompt.section(path) == nil, path .. ' must read nil from prompt.section')
+              assert(prompt.list(path) == nil, path .. ' must read nil from prompt.list')
             end
-            return prompt.section('## Rules')",
+            return prompt.section('../Rules')",
         )],
     );
     let trace = Scenario::new(main + &DOCUMENT.concat()).run();
@@ -74,12 +74,51 @@ fn prompt_reads_resolve_over_the_visible_set() {
     );
 }
 
+/// A path from the top names any section, and the same one from
+/// everywhere: the caller itself, its parent, a grandchild, and a section
+/// nested under another parent. A path that names no section reads as
+/// `nil`.
+#[test]
+fn a_path_from_the_top_reads_any_section_from_any_place() {
+    let reads = "
+        assert(prompt.section('/Main') ~= nil, 'a top-level section reads')
+        assert(prompt.section('/Main/Kid') == '- kid-one\\n- kid-two', 'a nested section reads its own Markdown')
+        assert(prompt.list('/Main/Kid/Grand')[1] == 'grand-item', 'a grandchild reads')
+        assert(prompt.list(' / Other / Niece ')[1] == 'niece-item', 'a section under another parent reads')
+        assert(prompt.section('/Other') == 'Other prose.', 'a section reads without its children')
+        assert(prompt.section('/Empty') == '', 'an empty section reads as the empty string')
+        assert(prompt.section('/Tree/Leaf'):find('leaf', 1, true), 'a nested section with Lua reads')
+        assert(prompt.section('/Tree'):find('Leaf', 1, true), 'its parent reads')
+        for _, path in ipairs({'/Kid', '/Main/Niece', '/Missing/Kid', '/Other/Niece/Deeper', '/Reads/Main'}) do
+          assert(prompt.section(path) == nil, path .. ' must read nil from prompt.section')
+          assert(prompt.list(path) == nil, path .. ' must read nil from prompt.list')
+        end";
+    let head = PromptSource::new()
+        .h1(reads)
+        .section(
+            "Main",
+            &format!("{reads}\nreturn call('../Tree') .. '|' .. prompt.section('/Rules')"),
+        )
+        .build();
+    // `Leaf` reads itself and its parent by the same paths as everyone.
+    let tree = format!(
+        "\n## Tree\n\n```lua\nreturn call('Leaf')\n```\n\n\
+         ### Leaf\n\n```lua\n{reads}\nreturn 'leaf'\n```\n"
+    );
+    let trace = Scenario::new([head, DOCUMENT.concat(), tree].concat()).run();
+    assert_eq!(
+        trace.text(),
+        format!("leaf|{RULES}"),
+        "the H1, a top-level section, and a nested one read the same sections"
+    );
+}
+
 /// A read raises only when the call itself is wrong: a target that is not a
-/// string, a malformed heading, or `prompt.list` naming a section with no
-/// pre-parsed items, whose message names the trimmed heading. A heading no
-/// section has and a heading outside the visible set are not mistakes, so
-/// both read as `nil`. A `call` to a heading no section has still raises,
-/// and its listing of the available sections names only the visible set.
+/// string, a malformed path, or `prompt.list` naming a section with no
+/// pre-parsed items, whose message shows the path without the whitespace
+/// around it. A path that names no section is not a mistake, so it reads
+/// as `nil`. A `call` with the same path raises, and its error says where
+/// it looked and lists no section.
 #[test]
 fn prompt_reads_raise_only_for_mistakes_in_the_call() {
     let main = prompt(
@@ -94,27 +133,26 @@ fn prompt_reads_raise_only_for_mistakes_in_the_call() {
             end
             for _, read in ipairs({prompt.section, prompt.list}) do
               expect_raise(read, 42, 'section target must be a string, got integer')
-              expect_raise(read, 'Nums', 'got bare name: Nums')
-              expect_raise(read, '##Nums', 'must have whitespace after the ## markers')
-              for _, heading in ipairs({'## Missing', '### Niece'}) do
-                local ok, value = pcall(read, heading)
-                assert(ok and value == nil, heading .. ' must read as nil, not raise: ' .. tostring(value))
+              expect_raise(read, '', 'section path \"\" has an empty step')
+              expect_raise(read, 'Kid/', 'section path \"Kid/\" has an empty step')
+              expect_raise(read, 'Kid/Grand', 'section path \"Kid/Grand\" has more than one name; a relative path is a child\\'s name, or \"../\" and a sibling\\'s name')
+              expect_raise(read, '..', 'section path \"..\" needs a name after \"..\"')
+              expect_raise(read, 'Kid[1]', 'section path \"Kid[1]\" has an index; a path in a prompt takes none')
+              expect_raise(read, '/Main/../Nums', 'section path \"/Main/../Nums\" uses \"..\"; a path from the top takes none')
+              for _, path in ipairs({'../Missing', 'Niece', '/Missing'}) do
+                local ok, value = pcall(read, path)
+                assert(ok and value == nil, path .. ' must read as nil, not raise: ' .. tostring(value))
               end
             end
-            expect_raise(prompt.list, '  ## Rules  ', 'section `## Rules` has no pre-parsed items')
-            expect_raise(prompt.list, '## Empty', 'section `## Empty` has no pre-parsed items')
-            assert(prompt.section('## Rules') ~= nil, 'prompt.section reads a section prompt.list refuses')
-            local ok, err = pcall(call, '## Missing')
-            assert(not ok, 'a call to a missing heading still raises')
+            expect_raise(prompt.list, '  ../Rules  ', 'section `../Rules` has no pre-parsed items')
+            expect_raise(prompt.list, '/Empty', 'section `/Empty` has no pre-parsed items')
+            assert(prompt.section('../Rules') ~= nil, 'prompt.section reads a section prompt.list refuses')
+            local ok, err = pcall(call, '../Missing')
+            assert(not ok, 'a call to a missing section still raises')
             local message = tostring(err)
-            local at = message:find('available sections:', 1, true)
-            assert(at, 'the call error lists the available sections: ' .. message)
-            local listed = message:sub(at)
-            for _, heading in ipairs({'## Other', '### Kid'}) do
-              assert(listed:find(heading, 1, true), 'the listing names the visible ' .. heading .. ': ' .. message)
-            end
-            for _, hidden in ipairs({'## Main', 'Niece', 'Grand'}) do
-              assert(not listed:find(hidden, 1, true), 'the listing leaks ' .. hidden .. ': ' .. message)
+            assert(message:find('section `../Missing` not found: `/Main` has no sibling `Missing`', 1, true), 'the call error says where it looked: ' .. message)
+            for _, other in ipairs({'Other', 'Kid', 'Nums', 'Niece', 'Grand'}) do
+              assert(not message:find(other, 1, true), 'the error lists ' .. other .. ': ' .. message)
             end
             return 'ok'",
         )],
@@ -127,36 +165,36 @@ fn prompt_reads_raise_only_for_mistakes_in_the_call() {
     );
 }
 
-/// Both reads work in H1, whose visible set is the whole top-level slice
-/// (every top-level section and no child), and in a library, which reads
-/// from the calling section: at load time, where each requiring section's
-/// load resolves over that section's own visible set, and from a library
-/// function, which resolves over the visible set of whichever section
-/// calls it.
+/// Both reads work in H1, whose children are the top-level sections and
+/// which has no siblings, and in a library, which reads from the calling
+/// section: at load time, where each requiring section's load resolves
+/// from that section, and from a library function, which resolves from
+/// whichever section calls it.
 #[test]
 fn prompt_reads_work_in_h1_and_a_library() {
     let head = PromptSource::new()
         .h1(
             "
-            require '## kid_reader'
-            assert(prompt.section('## Main') ~= nil, 'H1 sees every top-level section')
-            assert(prompt.section('### Kid') == nil, 'H1 sees no child')
-            assert(kids_at_load == nil, 'the load-time read in the H1 resolves over the H1 visible set')
-            assert(kid_items() == nil, 'a library function reads over the H1 visible set')
-            var.nums = table.concat(prompt.list('## Nums'), ',')",
+            require '/kid_reader'
+            assert(prompt.section('Main') ~= nil, 'a top-level section is a child of the H1')
+            assert(prompt.section('Kid') == nil, 'a nested section is no child of the H1')
+            assert(prompt.section('../Main') == nil, 'the H1 has no siblings')
+            assert(kids_at_load == nil, 'the load-time read in the H1 resolves from the H1')
+            assert(kid_items() == nil, 'a library function reads from the H1')
+            var.nums = table.concat(prompt.list('Nums'), ',')",
         )
         .section(
             "Main",
             "
-            require '## kid_reader'
-            assert(kids_at_load ~= nil, 'the load-time read in Main resolves over the Main visible set')
+            require '/kid_reader'
+            assert(kids_at_load ~= nil, 'the load-time read in Main resolves from Main')
             return var.nums .. '|' .. table.concat(kids_at_load, ',') .. '|' .. table.concat(kid_items(), ',')",
         );
     let library = "\n## kid_reader\n\n\
 ```lua\n\
-kids_at_load = prompt.list('### Kid')\n\
+kids_at_load = prompt.list('Kid')\n\
 function kid_items()\n\
-  return prompt.list('### Kid')\n\
+  return prompt.list('Kid')\n\
 end\n\
 ```\n";
     let source = [head.build().as_str(), &DOCUMENT.concat(), library].concat();

@@ -156,9 +156,9 @@ fn a_library_a_fanout_arm_and_a_spawned_task_all_see_a_prelude_global() {
         # Preludes\n\n\
         ## Main\n\n\
         ```lua\n\
-        require '## greetings'\n\
-        local arms = tasks.fanout('### Arm', { 'arm' })\n\
-        local t = tasks.spawn('## Child')\n\
+        require '/greetings'\n\
+        local arms = tasks.fanout('Arm', { 'arm' })\n\
+        local t = tasks.spawn('../Child')\n\
         local _, ok, child = tasks.join_any({ t })\n\
         assert(ok, tostring(child))\n\
         return library_greeting() .. '|' .. arms[1].text .. '|' .. child\n\
@@ -186,7 +186,7 @@ fn a_prelude_write_across_two_arms_ends_the_run_with_determinism_caught_or_not()
         # Preludes\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Worker', { 'alpha', 'beta' })\n\
+        local r = tasks.fanout('Worker', { 'alpha', 'beta' })\n\
         return r[1].text\n\
         ```\n\n\
         ### Worker\n\n\

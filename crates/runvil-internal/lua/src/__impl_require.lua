@@ -1,10 +1,10 @@
 -- Runvil's `require` for a section VM.
 --
 -- The Engine installs this once per VM. The chunk arguments are Engine
--- captures, never globals: `resolve(heading)` asks the caller's resolver
--- for a library, from the position of the library loading now or, when
--- none is, of the section, and returns the library's identity, its
--- heading, and the library itself; `begin_load(library)` reports the
+-- captures, never globals: `resolve(path)` asks the caller's resolver for
+-- the library a path from the top of the prompt names, and returns the
+-- library's identity, its path as the Engine prints it, and the library
+-- itself; `begin_load(library)` reports the
 -- load's start, loads the library's blocks, marks the library as the one
 -- loading, which makes `jump` refuse, and returns the blocks, their prose
 -- templates, and the prompt lines the templates start on, in order;
@@ -27,8 +27,8 @@ local resolve, begin_load, end_load, swap_prose, restore_prose, error_value = ..
 local error, setmetatable, concat = error, setmetatable, table.concat
 
 -- Each library's saved value under its identity, or `LOADING` while its
--- blocks run. Keyed by identity, never by heading text, so one heading
--- resolved from two positions names two libraries.
+-- blocks run. Keyed by identity, never by the path's text, so a library
+-- loads once however its path is spaced.
 local cache = {}
 local LOADING = {}
 
@@ -40,16 +40,16 @@ local function raise(message)
 end
 
 -- The cycle a require of `identity` closes, from that library's own load
--- through the innermost: `require cycle: ## a -> ## b -> ## a`.
-local function cycle(identity, heading)
+-- through the innermost: `require cycle: /a -> /b -> /a`.
+local function cycle(identity, path)
   local chain = {}
   local inside = false
   for index = 1, #loading do
     local entry = loading[index]
     if entry.identity == identity then inside = true end
-    if inside then chain[#chain + 1] = entry.heading end
+    if inside then chain[#chain + 1] = entry.path end
   end
-  chain[#chain + 1] = heading
+  chain[#chain + 1] = path
   return "require cycle: " .. concat(chain, " -> ")
 end
 
@@ -83,13 +83,13 @@ local function run(blocks, templates, lines)
   return true
 end
 
-local function require(heading)
-  local identity, library_heading, library = resolve(heading)
+local function require(path)
+  local identity, library_path, library = resolve(path)
   local saved = cache[identity]
-  if saved == LOADING then raise(cycle(identity, library_heading)) end
+  if saved == LOADING then raise(cycle(identity, library_path)) end
   if saved ~= nil then return saved end
   local entry <close> = setmetatable(
-    { identity = identity, heading = library_heading, finished = false },
+    { identity = identity, path = library_path, finished = false },
     closing
   )
   cache[identity] = LOADING

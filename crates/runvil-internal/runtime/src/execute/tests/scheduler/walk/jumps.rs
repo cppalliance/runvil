@@ -16,7 +16,7 @@ fn jump_transfer_skips_the_jumpers_remaining_blocks() {
         ## Check\n\n\
         ```lua\n\
         store.write('seen.txt', 'check')\n\
-        jump('## Help')\n\
+        jump('../Help')\n\
         store.write('seen.txt', 'should-not-run')\n\
         ```\n\n\
         ## Accept\n\n\
@@ -33,12 +33,12 @@ fn jump_transfer_skips_the_jumpers_remaining_blocks() {
 
 #[test]
 fn section_cannot_jump_to_itself() {
-    // The caller is outside its own visible set, so naming its own heading
-    // to `jump` resolves as not-found.
+    // The caller is outside its own visible set, so naming itself as a
+    // sibling to `jump` resolves as not-found.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Self\n\n\
         ## Self\n\n\
-        ```lua\njump('## Self')\n```\n";
+        ```lua\njump('../Self')\n```\n";
     let trace = scheduler_scenario(md).run();
 
     let rendered = trace.error().to_string();
@@ -54,7 +54,7 @@ fn jump_to_off_walk_section_runs_it() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Addressed\n\n\
         ## A\n\n\
-        ```lua\njump('## B')\n```\n\n\
+        ```lua\njump('../B')\n```\n\n\
         ## B\n\n\
         ---\n\n\
         ```lua\nreturn 'b-ran'\n```\n\n\
@@ -74,7 +74,7 @@ fn var_persists_across_a_jump() {
         ## A\n\n\
         ```lua\n\
         var.from_a = 'a'\n\
-        jump('## C')\n\
+        jump('../C')\n\
         ```\n\n\
         ## B\n\n\
         ```lua\nerror('the jump must skip B')\n```\n\n\
@@ -102,7 +102,7 @@ fn a_jump_fires_section_finished_for_the_jumper_before_the_target_starts() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Boundaries\n\n\
         ## A\n\n\
-        ```lua\njump('## B')\n```\n\n\
+        ```lua\njump('../B')\n```\n\n\
         ## B\n\n\
         ```lua\nreturn 'b-ran'\n```\n";
     let trace = scheduler_scenario(md).run();
@@ -156,12 +156,12 @@ fn an_erroring_section_reports_started_but_not_finished() {
 #[test]
 fn a_failed_jump_resolution_still_finishes_the_jumper() {
     // The error half of the jump observation boundary: the jumper's frame
-    // closes as completed before the heading resolves, so SECTION_FINISHED
+    // closes as completed before the path resolves, so SECTION_FINISHED
     // fires for the jumper even when the target does not resolve.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Unresolved\n\n\
         ## A\n\n\
-        ```lua\njump('## Missing')\n```\n";
+        ```lua\njump('../Missing')\n```\n";
     let trace = scheduler_scenario(md).run();
 
     let error = trace.error();
@@ -177,13 +177,13 @@ fn a_failed_jump_resolution_still_finishes_the_jumper() {
 }
 
 #[test]
-fn a_jump_to_a_missing_heading_fails_on_the_jump_line() {
+fn a_jump_to_a_missing_section_fails_on_the_jump_line() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Unresolved\n\n\
         ## A\n\n\
         ```lua\n\
         var.before = true\n\
-        jump('## Missing')\n\
+        jump('../Missing')\n\
         ```\n";
     let trace = scheduler_scenario(md).run();
 

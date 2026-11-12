@@ -47,7 +47,7 @@ const PREAMBLE: &str = "---\nname: runner-cap\ndescription: caps tool calls\nrun
 /// Main spawns Child and waits on a `wait` round while Child's loop asks
 /// its round, then cancels Child and lingers on a second round.
 const MAIN_CANCELS: &str = "## Main\n\n```lua\n\
-    local t = tasks.spawn('## Child')\n\
+    local t = tasks.spawn('../Child')\n\
     models.infer('wait')\n\
     tasks.cancel(t)\n\
     models.infer('linger')\n\
@@ -55,8 +55,8 @@ const MAIN_CANCELS: &str = "## Main\n\n```lua\n\
 
 /// Main spawns A, then B, and joins both.
 const MAIN_JOINS: &str = "## Main\n\n```lua\n\
-    local a = tasks.spawn('## A')\n\
-    local b = tasks.spawn('## B')\n\
+    local a = tasks.spawn('../A')\n\
+    local b = tasks.spawn('../B')\n\
     tasks.join({ a, b })\n\
     return 'joined'\n```\n\n";
 

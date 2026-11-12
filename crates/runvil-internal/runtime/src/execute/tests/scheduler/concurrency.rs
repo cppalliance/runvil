@@ -95,8 +95,8 @@ fn a_queued_task_reads_blocked_queued_and_its_start_event_fires_at_admission() {
         # Limits\n\n\
         ## Main\n\n\
         ```lua\n\
-        local a = tasks.spawn('## Child')\n\
-        local b = tasks.spawn('## Child')\n\
+        local a = tasks.spawn('../Child')\n\
+        local b = tasks.spawn('../Child')\n\
         local s = tasks.status(b)\n\
         assert(s.state == 'running', s.state)\n\
         assert(s.blocked == 'queued', tostring(s.blocked))\n\
@@ -151,8 +151,8 @@ fn a_start_event_reports_the_spawning_section_not_the_admission_time_one() {
         # Sections\n\n\
         ## Main\n\n\
         ```lua\n\
-        var.t = tasks.spawn('### Worker')\n\
-        jump('## Next')\n\
+        var.t = tasks.spawn('Worker')\n\
+        jump('../Next')\n\
         ```\n\n\
         ### Worker\n\n\
         ```lua\nreturn 'work'\n```\n\n\
@@ -200,7 +200,7 @@ fn a_resumed_task_is_admitted_ahead_of_fresh_starts() {
         # Resume\n\n\
         ## Main\n\n\
         ```lua\n\
-        local w = tasks.spawn('### Walker')\n\
+        local w = tasks.spawn('Walker')\n\
         local _, ok = tasks.join_any({ w })\n\
         assert(ok)\n\
         return 'done'\n\
@@ -208,7 +208,7 @@ fn a_resumed_task_is_admitted_ahead_of_fresh_starts() {
         ### Walker\n\n\
         ```lua\n\
         local set = {}\n\
-        for i = 1, 3 do set[i] = tasks.spawn('#### Sub', { index = i }) end\n\
+        for i = 1, 3 do set[i] = tasks.spawn('Sub', { index = i }) end\n\
         for i = 1, 3 do\n\
           tasks.join_any({ set[i] })\n\
           models.infer('W' .. i)\n\
@@ -254,7 +254,7 @@ fn an_arm_that_lowers_its_limit_runs_its_fanout_two_arms_at_a_time() {
         # Limits\n\n\
         ## Main\n\n\
         ```lua\n\
-        local arm = tasks.spawn('### Arm')\n\
+        local arm = tasks.spawn('Arm')\n\
         local _, ok = tasks.join_any({ arm })\n\
         assert(ok)\n\
         return 'done'\n\
@@ -263,7 +263,7 @@ fn an_arm_that_lowers_its_limit_runs_its_fanout_two_arms_at_a_time() {
         ```lua\n\
         local n = tasks.concurrency(2)\n\
         assert(n == 2, 'the effective limit is 2, got ' .. n)\n\
-        local r = tasks.fanout('#### Sub', {'x', 'y', 'z', 'w'})\n\
+        local r = tasks.fanout('Sub', {'x', 'y', 'z', 'w'})\n\
         return table.concat(r, ',')\n\
         ```\n\n\
         #### Sub\n\n\
@@ -297,12 +297,12 @@ fn a_nested_fanout_does_not_deadlock_under_a_ceiling_of_one() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Arm', {'a', 'b', 'c'})\n\
+        local r = tasks.fanout('Arm', {'a', 'b', 'c'})\n\
         return table.concat(r, ',')\n\
         ```\n\n\
         ### Arm\n\n\
         ```lua\n\
-        local inner = tasks.fanout('#### Sub', {'x', 'y', 'z'})\n\
+        local inner = tasks.fanout('Sub', {'x', 'y', 'z'})\n\
         local parts = {}\n\
         for i = 1, #inner do parts[i] = inner[i].text end\n\
         return item .. ':' .. table.concat(parts, '+')\n\

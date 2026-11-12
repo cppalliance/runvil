@@ -14,7 +14,7 @@ pub(super) fn arm_fanout() -> PromptSource {
     PromptSource::new().section(
         "Parent",
         "
-        local r = tasks.fanout('### Worker', {'alpha'})
+        local r = tasks.fanout('Worker', {'alpha'})
         return r[1].text",
     )
 }

@@ -16,10 +16,10 @@ use runvil_vfs::Access;
 use crate::execute::context::ChainState;
 use crate::execute::section_context::{SectionContext, TaskSeed};
 use crate::execute::walk_target::JumpTarget;
-use crate::heading_address::SectionPos;
 use crate::lua::{Answer, Blocked, UsageAnchor};
 use crate::model::{Message, ModelId};
 use crate::prompt::{Block, BodyText, Prompt, Section};
+use crate::section_pos::SectionPos;
 use crate::{Result, error};
 
 /// A chain's local id counters: the indices its next child chain and its
@@ -656,7 +656,7 @@ impl Chain {
         concurrency: std::num::NonZeroUsize,
     ) -> Chain {
         use crate::execute::RunParams;
-        use crate::heading_address::SectionIndex;
+        use crate::section_pos::SectionIndex;
         use crate::test_support::scenario::{TEST_SEED, TEST_STARTED_AT};
 
         let source = concat!(
@@ -867,9 +867,9 @@ mod tests {
 
     use super::{Chain, ChainArena, ChainIndex, ChainKind, ChatAnchor, Walk};
     use crate::execute::walk_target::JumpTarget;
-    use crate::heading_address::{SectionIndex, SectionPos};
     use crate::lua::UsageAnchor;
     use crate::model::{Message, ModelId};
+    use crate::section_pos::{SectionIndex, SectionPos};
 
     fn usage(prompt: u32, completion: u32) -> Usage {
         Usage::new(prompt, completion, prompt + completion)

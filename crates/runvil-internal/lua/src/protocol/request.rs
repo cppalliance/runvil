@@ -40,7 +40,7 @@ pub enum Request {
     /// `call(target, input?)`: run a contained chain over the target's
     /// slice.
     Call {
-        /// The heading string.
+        /// The target's section path, as the author wrote it.
         target: String,
         /// The optional input override; `None` runs under the caller's own
         /// args.
@@ -54,7 +54,7 @@ pub enum Request {
     /// chain shares `call`'s target resolution and depth cap, and refuses a
     /// list section as the target (the worker-template check).
     Spawn {
-        /// The heading string.
+        /// The target's section path, as the author wrote it.
         target: String,
         /// `opts.input`: the chain's `args` override; `None` runs under the
         /// caller's own args.

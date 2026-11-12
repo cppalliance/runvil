@@ -240,7 +240,7 @@ fn lazy_prose_composes_with_a_library_metatable() {
             Hello {{ var.word }}.
 
             ```lua
-            require '## capture'
+            require '/capture'
             var.word = 'world'
             plain = 'x'
             assert(captured.plain == 'x', 'the library __newindex still captures')

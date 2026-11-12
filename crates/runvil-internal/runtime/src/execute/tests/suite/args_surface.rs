@@ -296,7 +296,7 @@ fn a_call_chain_derives_argv_from_its_own_args_frozen() {
     let source = prompt(
         QUERY,
         &[
-            ("Main", "return call('## Sub', '{\"query\":\"chain\"}')"),
+            ("Main", "return call('../Sub', '{\"query\":\"chain\"}')"),
             (
                 "Sub",
                 "
@@ -317,7 +317,7 @@ fn a_no_input_call_inherits_the_repaired_argv() {
     let source = PromptSource::new()
         .front(QUERY)
         .h1("argv = { query = 'repaired' }")
-        .section("Main", "return call('## Sub')")
+        .section("Main", "return call('../Sub')")
         .section(
             "Sub",
             "

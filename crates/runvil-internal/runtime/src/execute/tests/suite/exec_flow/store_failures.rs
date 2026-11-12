@@ -147,7 +147,7 @@ fn a_caught_store_error_raised_again_after_a_suspending_call_keeps_store() {
                 "
                 local ok, err = pcall(function() return store.read('missing.txt') end)
                 assert(ok == false, 'the missing read fails')
-                call('### Sibling', '')
+                call('Sibling', '')
                 error(err)",
             ),
             ("### Sibling", "return 'sibling'"),
@@ -207,13 +207,13 @@ fn arms_requiring_a_seeder(seeder: &str) -> String {
             (
                 "Parent",
                 "
-                local r = tasks.fanout('### Worker', {'alpha', 'beta'})
+                local r = tasks.fanout('Worker', {'alpha', 'beta'})
                 return r[1].text",
             ),
             (
                 "### Worker",
                 "
-                require '## seeder'
+                require '/seeder'
                 return item",
             ),
             ("seeder", seeder),
@@ -270,13 +270,13 @@ fn a_captured_store_function_conflict_caught_with_pcall_still_ends_the_run_with_
             (
                 "Parent",
                 "
-                local r = tasks.fanout('### Worker', {'alpha', 'beta'})
+                local r = tasks.fanout('Worker', {'alpha', 'beta'})
                 return r[1].text",
             ),
             (
                 "### Worker",
                 "
-                require '## notes'
+                require '/notes'
                 pcall(save_note, 'note.txt', item)
                 return item",
             ),
@@ -301,7 +301,7 @@ fn a_captured_store_function_called_after_load_reaches_the_caller_as_a_store_eff
             (
                 "Only",
                 "
-                require '## notes'
+                require '/notes'
                 save_note('note.txt', 'kept')
                 return 'saved'",
             ),

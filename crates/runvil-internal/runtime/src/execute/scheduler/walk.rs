@@ -16,11 +16,10 @@ use std::sync::Arc;
 use runvil_types::error::place;
 
 use crate::execute::section_context::SectionContext;
-use crate::execute::walk_target::{
-    JumpTarget, h1_visible_sections, resolve_jump_target, section_position,
-};
-use crate::heading_address::{self, SectionIndex, SectionPos, Visible};
+use crate::execute::walk_target::{JumpTarget, resolve_jump_target};
 use crate::prompt::Block;
+use crate::section_path::Origin;
+use crate::section_pos::{SectionIndex, SectionPos};
 use crate::{Result, error};
 
 use super::chain::ChainStep;
@@ -196,19 +195,18 @@ impl ChainOps<'_> {
     /// Applies a jump's control transfer: closes the jumper's frame as
     /// completed (the final `var`
     /// rolled forward; the armed drop firing `SECTION_FINISHED`, a jump
-    /// being a completion), resolves the heading against the jumper's
-    /// visible set, and moves the walk. A sibling target replaces the
-    /// walk's current position; a child target suspends the jumper on the
-    /// chain's walk stack and descends into the jumper's child slice from
-    /// the target.
+    /// being a completion), resolves the path from the jumper, and moves
+    /// the walk. A sibling target replaces the walk's current position; a
+    /// child target suspends the jumper on the chain's walk stack and
+    /// descends into the jumper's child slice from the target.
     ///
     /// # Errors
     /// Returns a `LuaRuntime` failure when the `var` read-back fails (the
     /// frame drops unarmed), placed on the jumping block's line, or when
-    /// the heading matches no visible section or more than one, placed on
-    /// `line`, the `jump` call's - the jumper's frame has already closed
-    /// as completed.
-    pub(super) fn apply_jump(&mut self, heading: &str, line: Option<NonZeroU32>) -> Result<()> {
+    /// the path is refused or names no section, placed on `line`, the
+    /// `jump` call's - the jumper's frame has already closed as
+    /// completed.
+    pub(super) fn apply_jump(&mut self, path: &str, line: Option<NonZeroU32>) -> Result<()> {
         let prompt = self.prompt();
         {
             let chain = &mut *self.chain;
@@ -226,36 +224,30 @@ impl ChainOps<'_> {
             drop(frame);
         }
         let target = self
-            .resolve_chain_target(heading)
+            .resolve_chain_target(path)
             .map_err(|error| place(error, prompt.file(), line))?;
         self.chain.walk.jump(target);
         Ok(())
     }
 
-    /// Resolves `heading` against the chain's current section's visible
-    /// set into the position the walk or a contained chain continues from:
-    /// a direct child's place in the jumper's child slice, or a sibling's
-    /// in the jumper's own. The H1 pass's set is the whole top-level
-    /// slice, so its targets never descend.
+    /// Resolves the relative `path` from the chain's current section into
+    /// the position the walk or a contained chain continues from: a
+    /// direct child's place in the section's child slice, or a sibling's
+    /// in the section's own. The H1 pass's children are the top-level
+    /// sections, so its targets never descend.
     ///
     /// # Errors
-    /// Returns a `LuaRuntime` failure when the heading is malformed, matches no
-    /// visible section, or matches more than one (see
-    /// [`heading_address::resolve_visible`]).
-    pub(super) fn resolve_chain_target(&self, heading: &str) -> Result<JumpTarget> {
+    /// Returns a `LuaRuntime` failure when the path is malformed, is not
+    /// one of the two relative forms, or names no section (see
+    /// [`resolve_jump_target`]).
+    pub(super) fn resolve_chain_target(&self, path: &str) -> Result<JumpTarget> {
         let prompt = self.prompt();
         let chain = &*self.chain;
-        if chain.kind.is_h1() {
-            let sections = h1_visible_sections(&prompt);
-            let target = heading_address::resolve_visible(heading, Visible::all(sections))?;
-            let index = section_position(sections, target).ok_or(error::make_internal_error(
-                "a resolved H1 target is absent from the top-level slice",
-            ))?;
-            return Ok(JumpTarget {
-                pos: SectionPos::top(index),
-                descends: false,
-            });
-        }
-        resolve_jump_target(heading, &prompt, chain.walk.current())
+        let origin = if chain.kind.is_h1() {
+            Origin::H1
+        } else {
+            Origin::Section(chain.walk.current())
+        };
+        resolve_jump_target(path, &prompt, origin)
     }
 }

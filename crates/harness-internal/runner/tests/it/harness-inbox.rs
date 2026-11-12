@@ -88,7 +88,7 @@ const LOOPS_THEN_RECEIVES_TWICE: &str = "---\nname: loops-receives-twice\ndescri
 const STEERS_A_CHILD: &str = "---\nname: steers-child\ndescription: d\nrunvil: 0\n---\n\n\
     # SteersChild\n\n\
     ## Main\n\n```lua\n\
-    local child = tasks.spawn('## Child')\n\
+    local child = tasks.spawn('../Child')\n\
     tasks.send(child, (tasks.receive()))\n\
     local _t, _ok, report = tasks.join_any({ child })\n\
     return report\n```\n\n\
@@ -105,7 +105,7 @@ const STEERS_A_CHILD_THEN_LOOPS: &str = "---\nname: steers-child-loops\ndescript
     runvil: 0\n---\n\n\
     # SteersChildLoops\n\n\
     ## Main\n\n```lua\n\
-    local child = tasks.spawn('## Child')\n\
+    local child = tasks.spawn('../Child')\n\
     tasks.send(child, (tasks.receive()))\n\
     messages:user('mine')\n\
     models.loop()\n\

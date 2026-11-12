@@ -71,9 +71,9 @@ fn dangerous_globals_absent() {
 fn an_installed_require_is_runvils_and_loads_no_module() {
     let vm = TestVm::new().shims().build();
     vm.install_require(
-        |heading, _| {
+        |path| {
             Err::<Library, _>(crate::make_lua_runtime_error(format!(
-                "no section `{heading}` within reach of require"
+                "section `{path}` not found"
             )))
         },
         |template, _, _| Ok(template.to_owned()),
@@ -94,7 +94,7 @@ fn an_installed_require_is_runvils_and_loads_no_module() {
     assert_eq!(
         returned,
         format!(
-            "function|false|prompt:1: no section `os` within reach of require. {}|nil|nil",
+            "function|false|prompt:1: section `os` not found. {}|nil|nil",
             ErrorCode::LuaRuntime.prose()
         )
     );

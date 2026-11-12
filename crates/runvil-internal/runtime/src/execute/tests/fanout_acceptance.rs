@@ -43,7 +43,7 @@ fn a_queued_arm_is_admitted_when_any_arm_frees_its_slot() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Worker', {'a', 'b', 'c'})\n\
+        local r = tasks.fanout('Worker', {'a', 'b', 'c'})\n\
         return r[1].text .. '|' .. r[2].text .. '|' .. r[3].text\n\
         ```\n\n\
         ### Worker\n\n\
@@ -96,7 +96,7 @@ fn a_fatal_arm_gives_every_started_arm_exactly_one_terminal() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Fanout\n\n\
         ## Parent\n\n\
-        ```lua\ntasks.fanout('### Worker', {'boom', 'slow', 'queued'})\n```\n\n\
+        ```lua\ntasks.fanout('Worker', {'boom', 'slow', 'queued'})\n```\n\n\
         ### Worker\n\n\
         ```lua\n\
         local a = models.infer(item .. ':1')\n\
@@ -143,7 +143,7 @@ fn an_arm_that_replies_hands_the_call_its_reply_and_ends_canceled() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Worker', {'reply', 'return'})\n\
+        local r = tasks.fanout('Worker', {'reply', 'return'})\n\
         return r[1].text .. '|' .. tostring(r[1].ok) .. '|' .. r[2].text .. '|' .. #tasks.pending()\n\
         ```\n\n\
         ### Worker\n\n\
@@ -180,12 +180,12 @@ fn a_nested_fanout_nests_its_arm_ids_under_the_outer_arm() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Outer', {'a', 'b'})\n\
+        local r = tasks.fanout('Outer', {'a', 'b'})\n\
         return r[1].text .. '|' .. r[2].text\n\
         ```\n\n\
         ### Outer\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Inner', {'x', 'y'})\n\
+        local r = tasks.fanout('../Inner', {'x', 'y'})\n\
         return sys.id .. '(' .. r[1].text .. ',' .. r[2].text .. ')'\n\
         ```\n\n\
         ### Inner\n\n\
@@ -221,8 +221,8 @@ const IDENTITY: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     # Identity\n\n\
     ## Main\n\n\
     ```lua\n\
-    local r = tasks.fanout('## Worker', {'a', 'b'})\n\
-    local sub = call('## Sub')\n\
+    local r = tasks.fanout('../Worker', {'a', 'b'})\n\
+    local sub = call('../Sub')\n\
     return r[1].text .. '|' .. r[2].text .. '|' .. sub .. '|' .. sys.id\n\
     ```\n\n\
     ## Worker\n\n\
@@ -315,7 +315,7 @@ fn three_arms_running_models_loop_hold_three_model_rounds_in_flight_at_once() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Worker', {'a', 'b', 'c'})\n\
+        local r = tasks.fanout('Worker', {'a', 'b', 'c'})\n\
         return r[1].text .. '|' .. r[2].text .. '|' .. r[3].text\n\
         ```\n\n\
         ### Worker\n\n\

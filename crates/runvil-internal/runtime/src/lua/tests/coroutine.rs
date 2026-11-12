@@ -94,17 +94,17 @@ fn a_shim_yield_suspends_and_resumes_across_pcall() {
 
 #[test]
 fn jump_transfers_through_thread_resume_unchanged() {
-    // Spike (c): `jump` records the heading and raises its transfer
+    // Spike (c): `jump` records the path and raises its transfer
     // marker; through `Thread::resume` the slot still takes precedence
     // over the chunk's error, so the outcome matches the direct
     // `run_chunk` path.
     let vm = scheduler_vm(&ModelSet::default(), None);
-    let program = compile_block("jump(\"## Target\")\nerror(\"unreachable\")");
+    let program = compile_block("jump(\"../Target\")\nerror(\"unreachable\")");
     match vm
         .start_block_coro(&program)
         .expect("a jump is not a failure")
     {
-        CoroStep::Done(LuaBlockResult::Jump(heading, _)) => assert_eq!(heading, "## Target"),
+        CoroStep::Done(LuaBlockResult::Jump(path, _)) => assert_eq!(path, "../Target"),
         other => panic!("expected the jump transfer, got {other:?}"),
     }
 }

@@ -16,7 +16,7 @@ fn jump_transfer_skips_the_jumpers_remaining_blocks() {
                 "Check",
                 "
                 store.write('seen.txt', 'check')
-                jump('## Help')
+                jump('../Help')
                 store.write('seen.txt', 'should-not-run')",
             ),
             ("Accept", "return 'accepted'"),
@@ -40,10 +40,10 @@ fn jump_inside_call_is_contained_in_the_chain() {
             (
                 "Main",
                 "
-                local r = call('## Sub')
+                local r = call('../Sub')
                 return 'main:' .. r",
             ),
-            ("Sub", "jump('## Peer')"),
+            ("Sub", "jump('../Peer')"),
             ("Skipped", "error('the chain jump must move past me')"),
             ("Peer", "return 'peer-ran'"),
         ],
@@ -64,7 +64,7 @@ fn call_chain_jumps_to_a_child_and_returns_the_chain_result() {
                 "A",
                 "
                 store.append('order.txt', 'A1\\n')
-                local r = call('## Sub')
+                local r = call('../Sub')
                 assert(r == 's2-result', 'the chain final text returns to A')
                 store.append('order.txt', 'A2\\n')",
             ),
@@ -78,7 +78,7 @@ fn call_chain_jumps_to_a_child_and_returns_the_chain_result() {
                 "Sub",
                 "
                 store.append('order.txt', 'Sub\\n')
-                jump('### S1')",
+                jump('S1')",
             ),
             ("### S1", "store.append('order.txt', 'S1\\n')"),
             (
@@ -102,7 +102,7 @@ fn call_chain_over_off_walk_siblings_returns_to_the_caller() {
         .section(
             "A",
             "
-            local r = call('## S1')
+            local r = call('../S1')
             store.append('order.txt', 'A:' .. r .. '\\n')",
         )
         .section(
@@ -141,10 +141,10 @@ fn jump_inside_a_call_chain_moves_within_the_chain() {
             (
                 "A",
                 "
-                local r = call('## Sub')
+                local r = call('../Sub')
                 return 'A:' .. r",
             ),
-            ("Sub", "jump('## Peer')"),
+            ("Sub", "jump('../Peer')"),
             ("Peer", "store.append('order.txt', 'Peer\\n')"),
             (
                 "Tail",
@@ -169,7 +169,7 @@ fn the_outer_walk_never_moves_during_a_contained_chain() {
             (
                 "A",
                 "
-                call('## Sub')
+                call('../Sub')
                 store.append('order.txt', 'A-done\\n')",
             ),
             (
@@ -178,7 +178,7 @@ fn the_outer_walk_never_moves_during_a_contained_chain() {
                 store.append('order.txt', 'B\\n')
                 return store.read('order.txt')",
             ),
-            ("Sub", "jump('## Peer')"),
+            ("Sub", "jump('../Peer')"),
             (
                 "Peer",
                 "
@@ -202,7 +202,7 @@ fn a_return_inside_a_chain_ends_the_chain_not_the_run() {
             (
                 "A",
                 "
-                local r = call('## Sub')
+                local r = call('../Sub')
                 store.append('order.txt', 'A:' .. r .. '\\n')",
             ),
             (
@@ -234,7 +234,7 @@ fn a_call_chain_counts_its_own_entries_and_the_outer_walk_resumes_its_own_sequen
                 "Main",
                 "
                 assert(sys.id == '0.1', 'the first walked section takes entry 1 of the root chain')
-                local r = call('## Sub')
+                local r = call('../Sub')
                 store.append('order.txt', r .. '\\n')",
             ),
             (
@@ -269,8 +269,8 @@ fn entering_the_same_section_twice_takes_two_ids() {
             (
                 "Main",
                 "
-                local a = call('## Sub')
-                local b = call('## Sub')
+                local a = call('../Sub')
+                local b = call('../Sub')
                 return a .. ',' .. b",
             ),
             ("Sub", "return tostring(sys.id)"),
@@ -291,7 +291,7 @@ fn fanout_arms_take_child_ids_in_collection_order_and_a_per_fanout_index() {
             (
                 "Parent",
                 "
-                local r = tasks.fanout('### Worker', {'a', 'b'})
+                local r = tasks.fanout('Worker', {'a', 'b'})
                 local function parts(s) return string.match(s, '^(%d+):([%d%.]+)$') end
                 local i1, id1 = parts(r[1].text)
                 local i2, id2 = parts(r[2].text)
@@ -334,7 +334,7 @@ fn sys_taskid_inside_a_fanout_arm_is_the_arms_own_task() {
                 "Parent",
                 "
                 assert(sys.taskid == '0', 'the main walk is task 0, got ' .. sys.taskid)
-                local results = tasks.fanout('### Worker', {'a'})
+                local results = tasks.fanout('Worker', {'a'})
                 return results[1].text",
             ),
             ("### Worker", "return sys.taskid"),
@@ -351,7 +351,7 @@ fn sys_taskid_inside_a_fanout_arm_is_the_arms_own_task() {
 fn call_recursion_is_capped() {
     let source = prompt(
         "",
-        &[("A", "return call('## B')"), ("B", "return call('## A')")],
+        &[("A", "return call('../B')"), ("B", "return call('../A')")],
     );
     let trace = Scenario::new(source).run();
     let error = trace.error();
@@ -367,11 +367,11 @@ fn call_recursion_is_capped() {
     );
 }
 
-/// The caller is outside its own visible set (decision 3): naming its own
-/// heading to `call` resolves as not-found.
+/// The caller is outside its own visible set (decision 3): naming itself
+/// as a sibling to `call` resolves as not-found.
 #[test]
 fn section_cannot_call_itself() {
-    let trace = Scenario::new(prompt("", &[("Self", "return call('## Self')")])).run();
+    let trace = Scenario::new(prompt("", &[("Self", "return call('../Self')")])).run();
     let rendered = trace.error().to_string();
     assert!(
         rendered.contains("not found"),
@@ -379,11 +379,11 @@ fn section_cannot_call_itself() {
     );
 }
 
-/// The caller is outside its own visible set (decision 3): naming its own
-/// heading to `jump` resolves as not-found.
+/// The caller is outside its own visible set (decision 3): naming itself
+/// as a sibling to `jump` resolves as not-found.
 #[test]
 fn section_cannot_jump_to_itself() {
-    let trace = Scenario::new(prompt("", &[("Self", "jump('## Self')")])).run();
+    let trace = Scenario::new(prompt("", &[("Self", "jump('../Self')")])).run();
     let rendered = trace.error().to_string();
     assert!(
         rendered.contains("not found"),

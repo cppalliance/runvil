@@ -103,17 +103,17 @@ pub(crate) enum Observation {
     ToolCallFailed,
     /// A section VM began loading a library section.
     LuaLibraryLoadStarted {
-        /// The library section's heading with its markers.
+        /// The library section's path from the top of the prompt.
         library: String,
     },
     /// A section VM loaded a library section and ran its blocks.
     LuaLibraryLoadSucceeded {
-        /// The library section's heading with its markers.
+        /// The library section's path from the top of the prompt.
         library: String,
     },
     /// A section VM failed to load a library section or run its blocks.
     LuaLibraryLoadFailed {
-        /// The library section's heading with its markers.
+        /// The library section's path from the top of the prompt.
         library: String,
     },
     /// A section VM began executing a Lua chunk.

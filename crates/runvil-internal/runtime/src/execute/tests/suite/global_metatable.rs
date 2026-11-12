@@ -18,7 +18,7 @@ fn a_library_defaults_metatable_works_beside_frozen_argv_and_read_only_prose() {
     let source = query_source()
         .h1(
             "
-            require '## defaults'
+            require '/defaults'
             assert(tone == 'friendly', 'H1 reads the default')
             argv = { query = 'repaired' }
             assert(not pcall(function() prose = 'x' end), 'prose is read-only in H1')",
@@ -29,7 +29,7 @@ fn a_library_defaults_metatable_works_beside_frozen_argv_and_read_only_prose() {
             Tone: {{ tone }}.
 
             ```lua
-            require '## defaults'
+            require '/defaults'
             assert(prose == 'Tone: friendly.', 'a default renders in prose: ' .. prose)
             assert(missing == nil, 'a global with no default reads nil')
             local ok, err = pcall(function() argv = 'hijacked' end)
@@ -49,7 +49,7 @@ fn a_library_defaults_metatable_works_beside_frozen_argv_and_read_only_prose() {
         .section(
             "Second",
             "
-            require '## defaults'
+            require '/defaults'
             assert(argv.query == 'repaired', 'the H1 repair reaches a later section')
             assert(not pcall(function() argv = 'hijacked' end), 'argv stays frozen in a later section')
             return argv.query .. ' ' .. tone",
@@ -69,7 +69,7 @@ fn a_strict_metatable_raises_its_own_error_while_the_guard_serves_argv_prose_and
     let source = query_source()
         .h1(
             "
-            require '## strict'
+            require '/strict'
             local ok, err = pcall(function() return undefined_in_h1 end)
             assert(not ok and tostring(err):find('undefined global undefined_in_h1', 1, true), 'H1 is strict: ' .. tostring(err))",
         )
@@ -79,7 +79,7 @@ fn a_strict_metatable_raises_its_own_error_while_the_guard_serves_argv_prose_and
             Hi.
 
             ```lua
-            require '## strict'
+            require '/strict'
             local ok, err = pcall(function() return undefined_here end)
             assert(not ok, 'an undefined global raises')
             assert(type(err) == 'string', 'the author error comes back as raised, got ' .. type(err))
@@ -107,13 +107,13 @@ fn a_strict_metatable_raises_its_own_error_while_the_guard_serves_argv_prose_and
 fn an_h1_repair_lands_under_a_strict_index_and_a_write_hook() {
     let source = query_source()
         .h1("
-            require '## hooks'
+            require '/hooks'
             if argv == nil then argv = { query = 'repaired' } end
             assert(seen.argv == nil, 'the write hook never sees argv')")
         .section(
             "Only",
             "
-            require '## hooks'
+            require '/hooks'
             assert(argv.query == 'repaired', 'the repair reaches the walk')
             return argv.query",
         )
@@ -177,7 +177,7 @@ fn a_library_cannot_assign_prose() {
             The real prose.
 
             ```lua
-            require '## lib'
+            require '/lib'
             assert(library_prose == 'Library prose.', 'the library reads its own prose: ' .. tostring(library_prose))
             assert(library_refusal and library_refusal:find('prose is read-only', 1, true), 'the library cannot assign prose: ' .. tostring(library_refusal))
             return prose
@@ -206,7 +206,7 @@ fn getmetatable_on_g_returns_a_librarys_metatable_and_edits_apply_live() {
         .section(
             "Only",
             "
-            require '## metatable'
+            require '/metatable'
             assert(getmetatable(_G) == author_mt, 'getmetatable(_G) is the library metatable')
             getmetatable(_G).__index = function(_, key) return 'live ' .. key end
             assert(tone == 'live tone', 'an edit applies at once')

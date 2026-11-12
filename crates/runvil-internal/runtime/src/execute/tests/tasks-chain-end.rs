@@ -42,8 +42,8 @@ fn a_chain_ending_with_live_author_tasks_fails_as_tasks_live_naming_the_ids() {
     // never ran reports no start and no terminal, though its entry still
     // reaches Abandoned.
     let md = spawner_prompt(
-        "tasks.spawn('## Child')\n\
-         tasks.spawn('## Child')\n\
+        "tasks.spawn('../Child')\n\
+         tasks.spawn('../Child')\n\
          return 'done'",
         CHILD_PARKED_ON_STORE_WRITE,
     );
@@ -85,7 +85,7 @@ fn a_chain_failing_with_a_live_task_keeps_its_own_error_and_abandons_the_task() 
     // admitted - the spawner failed without suspending - so it reports no
     // start and no terminal.
     let md = spawner_prompt(
-        "tasks.spawn('## Child')\n\
+        "tasks.spawn('../Child')\n\
          error('spawner boom')",
         CHILD_PARKED_ON_STORE_WRITE,
     );
@@ -152,7 +152,7 @@ fn a_returning_owner_abandons_its_running_task_as_owner_returned() {
     // is admitted and parks on its held round; the spawner then returns
     // with the child live, which is the leak.
     let md = spawner_prompt(
-        "tasks.spawn('## Child')\n\
+        "tasks.spawn('../Child')\n\
          store.write('own', 'x')\n\
          return 'done'",
         CHILD_PARKED_ON_HELD_ROUND,
@@ -167,7 +167,7 @@ fn a_returning_owner_abandons_its_running_task_as_owner_returned() {
 #[test]
 fn a_failing_owner_abandons_its_running_task_as_owner_failed() {
     let md = spawner_prompt(
-        "tasks.spawn('## Child')\n\
+        "tasks.spawn('../Child')\n\
          store.write('own', 'x')\n\
          error('spawner boom')",
         CHILD_PARKED_ON_HELD_ROUND,
@@ -186,7 +186,7 @@ fn an_exhausted_tool_loop_abandons_its_running_task_as_tool_loop_exhausted() {
     // it fails as exhausted while the child is parked on its held round.
     let gateway = ScriptedChat::new(vec![calls(&[("call_0", "echo", "{\"value\":\"x\"}")])]);
     let owner = format!(
-        "tasks.spawn('## Child')\n\
+        "tasks.spawn('../Child')\n\
          store.write('own', 'x')\n\
          tools.offer('tools/echo')\n\
          {LOOP_TO_TEXT}"
@@ -216,7 +216,7 @@ fn moving_spawner_prompt(movement: &str) -> String {
          # Tasks\n\n\
          ## Spawner\n\n\
          ```lua\n\
-         tasks.spawn('## Child')\n\
+         tasks.spawn('../Child')\n\
          {movement}\
          ```\n\n\
          ## Sibling\n\n\
@@ -267,7 +267,7 @@ fn a_task_survives_its_spawning_sections_fall_through() {
 fn a_task_survives_its_spawning_sections_jump() {
     // A `jump` moves the walk within the same chain, so it settles nothing:
     // the jumped-to sibling's return leaks the task.
-    assert_task_outlives_movement(moving_spawner_prompt("jump('## Sibling')\n"));
+    assert_task_outlives_movement(moving_spawner_prompt("jump('../Sibling')\n"));
 }
 
 #[test]
@@ -279,13 +279,13 @@ fn a_call_chain_ending_with_a_live_task_answers_tasks_live_to_its_caller() {
         # Tasks\n\n\
         ## Main\n\n\
         ```lua\n\
-        local ok, err = pcall(call, '## Leaky')\n\
+        local ok, err = pcall(call, '../Leaky')\n\
         assert(not ok, 'the leaky call fails')\n\
         return err.kind .. '|' .. err.tasks .. '|' .. tostring(err)\n\
         ```\n\n\
         ## Leaky\n\n\
         ```lua\n\
-        tasks.spawn('## Child')\n\
+        tasks.spawn('../Child')\n\
         return 'leaked'\n\
         ```\n\n\
         ## Child\n\n\
@@ -320,12 +320,12 @@ fn a_fanout_arm_leaking_a_task_fails_on_the_arms_own_spawn_line() {
         # Tasks\n\n\
         ## Main\n\n\
         ```lua\n\
-        return tasks.fanout('## Worker', {'only'})[1].text\n\
+        return tasks.fanout('../Worker', {'only'})[1].text\n\
         ```\n\n\
         ## Worker\n\n\
         ```lua\n\
         local note = item\n\
-        tasks.spawn('## Child')\n\
+        tasks.spawn('../Child')\n\
         return note\n\
         ```\n\n\
         ## Child\n\n\
@@ -361,7 +361,7 @@ fn a_task_spawned_in_h1_belongs_to_the_main_walk() {
     let md = "---\nname: h1\ndescription: d\nrunvil: 0\n---\n\n\
         # Tasks\n\n\
         ```lua\n\
-        tasks.spawn('## Child')\n\
+        tasks.spawn('Child')\n\
         ```\n\n\
         ## Main\n\n\
         ```lua\n\
@@ -402,14 +402,14 @@ fn aborting_a_chain_abandons_the_tasks_it_owns() {
         # Tasks\n\n\
         ## Main\n\n\
         ```lua\n\
-        local ok, err = pcall(tasks.fanout, '## Worker', {'spawner', 'boom'})\n\
+        local ok, err = pcall(tasks.fanout, '../Worker', {'spawner', 'boom'})\n\
         assert(not ok, 'the fatal arm fails the fanout')\n\
         return tostring(err)\n\
         ```\n\n\
         ## Worker\n\n\
         ```lua\n\
         if item == 'spawner' then\n\
-          tasks.spawn('## Child')\n\
+          tasks.spawn('../Child')\n\
           store.write('park-' .. sys.id, 'x')\n\
           return 'never'\n\
         end\n\

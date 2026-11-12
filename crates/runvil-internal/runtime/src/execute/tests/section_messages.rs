@@ -95,13 +95,13 @@ fn a_jump_target_a_task_a_fanout_arm_and_a_called_section_each_start_empty() {
         .section(
             "Main",
             "messages:user('main')
-             local called = call('## Called')
-             local _, _, task = tasks.join_any({ tasks.spawn('## Task') })
-             local arms = tasks.fanout('### Arm', { 'a', 'b' })
+             local called = call('../Called')
+             local _, _, task = tasks.join_any({ tasks.spawn('../Task') })
+             local arms = tasks.fanout('Arm', { 'a', 'b' })
              var.seen = table.concat({
                called, task, arms[1].text, arms[2].text, #messages .. ':' .. messages[1].content,
              }, '|')
-             jump('## Next')",
+             jump('../Next')",
         )
         .section(
             "### Arm",
@@ -123,7 +123,7 @@ fn a_called_sections_loop_sends_only_its_own_list_and_leaves_the_callers() {
         .section(
             "Main",
             "messages:user('caller')
-             local called = call('## Called')
+             local called = call('../Called')
              models.loop()
              return called .. '|' .. #messages .. '|' .. messages[#messages].content",
         )
@@ -160,7 +160,7 @@ fn a_required_library_reads_and_extends_the_requiring_sections_list() {
         .section(
             "Main",
             "messages:user('main')
-             local seen = require '## lib'
+             local seen = require '/lib'
              return seen .. '|' .. #messages .. '|' .. messages[2].content",
         )
         .section(

@@ -19,7 +19,7 @@ use crate::engine_globals_store::install_store_table;
 use crate::error::Error;
 use crate::error::{self, Result};
 use crate::prose::ProseState;
-use crate::section::{Library, LibraryKey, SectionText, resolve_section_target};
+use crate::section::{Library, SectionText, resolve_section_target};
 use crate::sys::{SYS_LIVE_POISONED, seal_sys};
 #[cfg(test)]
 use crate::var::var_to_json;
@@ -174,13 +174,11 @@ impl SectionVm {
 
     /// Installs Runvil's `require` as a persistent global.
     ///
-    /// `resolver` finds a library from the heading as written. While a
-    /// library loads, a `require` passes that library's key, so the
-    /// library's own helpers resolve from its position wherever it is
-    /// required from; every other call passes `None`. An out-of-reach or
-    /// malformed heading is the resolver's error, raised at the call. Each
-    /// first load reports through a clone of `emitter` under `section`, and
-    /// `jump` refuses while any library loads.
+    /// `resolver` finds a library from the section path as written. A
+    /// path that is malformed, or that names no section, is the
+    /// resolver's error, raised at the call. Each first load reports
+    /// through a clone of `emitter` under `section`, and `jump` refuses
+    /// while any library loads.
     ///
     /// While a library block runs, its `prose` is its own: a lazy read of
     /// the block's prose template, rendered at most once through `render`
@@ -202,10 +200,7 @@ impl SectionVm {
         section: &str,
     ) -> Result<()>
     where
-        R: Fn(String, Option<LibraryKey>) -> std::result::Result<Library, E>
-            + Send
-            + Sync
-            + 'static,
+        R: Fn(String) -> std::result::Result<Library, E> + Send + Sync + 'static,
         E: std::error::Error + Send + Sync + 'static,
         P: Fn(&str, Option<NonZeroU32>, ProseState<'_>) -> mlua::Result<String>
             + Send
@@ -245,12 +240,12 @@ impl SectionVm {
                          library and call jump from the section after require returns",
                     ));
                 }
-                let heading = resolve_section_target(target)?;
+                let path = resolve_section_target(target)?;
                 let line = error::author_line(lua);
                 let mut slot = jump_slot.lock().map_err(|_| {
                     mlua::Error::external(error::make_internal_error(JUMP_SLOT_POISONED))
                 })?;
-                *slot = Some((heading, line));
+                *slot = Some((path, line));
                 Err(mlua::Error::external("jump transfer"))
             })
             .map_err(error::make_lua_error)?;
@@ -277,12 +272,12 @@ impl SectionVm {
         let list = self
             .lua
             .create_function(move |lua, target: Value| {
-                let heading = resolve_section_target(target)?;
-                match read(heading.clone()).map_err(mlua::Error::external)? {
+                let path = resolve_section_target(target)?;
+                match read(path.clone()).map_err(mlua::Error::external)? {
                     None => Ok(Value::Nil),
                     Some(text) if text.items.is_empty() => Err(mlua::Error::external(format!(
                         "section `{}` has no pre-parsed items",
-                        heading.trim()
+                        path.trim()
                     ))),
                     Some(text) => pack_sequence(lua, text.items).map(Value::Table),
                 }

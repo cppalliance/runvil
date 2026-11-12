@@ -202,7 +202,7 @@ fn waiting_for_input_is_true_exactly_while_the_main_chain_waits_on_its_inbox() {
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local t = tasks.spawn('## Worker')\n\
+            "local t = tasks.spawn('../Worker')\n\
              store.exists('busy')\n\
              local text = tasks.receive()\n\
              tasks.cancel(t)\n\
@@ -300,7 +300,7 @@ fn a_run_that_cannot_start_hands_back_the_messages_delivered_before_it() {
 #[test]
 fn a_receive_in_a_call_child_reads_the_main_chains_inbox() {
     let mut run = run_of_sections(&[
-        ("Main", "return 'main got ' .. call('## Reader')"),
+        ("Main", "return 'main got ' .. call('../Reader')"),
         ("Reader", "return tasks.receive()"),
     ]);
     let (effects, _, waiting) = pending(&mut run);
@@ -377,8 +377,8 @@ fn a_task_waiting_on_its_inbox_reads_blocked_inbox_and_gives_back_its_slot() {
         (
             "Main",
             "tasks.concurrency(1)\n\
-             local waiter = tasks.spawn('## Waiter')\n\
-             local worker = tasks.spawn('## Worker')\n\
+             local waiter = tasks.spawn('../Waiter')\n\
+             local worker = tasks.spawn('../Worker')\n\
              local _, ok, result = tasks.join_any({ worker })\n\
              local status = tasks.status(waiter)\n\
              tasks.cancel(waiter)\n\
@@ -399,7 +399,7 @@ fn a_task_reads_its_own_inbox_and_leaves_the_main_chains_message_queued() {
     let mut run = run_of_sections(&[
         (
             "Main",
-            "local waiter = tasks.spawn('## Waiter')\n\
+            "local waiter = tasks.spawn('../Waiter')\n\
              store.exists('busy')\n\
              local status = tasks.status(waiter)\n\
              local text = tasks.receive()\n\

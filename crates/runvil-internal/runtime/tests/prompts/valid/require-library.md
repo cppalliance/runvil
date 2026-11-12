@@ -13,7 +13,7 @@ The helper library is available to each section that requires it.
 Normalize the supplied subject.
 
 ```lua
-require '## helpers'
+require '/helpers'
 var.subject = normalize(args)
 ```
 
@@ -26,7 +26,7 @@ This nested prose remains attached to Prepare.
 Return the normalized subject.
 
 ```lua
-require '## helpers'
+require '/helpers'
 return normalize(var.subject)
 ```
 

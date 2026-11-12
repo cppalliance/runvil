@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 runvil-lua.workspace = true
+runvil-markdown.workspace = true
 runvil-model-client.workspace = true
 runvil-prompt.workspace = true
 runvil-types.workspace = true

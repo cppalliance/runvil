@@ -235,7 +235,7 @@ fn adhoc_calls_run_alone_between_their_neighbors() {
 fn canceling_a_task_parked_on_a_batch_orphans_every_call() {
     let md = "---\nname: loop\ndescription: d\nrunvil: 0\n---\n\n# Loop\n\n\
               ## Main\n\n```lua\n\
-              local t = tasks.spawn('## Child')\n\
+              local t = tasks.spawn('../Child')\n\
               models.infer('wait')\n\
               tasks.cancel(t)\n\
               models.infer('linger')\n\

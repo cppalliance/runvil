@@ -94,7 +94,7 @@ fn call_chain_over_off_walk_siblings_returns_to_the_caller() {
         # Siblings\n\n\
         ## A\n\n\
         ```lua\n\
-        local r = call('## S1')\n\
+        local r = call('../S1')\n\
         store.append('order.txt', 'A:' .. r .. '\\n')\n\
         ```\n\n\
         ## B\n\n\
@@ -143,7 +143,7 @@ fn call_clones_var_in_and_discards_child_writes() {
         ## Main\n\n\
         ```lua\n\
         var.shared = 'caller'\n\
-        local r = call('## Sub')\n\
+        local r = call('../Sub')\n\
         assert(r == 'sub saw caller', 'the child reads the cloned var')\n\
         assert(var.child_write == nil, 'child writes must not reach the caller')\n\
         return 'ok'\n\
@@ -168,7 +168,7 @@ fn a_call_chain_counts_its_own_entries_and_the_outer_walk_resumes_its_own_sequen
         ## Main\n\n\
         ```lua\n\
         assert(sys.id == '0.1', 'the first walked section takes entry 1 of the root chain')\n\
-        local r = call('## Sub')\n\
+        local r = call('../Sub')\n\
         store.append('order.txt', r .. '\\n')\n\
         ```\n\n\
         ## B\n\n\
@@ -199,8 +199,8 @@ fn entering_the_same_section_twice_takes_two_ids() {
         # Twice\n\n\
         ## Main\n\n\
         ```lua\n\
-        local a = call('## Sub')\n\
-        local b = call('## Sub')\n\
+        local a = call('../Sub')\n\
+        local b = call('../Sub')\n\
         return a .. ',' .. b\n\
         ```\n\n\
         ## Sub\n\n\

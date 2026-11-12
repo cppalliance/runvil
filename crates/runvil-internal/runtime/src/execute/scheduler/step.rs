@@ -11,9 +11,9 @@ use runvil_types::error::{ErrorCode, place};
 use runvil_types::event_lifecycle;
 
 use crate::execute::requirements::NOTICE_HEADER;
-use crate::heading_address::{SectionIndex, SectionPos};
 use crate::lua::{Answer, CoroStep, LuaBlockResult, Request, YieldParse};
 use crate::prompt::Block;
+use crate::section_pos::{SectionIndex, SectionPos};
 use crate::{Result, error};
 
 use super::chain::ChainStep;
@@ -29,8 +29,8 @@ enum Settled {
     Dispatch(Request),
     /// The block suspended on a call answered on the spot.
     Answer(Result<Answer>),
-    /// The block jumped to the heading, from the `jump` call on the
-    /// prompt line, when known.
+    /// The block jumped to the section path, from the `jump` call on
+    /// the prompt line, when known.
     Jump(String, Option<NonZeroU32>),
     /// The block returned a scalar.
     Returned(String),
@@ -103,7 +103,7 @@ fn settle_block(
             // resolved target.
             emitter.report(name, event_lifecycle::LUA_CHUNK_SUCCEEDED);
             match done {
-                LuaBlockResult::Jump(heading, line) => Ok(Settled::Jump(heading, line)),
+                LuaBlockResult::Jump(path, line) => Ok(Settled::Jump(path, line)),
                 LuaBlockResult::Returned(Some(value)) => {
                     // The H1 pass's final `var` read-back runs here
                     // exactly as the walk reads it on every exit, so a
@@ -245,11 +245,11 @@ impl Scheduler {
             Settled::Answer(answer) => self.answer_inline(id, answer)?,
             // A jump out of H1 ends the pass and starts the walk at the
             // target.
-            Settled::Jump(heading, line) if is_h1 => {
-                return self.end_h1_at_jump(id, &heading, line);
+            Settled::Jump(path, line) if is_h1 => {
+                return self.end_h1_at_jump(id, &path, line);
             }
-            Settled::Jump(heading, line) => {
-                self.with_chain(id, |ops| ops.apply_jump(&heading, line))?;
+            Settled::Jump(path, line) => {
+                self.with_chain(id, |ops| ops.apply_jump(&path, line))?;
                 self.ready.push_back(id);
             }
             Settled::Returned(value) if is_h1 => {

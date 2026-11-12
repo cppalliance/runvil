@@ -13,8 +13,8 @@ use crate::error::{Result, make_lua_runtime_error};
 pub enum LuaBlockResult {
     /// Normal completion with an optional scalar return.
     Returned(Option<String>),
-    /// `jump` transferred control to this heading (`## Name`), called on
-    /// this prompt line, which is `None` when the call found no author
+    /// `jump` transferred control to the section this path names, called
+    /// on this prompt line, which is `None` when the call found no author
     /// frame running.
     Jump(String, Option<NonZeroU32>),
 }
@@ -48,7 +48,7 @@ pub(crate) fn scalar_return(returned: MultiValue) -> Result<Option<String>> {
     }
 }
 
-/// Resolves a `call` / `jump` target from a heading string.
+/// Reads a `call` / `jump` target: a section path, as the author wrote it.
 ///
 /// # Errors
 /// Returns a Lua error when the value is not a string.
@@ -62,7 +62,7 @@ pub(crate) fn resolve_section_target(value: Value) -> mlua::Result<String> {
     }
 }
 
-/// What a prompt read sees of one visible section.
+/// What a prompt read sees of one section.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SectionText {
     /// The section's own raw Markdown.
@@ -74,8 +74,8 @@ pub struct SectionText {
 /// Which library a `require` resolved to, opaque to this crate.
 ///
 /// The caller encodes a library section's position in the identity
-/// string; `require`'s cache keys on that identity, never on the heading
-/// text, so one heading resolved from two positions names two libraries.
+/// string; `require`'s cache keys on that identity, never on the path's
+/// text, so a library loads once however its path is spaced.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LibraryKey(String);
 
@@ -96,12 +96,11 @@ impl LibraryKey {
 /// What `require` loads from one library section.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Library {
-    /// Which library this is: the cache key, and the position a `require`
-    /// made while it loads resolves from.
+    /// Which library this is: the cache key.
     pub key: LibraryKey,
-    /// The library section's heading with its markers, such as
-    /// `## helpers`, which its load reports and a cycle error name.
-    pub heading: String,
+    /// The library section's path from the top of the prompt, such as
+    /// `/helpers`, which its load reports and a cycle error name.
+    pub path: String,
     /// The section's blocks in order.
     pub blocks: Vec<LibraryBlock>,
 }

@@ -14,7 +14,7 @@ fn nested_call_and_inference_run_end_to_end_on_a_current_thread_runtime() {
         # Gate\n\n\
         ## Outer\n\n\
         ```lua\n\
-        local inner = call('## Inner')\n\
+        local inner = call('../Inner')\n\
         return models.infer('outer saw: ' .. inner)\n\
         ```\n\n\
         ## Inner\n\n\
@@ -83,9 +83,9 @@ fn call_depth_cap_reads_the_chain_field() {
     let md = "---\nname: depth\ndescription: d\nrunvil: 0\n---\n\n\
         # Depth\n\n\
         ## Alpha\n\n\
-        ```lua\nreturn call('## Beta')\n```\n\n\
+        ```lua\nreturn call('../Beta')\n```\n\n\
         ## Beta\n\n\
-        ```lua\nreturn call('## Alpha')\n```\n";
+        ```lua\nreturn call('../Alpha')\n```\n";
     let trace = scheduler_scenario(md).run();
 
     let error = trace.error();
@@ -135,7 +135,7 @@ fn a_dispatch_failure_resumes_through_the_envelope_into_pcall() {
         # Catch\n\n\
         ## Only\n\n\
         ```lua\n\
-        local ok, err = pcall(call, '## Missing')\n\
+        local ok, err = pcall(call, '../Missing')\n\
         if ok then return 'uncaught' end\n\
         return 'caught: ' .. tostring(err)\n\
         ```\n";

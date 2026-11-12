@@ -169,8 +169,8 @@ impl SectionVm {
                 Ok(Ok(CoroStep::Yielded(thread, values)))
             }
             result => {
-                if let Some((heading, line)) = self.take_jump()? {
-                    return Ok(Ok(CoroStep::Done(LuaBlockResult::Jump(heading, line))));
+                if let Some((path, line)) = self.take_jump()? {
+                    return Ok(Ok(CoroStep::Done(LuaBlockResult::Jump(path, line))));
                 }
                 match result {
                     Ok(returned) => Ok(Ok(CoroStep::Done(LuaBlockResult::Returned(

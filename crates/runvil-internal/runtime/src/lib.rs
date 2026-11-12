@@ -11,7 +11,7 @@
 //! ## Invariants
 //!
 //! - May depend on: `runvil-types`, `runvil-lua`,
-//!   `runvil-prompt`, `runvil-vfs`, and
+//!   `runvil-prompt`, `runvil-markdown`, `runvil-vfs`, and
 //!   `runvil-model-client`. `cargo test -p build-xtask` enforces the
 //!   product and container boundaries.
 //! - A run ends with `Ok` holding its final text or `Err` holding the
@@ -20,10 +20,11 @@
 
 mod error;
 mod execute;
-mod heading_address;
 mod lua;
 mod model;
 mod prompt;
+mod section_path;
+mod section_pos;
 mod subst;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;

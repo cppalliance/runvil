@@ -40,12 +40,11 @@ fn fill_var_x(
 fn a_library_block_reads_its_own_prose_filled_from_the_callers_var() {
     let (vm, _) = require_vm_rendering(
         vec![(
-            "## lib",
-            None,
+            "/lib",
             with_prose(
                 library(
                     "lib",
-                    "## lib",
+                    "/lib",
                     &["local ok = pcall(function() prose = 'x' end)\n\
                        return prose .. '|' .. tostring(ok)"],
                 ),
@@ -59,7 +58,7 @@ fn a_library_block_reads_its_own_prose_filled_from_the_callers_var() {
         .expect("the caller's prose must install");
     let value = returned(
         &vm,
-        "var.x = 'seven'\nlocal seen = require '## lib'\nreturn seen .. '|' .. prose",
+        "var.x = 'seven'\nlocal seen = require '/lib'\nreturn seen .. '|' .. prose",
     );
     assert_eq!(value.as_deref(), Some("lib sees seven|false|caller text"));
 }
@@ -69,19 +68,19 @@ fn a_library_blocks_prose_renders_with_the_line_its_template_starts_on() {
     let mut lib = with_prose(
         library(
             "lib",
-            "## lib",
+            "/lib",
             &["first = prose", "return first .. '|' .. prose"],
         ),
         &["one", "two"],
     );
     lib.blocks[0].line = NonZeroU32::new(40);
     let (vm, _) = require_vm_rendering(
-        vec![("## lib", None, lib)],
+        vec![("/lib", lib)],
         |template, line, _| Ok(format!("{template}@{line:?}")),
         &null_emitter(),
     );
     assert_eq!(
-        returned(&vm, "return require '## lib'").as_deref(),
+        returned(&vm, "return require '/lib'").as_deref(),
         Some("one@Some(40)|two@None"),
         "a block with no prose before it renders with no line"
     );
@@ -92,9 +91,8 @@ fn the_callers_read_prose_keeps_its_memo_across_a_require() {
     let renders = Arc::new(AtomicUsize::new(0));
     let (vm, _) = require_vm_rendering(
         vec![(
-            "## lib",
-            None,
-            with_prose(library("lib", "## lib", &["return prose"]), &["lib text"]),
+            "/lib",
+            with_prose(library("lib", "/lib", &["return prose"]), &["lib text"]),
         )],
         fill_var_x,
         &null_emitter(),
@@ -108,7 +106,7 @@ fn the_callers_read_prose_keeps_its_memo_across_a_require() {
     let value = returned(
         &vm,
         "var.x = 'one'\nlocal before = prose\nvar.x = 'two'\n\
-         local seen = require '## lib'\nreturn before .. '|' .. seen .. '|' .. prose",
+         local seen = require '/lib'\nreturn before .. '|' .. seen .. '|' .. prose",
     );
     assert_eq!(
         value.as_deref(),
@@ -125,10 +123,9 @@ fn the_callers_read_prose_keeps_its_memo_across_a_require() {
 fn a_load_that_raises_still_puts_the_callers_prose_back() {
     let (vm, _) = require_vm_rendering(
         vec![(
-            "## bad",
-            None,
+            "/bad",
             with_prose(
-                library("bad", "## bad", &["error('fault: ' .. prose)"]),
+                library("bad", "/bad", &["error('fault: ' .. prose)"]),
                 &["bad text"],
             ),
         )],
@@ -139,7 +136,7 @@ fn a_load_that_raises_still_puts_the_callers_prose_back() {
         .expect("the caller's prose must install");
     let value = returned(
         &vm,
-        "local ok, err = pcall(require, '## bad')\n\
+        "local ok, err = pcall(require, '/bad')\n\
          return tostring(ok) .. '|' .. tostring(err):match('fault: .*$') .. '|' .. prose",
     );
     assert_eq!(value.as_deref(), Some("false|fault: bad text|caller text"));

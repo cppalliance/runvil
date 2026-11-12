@@ -79,7 +79,7 @@ const CANCELS_A_HOLDER: &str = "---\nname: cancels\ndescription: d\nrunvil: 0\n\
     uses:\n  - tests/harness\n---\n\n\
     # Cancels\n\n\
     ## Main\n\n```lua\n\
-    local t = tasks.spawn('## Child')\n\
+    local t = tasks.spawn('../Child')\n\
     models.infer('wait')\n\
     tasks.cancel(t)\n\
     models.infer('after')\n\

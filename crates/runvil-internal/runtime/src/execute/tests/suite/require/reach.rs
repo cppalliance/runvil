@@ -1,8 +1,6 @@
-//! What a `require` reaches: a nested fanout worker reaches a top-level
-//! library its prompt reads cannot see, a library's own `require` during
-//! its load resolves from the library's position, and a library function
-//! called later resolves `call`, `prompt.section`, and `require` from the
-//! calling section.
+//! What a `require` names: a path from the top is the same library from a
+//! nested fanout worker, from a section under another parent, and from a
+//! library's own code, while it loads and when its functions run later.
 
 use super::*;
 
@@ -12,10 +10,10 @@ fn a_nested_fanout_worker_requires_a_top_level_library() {
         .section(
             "Research",
             "
-            local results = tasks.fanout('### Worker', { 'alpha', 'beta' })
+            local results = tasks.fanout('Worker', { 'alpha', 'beta' })
             return table.concat(results, ',')",
         )
-        .section("### Worker", "return require('## helpers').label(item)")
+        .section("### Worker", "return require('/helpers').label(item)")
         .prose(
             "helpers",
             "
@@ -37,7 +35,7 @@ fn a_nested_fanout_worker_requires_a_top_level_library() {
         loads
             .iter()
             .filter(|(section, detail)| section == "Worker"
-                && detail == "Lua library load succeeded: ## helpers")
+                && detail == "Lua library load succeeded: /helpers")
             .count(),
         2,
         "each arm's VM loads the library itself: {loads:?}"
@@ -45,17 +43,18 @@ fn a_nested_fanout_worker_requires_a_top_level_library() {
 }
 
 #[test]
-fn a_nested_worker_requires_a_library_its_prompt_section_read_cannot_see() {
+fn a_nested_worker_reads_and_requires_a_top_level_section_by_one_path() {
     let source = PromptSource::new()
         .section(
             "Research",
-            "return tostring(tasks.fanout('### Worker', { 'alpha' })[1])",
+            "return tostring(tasks.fanout('Worker', { 'alpha' })[1])",
         )
         .section(
             "### Worker",
             "
-            local read = prompt.section('## house_style')
-            return tostring(read) .. '|' .. require '## house_style'",
+            local read = prompt.section('/house_style')
+            local raw = read:find('{{ item }}', 1, true) ~= nil
+            return tostring(raw) .. '|' .. require '/house_style'",
         )
         .prose(
             "house_style",
@@ -69,50 +68,56 @@ fn a_nested_worker_requires_a_library_its_prompt_section_read_cannot_see() {
     let trace = require_case(source.build()).run();
     assert_eq!(
         trace.text(),
-        "nil|Plain words for alpha.",
-        "a parent's sibling is outside the visible set but within the reach"
+        "true|Plain words for alpha.",
+        "the read returns the raw text and the library renders its prose"
     );
 }
 
 #[test]
-fn a_load_resolves_from_the_library_and_a_later_call_from_the_caller() {
+fn a_library_requires_its_own_helper_by_one_path_while_it_loads_and_later() {
     let source = PromptSource::new()
         .section(
             "Main",
             "
-            local lib = require '## lib'
-            return lib.helped .. '|' .. lib.later()",
+            local lib = require '/lib'
+            return lib.helped .. '|' .. lib.later() .. '|' .. call('Nested')",
         )
-        .prose(
-            "### mine",
-            "
-            Mine text.
-
-            ```lua
-            return 'mine'
-            ```",
+        .section(
+            "### Nested",
+            "return require('/lib').later() .. ',' .. require '/lib/helper'",
         )
         .section(
             "lib",
             "
-            local helped = require '### helper'
+            local helped = require '/lib/helper'
             return {
               helped = helped,
-              later = function()
-                local text = prompt.section('### mine')
-                local found = text ~= nil and text:find('Mine text.', 1, true) ~= nil
-                local helper_ok = pcall(require, '### helper')
-                return table.concat({ require '### mine', call('### mine'), tostring(found),
-                  tostring(helper_ok) }, ',')
-              end,
+              later = function() return require '/lib/helper' end,
             }",
         )
         .section("### helper", "return 'helped'");
     let trace = require_case(source.build()).run();
     assert_eq!(
         trace.text(),
-        "helped|mine,mine,true,false",
-        "the load reaches the library's child; the later call reaches the caller's \
-         child and no longer the library's"
+        "helped|helped|helped,helped",
+        "the path names the library's helper wherever the require runs"
     );
+}
+
+#[test]
+fn a_section_requires_sections_nested_under_other_parents() {
+    let source = PromptSource::new()
+        .section("Main", "return call('Deep')")
+        .section(
+            "### Deep",
+            "
+            return table.concat({ require '/Other/Niece', require '/Other/Niece/Grand',
+              require '/Last' }, ',')",
+        )
+        .prose("Other", "")
+        .section("### Niece", "return 'niece'")
+        .section("#### Grand", "return 'grand'")
+        .section("Last", "return 'last'");
+    let trace = require_case(source.build()).run();
+    assert_eq!(trace.text(), "niece,grand,last");
 }

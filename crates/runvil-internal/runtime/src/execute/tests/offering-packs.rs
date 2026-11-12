@@ -30,11 +30,11 @@ fn an_offered_pack_reaches_only_the_rounds_of_the_section_entry_that_offered_it(
          ## A\n\n\
          ```lua\n\
          tools.offer('kit/a')\n\
-         require '## offers'\n\
+         require '/offers'\n\
          tools.offer('kit')\n\
          {a}\
-         call('## Called')\n\
-         tasks.join({{ tasks.spawn('## Worker') }})\n\
+         call('../Called')\n\
+         tasks.join({{ tasks.spawn('../Worker') }})\n\
          ```\n\n\
          ## B\n\n\
          ```lua\n{b}return 'ok'\n```\n\n\
@@ -43,7 +43,7 @@ fn an_offered_pack_reaches_only_the_rounds_of_the_section_entry_that_offered_it(
          ## Called\n\n\
          ```lua\n{called}return 'called'\n```\n\n\
          ## Worker\n\n\
-         ```lua\nrequire '## offers'\n{worker}return 'worker'\n```\n",
+         ```lua\nrequire '/offers'\n{worker}return 'worker'\n```\n",
         h1 = round("Packs"),
         a = round("A"),
         b = round("B"),

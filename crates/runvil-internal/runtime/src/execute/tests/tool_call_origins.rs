@@ -185,7 +185,7 @@ fn re_entering_a_section_gives_each_entrys_call_its_own_entry_id() {
                  if var.again then return 'done' end\n\
                  var.again = true",
             ),
-            ("Back", "jump('## Loop')"),
+            ("Back", "jump('../Loop')"),
         ],
     );
     let rig = run_scripted(&source);
@@ -204,7 +204,7 @@ fn two_fanout_arms_of_one_section_name_different_entries() {
         &[
             (
                 "Main",
-                "local r = tasks.fanout('## Worker', { 'a', 'b' })\n\
+                "local r = tasks.fanout('../Worker', { 'a', 'b' })\n\
                  return r[1].text .. '|' .. r[2].text",
             ),
             (

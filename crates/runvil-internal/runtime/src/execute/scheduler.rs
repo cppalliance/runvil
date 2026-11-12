@@ -32,7 +32,7 @@
 //! merged: `ChainState` is cloned into callbacks, while the scheduler must
 //! stay unreachable from the callback layer. The prompt tree is shared
 //! through the context's `Arc`, so a chain names its position in it by
-//! path ([`SectionPos`](crate::heading_address::SectionPos)) rather than by
+//! path ([`SectionPos`](crate::section_pos::SectionPos)) rather than by
 //! borrow, and the scheduler owns itself outright.
 //!
 //! This file holds the scheduler core: the run's lifecycle and the ready

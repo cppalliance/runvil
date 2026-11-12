@@ -12,7 +12,7 @@ use crate::test_support::at_line;
 #[test]
 fn a_failed_substitution_in_library_prose_is_placed_on_the_librarys_template_line() {
     let source = PromptSource::new()
-        .section("Main", "return require '## lib'")
+        .section("Main", "return require '/lib'")
         .prose(
             "lib",
             "
@@ -47,8 +47,8 @@ fn a_library_hands_its_prose_to_the_caller_and_leaves_the_callers_prose_alone() 
             local before = prose
             var.word = 'changed'
             style = 'terse'
-            local text = require '## house_style'
-            local ok = pcall(require, '## broken_style')
+            local text = require '/house_style'
+            local ok = pcall(require, '/broken_style')
             var.summary = table.concat({ before, prose, text, tostring(ok) }, '|')
             ```
 
@@ -56,7 +56,7 @@ fn a_library_hands_its_prose_to_the_caller_and_leaves_the_callers_prose_alone() 
 
             ```lua
             var.word = 'two'
-            local ok = pcall(require, '## broken_style')
+            local ok = pcall(require, '/broken_style')
             var.word = 'three'
             return table.concat({ var.summary, tostring(ok), var.broken_saw, prose }, '|')
             ```",

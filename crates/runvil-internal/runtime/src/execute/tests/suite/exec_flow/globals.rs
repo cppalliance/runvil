@@ -8,8 +8,8 @@ use super::*;
 use crate::test_support::at_line;
 
 /// The `tasks` global is the task namespace (`tasks.spawn` and the
-/// waits), not a control-flow table: indexing it by a heading string reads
-/// nil, and control flow takes heading strings only.
+/// waits), not a control-flow table: indexing it by a section path reads
+/// nil, and control flow takes section paths only.
 #[test]
 fn tasks_global_is_the_task_namespace() {
     let source = prompt(
@@ -19,7 +19,7 @@ fn tasks_global_is_the_task_namespace() {
             "
             assert(type(tasks) == 'table', 'the tasks namespace is installed')
             assert(type(tasks.spawn) == 'function', 'tasks.spawn is a namespace function')
-            assert(tasks['## Main'] == nil, 'the namespace is not a heading table')
+            assert(tasks['../Main'] == nil, 'the namespace is not a table of sections')
             return 'ok'",
         )],
     );
@@ -71,7 +71,7 @@ fn fanout_arms_get_fresh_var_clones() {
         .section(
             "Parent",
             "
-            local r = tasks.fanout('### Worker', {'a', 'b'})
+            local r = tasks.fanout('Worker', {'a', 'b'})
             assert(var.a == nil and var.b == nil, 'arm writes must not reach the caller')
             return r[1].text .. r[2].text",
         )
@@ -98,7 +98,7 @@ fn var_persists_across_sections_fallthrough_and_jump() {
             "
             assert(var.from_h1 == 'seed', 'H1 var writes must reach the first H2 section')
             var.from_a = 'a'
-            jump('## C')",
+            jump('../C')",
         )
         .section("B", "error('the jump must skip B')")
         .section(
@@ -128,7 +128,7 @@ fn call_clones_var_in_and_discards_child_writes() {
                 "Main",
                 "
                 var.shared = 'caller'
-                local r = call('## Sub')
+                local r = call('../Sub')
                 assert(r == 'sub saw caller', 'the child reads the cloned var')
                 assert(var.child_write == nil, 'child writes must not reach the caller')
                 return 'ok'",
@@ -200,7 +200,7 @@ fn a_var_read_back_failure_at_a_jump_is_placed_on_the_jumping_block() {
             ```lua
             local leaving = true
             var = 5
-            jump('## B')
+            jump('../B')
             ```
 
             ```lua

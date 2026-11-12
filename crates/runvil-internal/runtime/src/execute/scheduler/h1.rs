@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use runvil_types::error::place;
 
-use crate::heading_address::{SectionIndex, SectionPos};
+use crate::section_pos::{SectionIndex, SectionPos};
 use crate::{Result, error};
 
 use super::chain::ChainStep;
@@ -145,25 +145,24 @@ impl Scheduler {
         Ok(ChainStep::Continue)
     }
 
-    /// Ends the H1 pass on a jump out: the heading resolves against the
-    /// pass's top-level set through
+    /// Ends the H1 pass on a jump out: the path resolves from the H1,
+    /// whose children are the top-level sections, through
     /// [`resolve_chain_target`](super::ChainOps::resolve_chain_target),
     /// then the pass ends and the root walk starts at the target.
     ///
     /// # Errors
-    /// Returns a `LuaRuntime` failure when the heading is malformed, matches no
-    /// top-level section, or matches more than one, placed on `line`, the
-    /// `jump` call's; the pass's own ending can fail as
-    /// [`end_h1`](Self::end_h1) documents.
+    /// Returns a `LuaRuntime` failure when the path is refused or names no
+    /// top-level section, placed on `line`, the `jump` call's; the pass's
+    /// own ending can fail as [`end_h1`](Self::end_h1) documents.
     pub(super) fn end_h1_at_jump(
         &mut self,
         id: ChainIndex,
-        heading: &str,
+        path: &str,
         line: Option<NonZeroU32>,
     ) -> Result<ChainStep> {
         let prompt = self.prompt();
         let target = self
-            .with_chain(id, |ops| ops.resolve_chain_target(heading))
+            .with_chain(id, |ops| ops.resolve_chain_target(path))
             .map_err(|error| place(error, prompt.file(), line))?;
         self.end_h1(id, target.pos)
     }

@@ -50,8 +50,8 @@ fn log_byte_budget(log_events: u32) -> usize {
     (log_events as usize).saturating_mul(LUA_LOG_CHARACTER_LIMIT)
 }
 
-/// A `jump` the running chunk recorded: the target heading, and the prompt
-/// line of the author's `jump` call.
+/// A `jump` the running chunk recorded: the target's section path, and the
+/// prompt line of the author's `jump` call.
 type Jump = (String, Option<NonZeroU32>);
 
 /// The failure of a poisoned jump slot.
@@ -386,7 +386,7 @@ mod tests {
         let vm = TestVm::new().shims().build();
         poison(&vm.jump_slot);
         let kind: String = vm.eval(
-            "local ok, err = pcall(jump, '## Next')\n\
+            "local ok, err = pcall(jump, '../Next')\n\
          assert(not ok, 'jump must raise')\n\
          return tostring(err.kind)",
         );

@@ -135,7 +135,7 @@ async fn open_gate_after_the_second_write(
 }
 
 /// A main section that writes twice while its child's tool call is out.
-const WRITES_BESIDE_A_PARKED_CALL: &str = "local t = tasks.spawn('## Child')\n\
+const WRITES_BESIDE_A_PARKED_CALL: &str = "local t = tasks.spawn('../Child')\n\
      store.write('first.md', '1')\n\
      store.write('second.md', '2')\n\
      local _task, _ok, result = tasks.join_any({ t })\n\
@@ -222,8 +222,8 @@ async fn a_backend_that_panics_drops_its_effect_instead_of_unwinding_the_run() {
 const WITHDRAWS_A_WRITE: [(&str, &str); 3] = [
     (
         "Main",
-        "local slow = tasks.spawn('## Slow')\n\
-         local fast = tasks.spawn('## Fast')\n\
+        "local slow = tasks.spawn('../Slow')\n\
+         local fast = tasks.spawn('../Fast')\n\
          local _task, _ok, result = tasks.join_any({ fast })\n\
          tasks.cancel(slow)\n\
          return result",

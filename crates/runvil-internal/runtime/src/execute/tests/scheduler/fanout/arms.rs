@@ -13,7 +13,7 @@ fn pre_canceled_fanout_returns_canceled() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Worker', {'alpha', 'beta'})\n\
+        local r = tasks.fanout('Worker', {'alpha', 'beta'})\n\
         return r[1].text\n\
         ```\n\n\
         ### Worker\n\n\
@@ -38,7 +38,7 @@ fn model_required_when_arm_infer_has_no_binding() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        tasks.fanout('### Worker', {'alpha'})\n\
+        tasks.fanout('Worker', {'alpha'})\n\
         ```\n\n\
         ### Worker\n\n\
         Ask the model about {{ item }}.\n\n\
@@ -66,12 +66,12 @@ fn a_library_required_in_an_arm_sees_the_arm_item() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Worker', {'alpha'})\n\
+        local r = tasks.fanout('Worker', {'alpha'})\n\
         return r[1].text\n\
         ```\n\n\
         ### Worker\n\n\
         ```lua\n\
-        require '## capture'\n\
+        require '/capture'\n\
         return tostring(captured_by_library) .. '|' .. tostring(item)\n\
         ```\n\n\
         ## capture\n\n\
@@ -100,12 +100,12 @@ fn a_jump_inside_a_fanout_arm_drives_a_child_walk() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Worker', {'alpha'})\n\
+        local r = tasks.fanout('Worker', {'alpha'})\n\
         return r[1].text\n\
         ```\n\n\
         ### Worker\n\n\
         ```lua\n\
-        jump('### Target')\n\
+        jump('../Target')\n\
         error('the arm remaining blocks are skipped')\n\
         ```\n\n\
         ### Target\n\n\
@@ -138,12 +138,12 @@ fn a_jump_from_an_arm_to_a_worker_child_walks_the_child_slice() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Worker', {'alpha'})\n\
+        local r = tasks.fanout('Worker', {'alpha'})\n\
         return r[1].text\n\
         ```\n\n\
         ### Worker\n\n\
         ```lua\n\
-        jump('#### Child')\n\
+        jump('Child')\n\
         error('the arm remaining blocks are skipped')\n\
         ```\n\n\
         #### Child\n\n\
@@ -178,7 +178,7 @@ fn fanout_hash_collection_iterates_in_sorted_key_order() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Worker', { zeta = 1, alpha = 2, mid = 3 })\n\
+        local r = tasks.fanout('Worker', { zeta = 1, alpha = 2, mid = 3 })\n\
         assert(r[1].item.key == 'alpha' and r[3].item.key == 'zeta', 'results land by sorted key')\n\
         return table.concat(r, ',')\n\
         ```\n\n\
@@ -203,7 +203,7 @@ fn fanout_results_are_sealed_against_writes_and_metatable_replacement() {
         # Fanout\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local r = tasks.fanout('### Worker', {'alpha', 'beta'})\n\
+        local r = tasks.fanout('Worker', {'alpha', 'beta'})\n\
         local ok, err = pcall(function() r[1].text = 'forged' end)\n\
         assert(not ok and tostring(err):find('tasks.fanout results are read-only', 1, true), 'a write raises: ' .. tostring(err))\n\
         ok, err = pcall(setmetatable, r[1], nil)\n\

@@ -98,7 +98,7 @@ fn spawner_prompt(spawner_body: &str, child_body: &str) -> String {
 #[test]
 fn spawn_returns_to_its_caller_before_the_child_runs() {
     let md = spawner_prompt(
-        "local t = tasks.spawn('## Child')\n\
+        "local t = tasks.spawn('../Child')\n\
          log('spawned ' .. t.task)\n\
          store.write('park', 'x')\n\
          return 'done'",
@@ -130,7 +130,7 @@ fn spawn_returns_to_its_caller_before_the_child_runs() {
 #[test]
 fn a_finished_child_moves_its_entry_to_done_and_reports_task_succeeded() {
     let md = spawner_prompt(
-        "tasks.spawn('## Child')\n\
+        "tasks.spawn('../Child')\n\
          store.write('park', 'x')\n\
          return 'done'",
         "return 'child result'",
@@ -170,7 +170,7 @@ fn a_finished_child_moves_its_entry_to_done_and_reports_task_succeeded() {
 #[test]
 fn a_failed_child_moves_its_entry_to_done_and_reports_task_failed() {
     let md = spawner_prompt(
-        "tasks.spawn('## Child')\n\
+        "tasks.spawn('../Child')\n\
          store.write('park', 'x')\n\
          return 'done'",
         "error('child boom')",
@@ -203,7 +203,7 @@ fn task_started_includes_the_spawn_seeds_and_the_child_sees_them() {
     let md = spawner_prompt(
         "var.k = 1\n\
          log('root taskid=' .. sys.taskid)\n\
-         tasks.spawn('## Child', { input = 'child args', item = { name = 'alpha' }, index = 7 })\n\
+         tasks.spawn('../Child', { input = 'child args', item = { name = 'alpha' }, index = 7 })\n\
          store.write('park', 'x')\n\
          return 'done'",
         "log('taskid=' .. sys.taskid .. ' id=' .. sys.id .. ' index=' .. sys.index\n\
@@ -234,11 +234,11 @@ fn task_started_includes_the_spawn_seeds_and_the_child_sees_them() {
 #[test]
 fn spawn_shares_calls_target_resolution_and_raises_at_the_call_site() {
     // An unresolvable target is the call's answer: `pcall` catches it, and
-    // the message is exactly the one `call` produces for the same heading.
+    // the message is exactly the one `call` produces for the same path.
     // Both calls share a line, so both are placed on it.
     let md = spawner_prompt(
-        "local ok_s, err_s = pcall(tasks.spawn, '## Missing'); \
-         local ok_c, err_c = pcall(call, '## Missing')\n\
+        "local ok_s, err_s = pcall(tasks.spawn, '../Missing'); \
+         local ok_c, err_c = pcall(call, '../Missing')\n\
          assert(not ok_s and not ok_c, 'both resolutions fail')\n\
          assert(err_s.kind == 'lua', err_s.kind)\n\
          assert(tostring(err_s) == tostring(err_c), tostring(err_s) .. ' vs ' .. tostring(err_c))\n\
@@ -248,7 +248,7 @@ fn spawn_shares_calls_target_resolution_and_raises_at_the_call_site() {
     let rig = Rig::run(scheduler_scenario(md));
     let out = rig.trace().text();
     assert!(
-        out.contains("section heading `## Missing` not found"),
+        out.contains("section `../Missing` not found: `/Spawner` has no sibling `Missing`"),
         "unexpected message: {out}"
     );
 }
@@ -263,14 +263,14 @@ fn spawn_shares_calls_depth_cap() {
         # Depth\n\n\
         ## Alpha\n\n\
         ```lua\n\
-        local ok, err = pcall(tasks.spawn, '## Beta')\n\
+        local ok, err = pcall(tasks.spawn, '../Beta')\n\
         if not ok then log(tostring(err)) end\n\
         store.write('park-' .. sys.id, 'x')\n\
         return 'done'\n\
         ```\n\n\
         ## Beta\n\n\
         ```lua\n\
-        local ok, err = pcall(tasks.spawn, '## Alpha')\n\
+        local ok, err = pcall(tasks.spawn, '../Alpha')\n\
         if not ok then log(tostring(err)) end\n\
         store.write('park-' .. sys.id, 'x')\n\
         return 'done'\n\
@@ -310,7 +310,7 @@ fn spawn_rejects_a_list_section_target_with_the_worker_message() {
         # Lists\n\n\
         ## Parent\n\n\
         ```lua\n\
-        local ok, err = pcall(tasks.spawn, '### Items')\n\
+        local ok, err = pcall(tasks.spawn, 'Items')\n\
         assert(not ok, 'a list section is not a worker template')\n\
         return tostring(err)\n\
         ```\n\n\

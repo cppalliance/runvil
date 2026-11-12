@@ -19,7 +19,7 @@ fn jump_to_a_child_starts_the_child_level_walk() {
         ## A\n\n\
         ```lua\n\
         store.append('order.txt', 'A\\n')\n\
-        jump('### X')\n\
+        jump('X')\n\
         ```\n\n\
         ### X\n\n\
         ```lua\nstore.append('order.txt', 'X\\n')\n```\n\n\
@@ -45,12 +45,12 @@ fn child_walk_recurses_to_h4() {
         ## A\n\n\
         ```lua\n\
         store.append('order.txt', 'A\\n')\n\
-        jump('### X')\n\
+        jump('X')\n\
         ```\n\n\
         ### X\n\n\
         ```lua\n\
         store.append('order.txt', 'X\\n')\n\
-        jump('#### P')\n\
+        jump('P')\n\
         ```\n\n\
         #### P\n\n\
         ```lua\nstore.append('order.txt', 'P\\n')\n```\n\n\
@@ -76,11 +76,11 @@ fn a_child_level_that_runs_out_inside_a_call_chain_resumes_after_the_jumper() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # CallDescend\n\n\
         ## Main\n\n\
-        ```lua\nreturn 'main:' .. call('## Sub')\n```\n\n\
+        ```lua\nreturn 'main:' .. call('../Sub')\n```\n\n\
         ## Sub\n\n\
         ```lua\n\
         var.order = 'Sub'\n\
-        jump('### S1')\n\
+        jump('S1')\n\
         ```\n\n\
         ### S1\n\n\
         ```lua\nvar.order = var.order .. ',S1'\n```\n\n\
@@ -102,13 +102,13 @@ fn a_child_level_that_runs_out_inside_a_task_chain_resumes_after_the_jumper() {
         # TaskDescend\n\n\
         ## Main\n\n\
         ```lua\n\
-        local results = tasks.join({ tasks.spawn('## Worker') })\n\
+        local results = tasks.join({ tasks.spawn('../Worker') })\n\
         return 'main:' .. results[1].result\n\
         ```\n\n\
         ## Worker\n\n\
         ```lua\n\
         var.order = 'Worker'\n\
-        jump('### W1')\n\
+        jump('W1')\n\
         ```\n\n\
         ### W1\n\n\
         ```lua\nvar.order = var.order .. ',W1'\n```\n\n\
@@ -129,14 +129,14 @@ fn a_child_level_whose_jumper_was_last_in_its_slice_unwinds_through_a_second_pop
         ## A\n\n\
         ```lua\n\
         var.order = 'A'\n\
-        jump('### X')\n\
+        jump('X')\n\
         ```\n\n\
         ### X\n\n\
         ```lua\nvar.order = var.order .. ',X'\n```\n\n\
         ### Y\n\n\
         ```lua\n\
         var.order = var.order .. ',Y'\n\
-        jump('#### P')\n\
+        jump('P')\n\
         ```\n\n\
         #### P\n\n\
         ```lua\nvar.order = var.order .. ',P'\n```\n\n\
@@ -159,7 +159,7 @@ fn a_child_level_whose_jumper_was_last_at_the_root_ends_the_chain() {
         ## Last\n\n\
         ```lua\n\
         store.append('order.txt', 'Last\\n')\n\
-        jump('### C')\n\
+        jump('C')\n\
         ```\n\n\
         ### C\n\n\
         ```lua\nstore.append('order.txt', 'C\\n')\n```\n";
@@ -179,7 +179,7 @@ fn the_chain_reports_the_section_it_resumes_in_after_a_pop() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Names\n\n\
         ## A\n\n\
-        ```lua\njump('### X')\n```\n\n\
+        ```lua\njump('X')\n```\n\n\
         ### X\n\n\
         ```lua\nvar.x = 1\n```\n\n\
         ## B\n\n\
@@ -203,7 +203,7 @@ fn jump_to_an_off_walk_child_runs_it() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # OffChild\n\n\
         ## A\n\n\
-        ```lua\njump('### Off')\n```\n\n\
+        ```lua\njump('Off')\n```\n\n\
         ### X\n\n\
         ```lua\nstore.append('order.txt', 'X\\n')\n```\n\n\
         ### Off\n\n\
@@ -225,12 +225,12 @@ fn running_child_addresses_its_own_siblings_and_children() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Visible\n\n\
         ## A\n\n\
-        ```lua\njump('### X')\n```\n\n\
+        ```lua\njump('X')\n```\n\n\
         ### X\n\n\
         ```lua\n\
-        local r = call('#### Grand')\n\
+        local r = call('Grand')\n\
         store.append('order.txt', 'X:' .. r .. '\\n')\n\
-        jump('### Y')\n\
+        jump('../Y')\n\
         ```\n\n\
         #### Grand\n\n\
         ```lua\nreturn 'grand-ran'\n```\n\n\
@@ -244,22 +244,22 @@ fn running_child_addresses_its_own_siblings_and_children() {
 }
 
 #[test]
-fn running_child_cannot_address_a_top_level_section() {
-    // A running child cannot address a top-level section - the parent level
-    // is not in its visible set, so the jump resolves as not-found.
+fn a_running_child_cannot_jump_to_its_parents_sibling() {
+    // A running child cannot jump to a top-level section - its parent's
+    // sibling is not its own sibling, so the jump resolves as not-found.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Escape\n\n\
         ## A\n\n\
-        ```lua\njump('### X')\n```\n\n\
+        ```lua\njump('X')\n```\n\n\
         ### X\n\n\
-        ```lua\njump('## B')\n```\n\n\
+        ```lua\njump('../B')\n```\n\n\
         ## B\n\n\
         ```lua\nreturn 'b-ran'\n```\n";
     let trace = scheduler_scenario(md).run();
 
     let rendered = trace.error().to_string();
     assert!(
-        rendered.contains("not found"),
+        rendered.contains("section `../B` not found: `/A/X` has no sibling `B`"),
         "a top-level section is not in a child's visible set: {rendered}"
     );
 }
@@ -271,7 +271,7 @@ fn jump_to_a_niece_errors() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Niece\n\n\
         ## A\n\n\
-        ```lua\njump('### Niece')\n```\n\n\
+        ```lua\njump('Niece')\n```\n\n\
         ## B\n\n\
         ### Niece\n\n\
         ```lua\nreturn 'niece-ran'\n```\n";
@@ -294,7 +294,7 @@ fn sys_id_counts_the_sections_one_chain_enters_across_a_jump_into_a_child_level(
         ## A\n\n\
         ```lua\n\
         store.append('ids.txt', tostring(sys.id) .. '\\n')\n\
-        jump('### X')\n\
+        jump('X')\n\
         ```\n\n\
         ### X\n\n\
         ```lua\nstore.append('ids.txt', tostring(sys.id) .. '\\n')\n```\n\n\
@@ -322,14 +322,14 @@ fn a_call_child_takes_ids_nested_under_its_own_chain_distinct_from_the_parent() 
         ## Main\n\n\
         ```lua\n\
         store.append('ids.txt', 'main:' .. sys.id .. '\\n')\n\
-        call('## Sub')\n\
+        call('../Sub')\n\
         store.append('ids.txt', 'after:' .. sys.id .. '\\n')\n\
         return store.read('ids.txt')\n\
         ```\n\n\
         ## Sub\n\n\
         ```lua\n\
         store.append('ids.txt', 'sub:' .. sys.id .. '\\n')\n\
-        local r = tasks.fanout('## Worker', {'a', 'b'})\n\
+        local r = tasks.fanout('../Worker', {'a', 'b'})\n\
         store.append('ids.txt', r[1].text .. '\\n' .. r[2].text .. '\\n')\n\
         return 'sub-done'\n\
         ```\n\n\
@@ -357,10 +357,10 @@ fn two_runs_of_the_same_prompt_produce_identical_ids() {
         ## Main\n\n\
         ```lua\n\
         local ids = { sys.id }\n\
-        ids[#ids + 1] = call('## Sub')\n\
-        local r = tasks.fanout('## Worker', {'x', 'y', 'z'})\n\
+        ids[#ids + 1] = call('../Sub')\n\
+        local r = tasks.fanout('../Worker', {'x', 'y', 'z'})\n\
         for i = 1, #r do ids[#ids + 1] = r[i].text end\n\
-        ids[#ids + 1] = call('## Sub')\n\
+        ids[#ids + 1] = call('../Sub')\n\
         var.ids = table.concat(ids, ',')\n\
         ```\n\n\
         ## Last\n\n\

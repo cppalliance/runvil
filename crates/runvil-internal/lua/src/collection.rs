@@ -27,7 +27,7 @@ use crate::order::{KeyError, SortKey, sort_key};
 pub(crate) fn collection_members(lua: &Lua, collection: &Value) -> Result<Table> {
     let Value::Table(table) = collection else {
         return Err(make_lua_runtime_error(
-            "tasks.fanout's second parameter is a collection; for a list section use prompt.list(heading), which returns nil when no visible section has that heading".to_owned(),
+            "tasks.fanout's second parameter is a collection; for a list section use prompt.list(path), which returns nil when the path names no section".to_owned(),
         ));
     };
     let border = table.raw_len();
@@ -148,12 +148,12 @@ mod tests {
     #[test]
     fn collection_members_rejects_a_non_table() {
         let lua = mlua::Lua::new();
-        for source in ["return '### Items'", "return 5", "return true"] {
+        for source in ["return 'Items'", "return 5", "return true"] {
             let value = eval(&lua, source);
             let error =
                 collection_members(&lua, &value).expect_err("a non-table is not a collection");
             assert!(
-                error.to_string().contains("prompt.list(heading)"),
+                error.to_string().contains("prompt.list(path)"),
                 "the error must point at prompt.list for {source}: {error}"
             );
         }

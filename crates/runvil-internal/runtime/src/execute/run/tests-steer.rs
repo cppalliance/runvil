@@ -508,7 +508,7 @@ const STEERED_TASK: &[(&str, &str)] = &[
     (
         "Main",
         "models.use('default')\n\
-         local t = tasks.spawn('## Worker')\n\
+         local t = tasks.spawn('../Worker')\n\
          store.exists('busy')\n\
          tasks.send(t, 'shorter please')\n\
          local _, _, result = tasks.join_any({ t })\n\
@@ -566,8 +566,8 @@ fn a_message_to_one_task_does_not_withdraw_another_chains_request() {
             (
                 "Main",
                 "models.use('default')\n\
-                 local a = tasks.spawn('## A')\n\
-                 local b = tasks.spawn('## B')\n\
+                 local a = tasks.spawn('../A')\n\
+                 local b = tasks.spawn('../B')\n\
                  store.exists('busy')\n\
                  tasks.send(a, 'for a')\n\
                  local results = tasks.join({ a, b })\n\

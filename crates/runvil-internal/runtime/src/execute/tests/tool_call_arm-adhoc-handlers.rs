@@ -139,7 +139,7 @@ fn a_script_caller_catches_the_handlers_own_error_and_jump_is_restored() {
                 local ok, err = pcall(tools.call, 'adhoc/grab', {})
                 assert(not ok, 'the handler raise reaches the call site')
                 assert(err == raised and err.kind == 'custom', 'the caller catches the handler table')
-                jump('## Other')";
+                jump('../Other')";
     let source = prompt("", &[("Only", only), ("Other", "return 'jumped'")]);
     let trace = arm_scenario(source).run();
     assert_eq!(

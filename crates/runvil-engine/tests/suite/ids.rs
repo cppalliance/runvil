@@ -8,8 +8,8 @@ use runvil_engine::ids::{Provenance, TaskId};
 use super::support::{Scenario, TestResult, prompt, text};
 
 const GREET: &str = "
-    local first = tasks.spawn('## Reply', { input = 'hello' })
-    local second = tasks.spawn('## Reply', { input = 'bye' })
+    local first = tasks.spawn('../Reply', { input = 'hello' })
+    local second = tasks.spawn('../Reply', { input = 'bye' })
     local results = tasks.join({ first, second })
     return results[1].result .. ' ' .. results[2].result
 ";

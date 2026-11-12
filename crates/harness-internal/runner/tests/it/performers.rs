@@ -139,7 +139,7 @@ async fn a_timer_effect_is_answered_after_its_duration() {
 
     // The first wait times out at 50ms while the child is still parked on
     // its 400ms tool call; the second wait, without a timer, delivers it.
-    let main = "local t = tasks.spawn('## Child')\n\
+    let main = "local t = tasks.spawn('../Child')\n\
         local first = tasks.join_any({ t }, { timeout = 0.05 })\n\
         local _task, ok, result = tasks.join_any({ t })\n\
         return tostring(first == nil) .. '|' .. tostring(ok) .. '|' .. result";

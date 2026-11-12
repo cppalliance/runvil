@@ -12,7 +12,7 @@ fn spawn_parses_target_seeds_and_var() {
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'spawn', target = '## Child', input = 'override', item = { name = 'alpha' }, \
+        "{ op = 'spawn', target = '../Child', input = 'override', item = { name = 'alpha' }, \
            index = 3, var = { k = 1 } }",
     );
     let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
@@ -24,7 +24,7 @@ fn spawn_parses_target_seeds_and_var() {
             index,
             var,
         } => {
-            assert_eq!(target, "## Child");
+            assert_eq!(target, "../Child");
             assert_eq!(input.as_deref(), Some("override"));
             assert_eq!(item, Some(json!({ "name": "alpha" })));
             assert_eq!(index, Some(3));
@@ -39,7 +39,7 @@ fn spawn_without_options_parses_every_seed_as_absent() {
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'spawn', target = '## Child', var = { k = 1 } }",
+        "{ op = 'spawn', target = '../Child', var = { k = 1 } }",
     );
     match expect_request(Request::from_yield(&lua, &Value::Table(table))) {
         Request::Spawn {
@@ -57,7 +57,7 @@ fn spawn_without_options_parses_every_seed_as_absent() {
 fn a_spawn_item_holding_json_null_parses_to_a_null_field() {
     let vm = crate::test_vm::TestVm::new().build();
     let table: mlua::Table = vm.eval(
-        "return { op = 'spawn', target = '## Child', \
+        "return { op = 'spawn', target = '../Child', \
          item = { a = json.null }, var = { k = 1 } }",
     );
     match expect_request(Request::from_yield(vm.lua(), &Value::Table(table))) {
@@ -73,7 +73,7 @@ fn spawn_seed_shape_errors_are_the_calls_error() {
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'spawn', target = '## Child', item = function() end, \
+        "{ op = 'spawn', target = '../Child', item = function() end, \
            var = { k = 1 } }",
     );
     match Request::from_yield(&lua, &Value::Table(table)) {
@@ -89,7 +89,7 @@ fn spawn_seed_shape_errors_are_the_calls_error() {
 
     let table = lua_table(
         &lua,
-        "{ op = 'spawn', target = '## Child', index = -1, var = { k = 1 } }",
+        "{ op = 'spawn', target = '../Child', index = -1, var = { k = 1 } }",
     );
     match Request::from_yield(&lua, &Value::Table(table)) {
         YieldParse::Refused(Error {
@@ -108,7 +108,7 @@ fn an_unconvertible_spawn_item_is_the_calls_error_naming_the_conversion_failure(
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'spawn', target = '## Child', item = { f = function() end }, \
+        "{ op = 'spawn', target = '../Child', item = { f = function() end }, \
            var = { k = 1 } }",
     );
     let item: Value = table

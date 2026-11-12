@@ -26,7 +26,7 @@ fn a_library_function_sees_sys_model_unknown_before_scope_close() {
             "Only",
             "
             ```lua
-            require '## sys_reader'
+            require '/sys_reader'
             return read_sys_model()
             ```
 
@@ -102,7 +102,7 @@ fn fanout_arm_sees_the_model_name_in_sys_model_after_the_scope_install() {
             .section(
                 "Parent",
                 "
-                local r = tasks.fanout('### Worker', prompt.list('### Items'))
+                local r = tasks.fanout('Worker', prompt.list('Items'))
                 return table.concat(r, ',')",
             )
             .prose(
@@ -129,7 +129,7 @@ fn fanout_item_substitution_renders_a_table_member_as_compact_json() {
         .section(
             "Parent",
             "
-            local r = tasks.fanout('### Worker', {{7, 'x'}})
+            local r = tasks.fanout('Worker', {{7, 'x'}})
             return r[1].text",
         )
         .prose(

@@ -19,10 +19,10 @@ fn at(source: &str, location: &str, line: u32) -> LuaProgram {
 
 /// A library under `identity` whose blocks are `blocks`, each a source
 /// with its location and first prompt line.
-fn placed(identity: &str, heading: &str, blocks: &[(&str, &str, u32)]) -> Library {
+fn placed(identity: &str, path: &str, blocks: &[(&str, &str, u32)]) -> Library {
     Library {
         key: LibraryKey::new(identity.to_owned()),
-        heading: heading.to_owned(),
+        path: path.to_owned(),
         blocks: blocks
             .iter()
             .map(|(source, location, line)| LibraryBlock {
@@ -46,11 +46,10 @@ fn failing(vm: &SectionVm, program: &LuaProgram) -> String {
 fn a_raise_during_the_load_and_from_a_later_call_reports_the_library_line() {
     let (vm, _) = require_vm(
         vec![(
-            "## lib",
-            None,
+            "/lib",
             placed(
                 "lib",
-                "## lib",
+                "/lib",
                 &[(
                     "function boom()\n  error('later fault')\nend\n\
                      if fail_now then error('load fault') end",
@@ -61,13 +60,13 @@ fn a_raise_during_the_load_and_from_a_later_call_reports_the_library_line() {
         )],
         &null_emitter(),
     );
-    let during = failing(&vm, &program("fail_now = true\nrequire '## lib'"));
+    let during = failing(&vm, &program("fail_now = true\nrequire '/lib'"));
     assert!(
         during.starts_with("section `lib` prologue:43: ")
             && during.contains("section `lib` prologue:43: load fault"),
         "a raise during the load must report the library's line 43, got {during}"
     );
-    let later = failing(&vm, &program("fail_now = false\nrequire '## lib'\nboom()"));
+    let later = failing(&vm, &program("fail_now = false\nrequire '/lib'\nboom()"));
     assert!(
         later.starts_with("section `lib` prologue:41: ")
             && later.contains("section `lib` prologue:41: later fault"),
@@ -79,11 +78,10 @@ fn a_raise_during_the_load_and_from_a_later_call_reports_the_library_line() {
 fn a_raise_in_the_second_of_two_middle_blocks_maps_to_its_own_line() {
     let (vm, _) = require_vm(
         vec![(
-            "## lib",
-            None,
+            "/lib",
             placed(
                 "lib",
-                "## lib",
+                "/lib",
                 &[
                     ("first = 1", "section `lib` lua 2", 10),
                     (
@@ -96,7 +94,7 @@ fn a_raise_in_the_second_of_two_middle_blocks_maps_to_its_own_line() {
         )],
         &null_emitter(),
     );
-    let error = failing(&vm, &program("require '## lib'"));
+    let error = failing(&vm, &program("require '/lib'"));
     assert!(
         error.starts_with("section `lib` lua 3:21: ")
             && error.contains("section `lib` lua 3:21: second fault"),
@@ -108,11 +106,10 @@ fn a_raise_in_the_second_of_two_middle_blocks_maps_to_its_own_line() {
 fn library_and_caller_markers_each_map_once_under_one_leading_tag() {
     let (vm, _) = require_vm(
         vec![(
-            "## lib",
-            None,
+            "/lib",
             placed(
                 "lib",
-                "## lib",
+                "/lib",
                 &[(
                     "function boom()\n  error('deep fault')\nend",
                     "section `lib` prologue",
@@ -122,7 +119,7 @@ fn library_and_caller_markers_each_map_once_under_one_leading_tag() {
         )],
         &null_emitter(),
     );
-    let caller = at("require '## lib'\nboom()", "section `Main` prologue", 30);
+    let caller = at("require '/lib'\nboom()", "section `Main` prologue", 30);
     let error = failing(&vm, &caller);
     assert!(
         error.starts_with("section `lib` prologue:51: "),
@@ -154,7 +151,7 @@ fn a_parent_that_loaded_the_same_library_keeps_a_childs_mapped_line() {
     let lib = || {
         placed(
             "lib",
-            "## lib",
+            "/lib",
             &[(
                 "function boom()\n  error('deep fault')\nend",
                 "section `lib` prologue",
@@ -162,16 +159,16 @@ fn a_parent_that_loaded_the_same_library_keeps_a_childs_mapped_line() {
             )],
         )
     };
-    let (child, _) = require_vm(vec![("## lib", None, lib())], &null_emitter());
-    let surfaced = failing(&child, &program("require '## lib'\nboom()"));
+    let (child, _) = require_vm(vec![("/lib", lib())], &null_emitter());
+    let surfaced = failing(&child, &program("require '/lib'\nboom()"));
     assert!(
         surfaced.contains("section `lib` prologue:51: deep fault"),
         "the child must map the library line first, got {surfaced}"
     );
-    let (parent, _) = require_vm(vec![("## lib", None, lib())], &null_emitter());
+    let (parent, _) = require_vm(vec![("/lib", lib())], &null_emitter());
     let error = failing(
         &parent,
-        &program(&format!("require '## lib'\nerror([==[{surfaced}]==], 0)")),
+        &program(&format!("require '/lib'\nerror([==[{surfaced}]==], 0)")),
     );
     assert!(
         error.contains(&surfaced),

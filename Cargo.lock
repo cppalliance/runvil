@@ -4864,6 +4864,7 @@ dependencies = [
  "mlua",
  "regex",
  "runvil-lua",
+ "runvil-markdown",
  "runvil-model-client",
  "runvil-prompt",
  "runvil-types",

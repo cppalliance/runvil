@@ -25,19 +25,19 @@ fn a_first_load_reports_its_start_and_success_and_a_cached_call_nothing() {
     let recorder = Recorder::default();
     let (vm, _) = require_vm(
         vec![
-            ("## a", None, library("a", "## a", &["require '## b'"])),
-            ("## b", None, library("b", "## b", &["return 'b'"])),
+            ("/a", library("a", "/a", &["require '/b'"])),
+            ("/b", library("b", "/b", &["return 'b'"])),
         ],
         recorder.emitter(),
     );
-    returned(&vm, "require '## a'\nrequire '## a'\nrequire '## b'");
+    returned(&vm, "require '/a'\nrequire '/a'\nrequire '/b'");
     assert_eq!(
         library_loads(&recorder),
         [
-            load("started", "## a"),
-            load("started", "## b"),
-            load("succeeded", "## b"),
-            load("succeeded", "## a"),
+            load("started", "/a"),
+            load("started", "/b"),
+            load("succeeded", "/b"),
+            load("succeeded", "/a"),
         ]
     );
 }
@@ -46,17 +46,17 @@ fn a_first_load_reports_its_start_and_success_and_a_cached_call_nothing() {
 fn a_failing_load_reports_its_start_and_failure_on_every_try() {
     let recorder = Recorder::default();
     let (vm, _) = require_vm(
-        vec![("## a", None, library("a", "## a", &["error('fault')"]))],
+        vec![("/a", library("a", "/a", &["error('fault')"]))],
         recorder.emitter(),
     );
-    returned(&vm, "pcall(require, '## a')\npcall(require, '## a')");
+    returned(&vm, "pcall(require, '/a')\npcall(require, '/a')");
     assert_eq!(
         library_loads(&recorder),
         [
-            load("started", "## a"),
-            load("failed", "## a"),
-            load("started", "## a"),
-            load("failed", "## a"),
+            load("started", "/a"),
+            load("failed", "/a"),
+            load("started", "/a"),
+            load("failed", "/a"),
         ]
     );
 }

@@ -224,8 +224,8 @@ fn run_scalar(
 ) -> Result<Option<String>> {
     match vm.run_chunk(program, emitter, section)? {
         LuaBlockResult::Returned(value) => Ok(value),
-        LuaBlockResult::Jump(heading, _) => Err(crate::error::make_lua_runtime_error(format!(
-            "unexpected jump to {heading}"
+        LuaBlockResult::Jump(path, _) => Err(crate::error::make_lua_runtime_error(format!(
+            "unexpected jump to {path}"
         ))),
     }
 }

@@ -232,7 +232,7 @@ fn timed_run(main: &str, cancel: &CancelHandle) -> Run {
 /// child untimed and reports both.
 fn caught_wait(wait: &str) -> String {
     format!(
-        "local t = tasks.spawn('## Child')\n\
+        "local t = tasks.spawn('../Child')\n\
          local ok, err = pcall({wait}, {{ t }}, {{ timeout = 30 }})\n\
          local _t, _ok, result = tasks.join_any({{ t }})\n\
          return tostring(ok) .. ':' .. err.kind .. '|' .. result"
@@ -299,7 +299,7 @@ fn an_uncaught_dropped_timer_ends_the_run_canceled() {
     for wait in ["tasks.join_any", "tasks.join"] {
         let mut run = timed_run(
             &format!(
-                "local t = tasks.spawn('## Child')\n\
+                "local t = tasks.spawn('../Child')\n\
                  {wait}({{ t }}, {{ timeout = 30 }})\n\
                  return 'waited'"
             ),
