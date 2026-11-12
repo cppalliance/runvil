@@ -167,11 +167,16 @@ fn repository_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// What the std Plugin's library holds in a test, as Cargo built it in
-/// `profile` for the named `target`, or for the host when no target is
-/// named. Each build's differs, so a test shows which one was placed.
-fn plugin_bytes(target: Option<&str>, profile: &str) -> Vec<u8> {
-    format!("plugin for {} in {profile}", target.unwrap_or("the host")).into_bytes()
+/// What the shipped library `library`, one of [`plugin::LIBRARIES`],
+/// holds in a test, as Cargo built it in `profile` for the named
+/// `target`, or for the host when no target is named. Each library's and
+/// each build's differs, so a test shows which one was placed.
+fn plugin_bytes(library: &str, target: Option<&str>, profile: &str) -> Vec<u8> {
+    format!(
+        "{library} for {} in {profile}",
+        target.unwrap_or("the host")
+    )
+    .into_bytes()
 }
 
 fn write_file(path: &Path, contents: &[u8]) {
@@ -200,37 +205,43 @@ impl TestEnvironment {
         self.stage_gateway_kind(target, "stub")
     }
 
-    /// Writes the std Plugin's library where Cargo leaves it whenever it
-    /// builds Workshop for `target`, in either profile, with the target
-    /// named or left to the host. Each of the four holds its own
-    /// [`plugin_bytes`]. No fake build writes a file of its own, and
-    /// every test that builds Workshop names its Gateway first, so the
-    /// Gateway helpers call this.
-    fn leave_plugin(&self, target: &str) {
+    /// Writes each shipped Plugin's library where Cargo leaves it
+    /// whenever it builds Workshop for `target`, in either profile, with
+    /// the target named or left to the host. Each of the four builds'
+    /// libraries holds its own [`plugin_bytes`]. No fake build writes a
+    /// file of its own, and every test that builds Workshop names its
+    /// Gateway first, so the Gateway helpers call this.
+    fn leave_plugins(&self, target: &str) {
         let root = &self.environment.target_root;
         for (base, named) in [(root.clone(), None), (root.join(target), Some(target))] {
             for profile in ["debug", "release"] {
-                write_file(
-                    &plugin::built_library(&base.join(profile), target),
-                    &plugin_bytes(named, profile),
-                );
+                let built = plugin::built_libraries(&base.join(profile), target);
+                for (library, path) in plugin::LIBRARIES.iter().zip(built) {
+                    write_file(&path, &plugin_bytes(library, named, profile));
+                }
             }
         }
     }
 
-    /// Removes what [`leave_plugin`](Self::leave_plugin) wrote, as a
-    /// build that never compiled the library leaves things.
-    fn lose_plugin(&self, target: &str) {
+    /// Removes the library `library`, one of [`plugin::LIBRARIES`], that
+    /// [`leave_plugins`](Self::leave_plugins) wrote, as a build that
+    /// never compiled it leaves things.
+    fn lose_plugin(&self, target: &str, library: &str) {
         let root = &self.environment.target_root;
         for base in [root.clone(), root.join(target)] {
             for profile in ["debug", "release"] {
-                let _ = std::fs::remove_file(plugin::built_library(&base.join(profile), target));
+                let built = plugin::built_libraries(&base.join(profile), target);
+                for (name, path) in plugin::LIBRARIES.iter().zip(built) {
+                    if *name == library {
+                        let _ = std::fs::remove_file(path);
+                    }
+                }
             }
         }
     }
 
     fn stage_gateway_kind(&self, target: &str, kind: &str) -> PathBuf {
-        self.leave_plugin(target);
+        self.leave_plugins(target);
         let slot = self.sidecar(target);
         write_file(&slot, b"gateway");
         let mut marker = slot.clone().into_os_string();
@@ -245,7 +256,7 @@ impl TestEnvironment {
     /// A Gateway binary outside the slot, as `--gateway-binary` or
     /// `RUNVIL_GATEWAY_SIDECAR` names one.
     fn given_gateway(&self, target: &str) -> PathBuf {
-        self.leave_plugin(target);
+        self.leave_plugins(target);
         let path = self
             .temp
             .path()

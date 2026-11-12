@@ -37,6 +37,7 @@ on:
       - crates/workshop/desktop/tauri*.conf.json
       - crates/workshop/desktop/icons/**
       - crates/workshop/plugin-std/**
+      - crates/workshop/plugin-bashkit/**
       - crates/workshop/package.json
       - crates/workshop/package-lock.json
       - crates/workshop/gateway-discovery/src/**

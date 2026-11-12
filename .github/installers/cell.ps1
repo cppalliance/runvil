@@ -44,8 +44,12 @@ if (-not $gatewayVersion) { Fail "$pin names no Gateway version" }
 $root = Join-Path $env:LOCALAPPDATA 'Runvil'
 $profileDir = Join-Path $env:USERPROFILE '.runvil'
 $workshopExe = Join-Path $root 'runvil-workshop.exe'
-# The std Plugin's library installs with Workshop, in its Plugin directory.
-$stdPlugin = Join-Path $root 'plugins\plugin_std.dll'
+# The libraries of the std Plugin and the bashkit Plugin install with
+# Workshop, in its Plugin directory. Each is listed with the name its
+# Plugin reports.
+$plugins = @(
+  @{ Name = 'std'; Library = Join-Path $root 'plugins\plugin_std.dll' },
+  @{ Name = 'bashkit'; Library = Join-Path $root 'plugins\plugin_bashkit.dll' })
 $gatewayExe = Join-Path $root 'runvil-gateway.exe'
 $config = Join-Path $profileDir 'gateway.toml'
 $discovery = Join-Path $profileDir 'run\gateway.json'
@@ -260,7 +264,9 @@ function Test-Selection($Want) {
   # nothing into the profile, and the Speech to Text gate records the
   # choice for the Gateway's first start.
   Test-Presence 'Workshop' $Want.Workshop $workshopExe
-  Test-Presence "Workshop's std Plugin" $Want.Workshop $stdPlugin
+  foreach ($plugin in $plugins) {
+    Test-Presence "Workshop's $($plugin.Name) Plugin" $Want.Workshop $plugin.Library
+  }
   Test-Presence 'Gateway' $Want.Gateway $gatewayExe
   if (Test-Path -LiteralPath $config) { Fail "the install must leave the Gateway config to the Gateway's first start, but $config exists" }
   $downloaded = @(Get-ModelFiles)
@@ -278,17 +284,20 @@ function Test-Selection($Want) {
     if ($output -ne $check.Expected) { Fail "$($check.Exe) --version printed '$output', required '$($check.Expected)'" }
   }
 
-  # Workshop loads the std Plugin it installed, which holds the file tools.
+  # Workshop loads the Plugins it installed: std, which holds the file
+  # tools, and bashkit, which holds the shell.
   # The pipe matters: Workshop is a windowed program, and PowerShell waits
   # for one, and reads its output, only when that output is piped.
   if ($Want.Workshop) {
     $stderr = Join-Path $logs 'plugins.stderr.log'
     $listed = (& $workshopExe --plugins 2>$stderr | Out-String).Trim()
-    if ($listed -notmatch '(?m)^std \d') {
-      $reason = if (Test-Path -LiteralPath $stderr) { (Get-Content -LiteralPath $stderr -Raw) } else { '' }
-      Fail "$workshopExe --plugins must list the std Plugin; it printed '$listed' and exited $LASTEXITCODE. stderr: $reason"
+    foreach ($plugin in $plugins) {
+      if ($listed -notmatch "(?m)^$($plugin.Name) \d") {
+        $reason = if (Test-Path -LiteralPath $stderr) { (Get-Content -LiteralPath $stderr -Raw) } else { '' }
+        Fail "$workshopExe --plugins must list the $($plugin.Name) Plugin; it printed '$listed' and exited $LASTEXITCODE. stderr: $reason"
+      }
     }
-    Write-Host "cell: Workshop loads its std Plugin ($listed)"
+    Write-Host "cell: Workshop loads its Plugins ($($listed -replace '\s+', ' '))"
   }
 
   # 4. Workshop serves its page, attached to the installed Gateway when

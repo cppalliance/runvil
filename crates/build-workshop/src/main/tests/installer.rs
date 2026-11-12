@@ -52,44 +52,51 @@ pub(super) fn bundled(
     )
 }
 
-/// The std Plugin's library inside the Workshop bundle a Tauri build
-/// leaves for a macOS or Linux `target`, where the build's configuration
-/// has Tauri copy it.
-pub(super) fn bundled_plugin(environment: &BuildEnvironment, target: &str) -> PathBuf {
-    if target.contains("apple") {
-        bundle(environment, target, "macos")
-            .join("Runvil.app")
-            .join("Contents")
-            .join("Resources")
-            .join("plugins")
-            .join("libplugin_std.dylib")
+/// The library of each Plugin Workshop ships, inside the Workshop bundle
+/// a Tauri build leaves for a macOS or Linux `target`, where the build's
+/// configuration has Tauri copy them.
+pub(super) fn bundled_plugins(environment: &BuildEnvironment, target: &str) -> Vec<PathBuf> {
+    let (plugins, names) = if target.contains("apple") {
+        (
+            bundle(environment, target, "macos")
+                .join("Runvil.app")
+                .join("Contents")
+                .join("Resources")
+                .join("plugins"),
+            ["libplugin_std.dylib", "libplugin_bashkit.dylib"],
+        )
     } else {
-        bundle(environment, target, "appimage")
-            .join("Runvil.AppDir")
-            .join("usr")
-            .join("lib")
-            .join("runvil")
-            .join("plugins")
-            .join("libplugin_std.so")
-    }
+        (
+            bundle(environment, target, "appimage")
+                .join("Runvil.AppDir")
+                .join("usr")
+                .join("lib")
+                .join("runvil")
+                .join("plugins"),
+            ["libplugin_std.so", "libplugin_bashkit.so"],
+        )
+    };
+    names.iter().map(|name| plugins.join(name)).collect()
 }
 
-/// The `--config` text that has Tauri copy the library of `target`'s
+/// The `--config` text that has Tauri copy the libraries of `target`'s
 /// release build into Workshop's bundle, or `None` for Windows.
 fn plugin_config(environment: &BuildEnvironment, target: &str) -> Option<String> {
     let deps = release(environment, target).join("deps");
     let config = if target.contains("apple") {
-        let library = deps.join("libplugin_std.dylib");
         serde_json::json!({
             "bundle": { "macOS": { "files": {
-                "Resources/plugins/libplugin_std.dylib": library
+                "Resources/plugins/libplugin_std.dylib": deps.join("libplugin_std.dylib"),
+                "Resources/plugins/libplugin_bashkit.dylib":
+                    deps.join("libplugin_bashkit.dylib"),
             } } }
         })
     } else if target.contains("linux") {
-        let library = deps.join("libplugin_std.so");
         serde_json::json!({
             "bundle": { "linux": { "appimage": { "files": {
-                "/usr/lib/runvil/plugins/libplugin_std.so": library
+                "/usr/lib/runvil/plugins/libplugin_std.so": deps.join("libplugin_std.so"),
+                "/usr/lib/runvil/plugins/libplugin_bashkit.so":
+                    deps.join("libplugin_bashkit.so"),
             } } } }
         })
     } else {
@@ -239,11 +246,14 @@ fn linux_unsigned_from_the_host_publishes_only_the_installer() {
         version_printed(),
         bundled(
             staged.clone(),
-            vec![
-                appimage.join(format!("Runvil_{VERSION}_amd64.AppImage")),
-                appimage.join("Runvil.AppDir").join("AppRun"),
-                bundled_plugin(environment, target),
-            ],
+            [
+                vec![
+                    appimage.join(format!("Runvil_{VERSION}_amd64.AppImage")),
+                    appimage.join("Runvil.AppDir").join("AppRun"),
+                ],
+                bundled_plugins(environment, target),
+            ]
+            .concat(),
             success(""),
         ),
     ];
@@ -281,8 +291,8 @@ fn linux_unsigned_from_the_host_publishes_only_the_installer() {
         std::fs::read(output_root.join("payload").join("runvil-gateway")).expect("payload"),
         b"gateway"
     );
-    // The std Plugin's library rides inside the AppImage, so nothing
-    // beside it carries a Plugin directory.
+    // The Plugins' libraries ride inside the AppImage, so nothing beside
+    // it carries a Plugin directory.
     assert!(!output_root.join("payload").join("plugins").exists());
     assert!(
         !output_root
@@ -335,11 +345,11 @@ fn linux_signed_publishes_the_appimage_and_its_signature_beside_the_installer() 
         version_printed(),
         bundled(
             staged,
-            vec![
-                collect_signature(&appimage),
-                appimage,
-                bundled_plugin(environment, target),
-            ],
+            [
+                vec![collect_signature(&appimage), appimage],
+                bundled_plugins(environment, target),
+            ]
+            .concat(),
             success(""),
         ),
     ];

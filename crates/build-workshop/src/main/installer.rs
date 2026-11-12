@@ -140,11 +140,11 @@ pub(super) fn build_installer(
     // make the collection ambiguous.
     remove_directory(&bundle_directory)?;
     check_gateway_version(runner, environment, &gateway)?;
-    // The Windows setup takes the std Plugin's library from the build
-    // itself. On macOS and Linux Tauri copies it into Workshop's bundle,
-    // so the updater replaces it with Workshop.
-    let library = plugin::built_library(&release, &target);
-    let plugin_config = plugin::bundle_config(platform.system, &library).map_err(failure)?;
+    // The Windows setup takes the Plugins' libraries from the build
+    // itself. On macOS and Linux Tauri copies them into Workshop's bundle,
+    // so the updater replaces them with Workshop.
+    let libraries = plugin::built_libraries(&release, &target);
+    let plugin_config = plugin::bundle_config(platform.system, &libraries).map_err(failure)?;
     with_staged_sidecar(
         environment,
         &target,
@@ -166,7 +166,7 @@ pub(super) fn build_installer(
     plugin::check_bundled(
         platform.system,
         &bundle_directory,
-        plugin::library_name(&target),
+        &plugin::library_names(&target),
     )
     .map_err(failure)?;
     let output = environment.target_root.join("installer").join(&target);
@@ -320,8 +320,8 @@ fn check_gateway_version(
 }
 
 /// The Tauri build of Workshop's bundle for `target`. `plugin_config` is
-/// the configuration that copies the std Plugin's library into the
-/// bundle, when the platform has one.
+/// the configuration that copies the Plugins' libraries into the bundle,
+/// when the platform has one.
 fn tauri_build_command(
     environment: &BuildEnvironment,
     target: &str,

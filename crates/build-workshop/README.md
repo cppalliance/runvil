@@ -4,7 +4,7 @@ This crate is `cargo workshop`, the one build path for Runvil's desktop products
 
 ## Modes
 
-- `cargo workshop [--release] [--target <triple>] [--gateway-binary <path>]` builds Workshop with Cargo. For a Windows target the gateway is Workshop's sidecar; elsewhere the build copies it beside Workshop in the target directory, where a development Workshop finds it. Every build also copies the std Plugin's library into `plugins` beside Workshop, where a development Workshop loads it.
+- `cargo workshop [--release] [--target <triple>] [--gateway-binary <path>]` builds Workshop with Cargo. For a Windows target the gateway is Workshop's sidecar; elsewhere the build copies it beside Workshop in the target directory, where a development Workshop finds it. Every build also copies the libraries of the Plugins Workshop ships into `plugins` beside Workshop, where a development Workshop loads them.
 - `cargo workshop installer [--target <triple>] [--sign] [--gateway-binary <path>]` builds one platform's installer in release.
 - `cargo workshop manifest --assets <dir> --base-url <url> [--public-key <file>]` checks that a directory holds exactly one release's files for every platform, verifies each updater signature, and writes `latest.json` and `SHA256SUMS` beside them.
 
@@ -20,9 +20,16 @@ node tools/fetch-gateway-sidecar.mjs --target <triple>
 
 The script downloads the release asset, checks its SHA-256 against the pin, and stages the executable in `crates/workshop/desktop/binaries/`, where every later build reuses it. `--gateway-binary <path>`, or the `RUNVIL_GATEWAY_SIDECAR` environment variable, names another gateway instead; for a Windows target, remove the staged one first, because a named gateway never replaces it. The installer build runs the gateway's `--version` and refuses one that is not the pinned version.
 
-## The std Plugin
+## The Plugins Workshop ships
 
-The file tools live in the std Plugin, a dynamic library whose code is in [cppalliance/runvil-plugin-std](https://github.com/cppalliance/runvil-plugin-std), pinned by commit in the root `Cargo.toml`. Nothing here builds it by name: the Workshop server depends on `workshop-plugin-std`, so Cargo writes `plugin_std.dll`, `libplugin_std.so`, or `libplugin_std.dylib` to `deps` in the profile's directory whenever it builds Workshop. Each mode takes the library from there. A build copies it into `plugins` beside Workshop in the target directory. A macOS or Linux installer has Tauri copy it into Workshop's bundle, at `Runvil.app/Contents/Resources/plugins` or at `usr/lib/runvil/plugins` in the AppImage, so the updater, which replaces only that bundle, replaces the library with it. The installer build fails when the bundle Tauri built does not hold the library. A Workshop run with plain `cargo run -p workshop` has no Plugin directory, so its agents have no file tools; run `cargo workshop` once to place the library. Plain Cargo builds do not refresh the placed copy, so run `cargo workshop` again after the pin or the contract version changes.
+Two Plugins ship with Workshop, each a dynamic library whose code is in a repository of its own, pinned by commit in the root `Cargo.toml`:
+
+- The std Plugin, from [cppalliance/runvil-plugin-std](https://github.com/cppalliance/runvil-plugin-std), holds the file tools. Its library is `plugin_std.dll`, `libplugin_std.so`, or `libplugin_std.dylib`.
+- The bashkit Plugin, from [cppalliance/runvil-plugin-bashkit](https://github.com/cppalliance/runvil-plugin-bashkit), holds the shell. Its library is `plugin_bashkit.dll`, `libplugin_bashkit.so`, or `libplugin_bashkit.dylib`.
+
+Nothing here builds them by name: the Workshop server depends on `workshop-plugin-std` and `workshop-plugin-bashkit`, so Cargo writes each library to `deps` in the profile's directory whenever it builds Workshop. Each mode takes the libraries from there. A build copies them into `plugins` beside Workshop in the target directory. A macOS or Linux installer has Tauri copy them into Workshop's bundle, at `Runvil.app/Contents/Resources/plugins` or at `usr/lib/runvil/plugins` in the AppImage, so the updater, which replaces only that bundle, replaces the libraries with it. The installer build fails when the bundle Tauri built does not hold each library. A Workshop run with plain `cargo run -p workshop` has no Plugin directory, so its agents have no file tools and no shell; run `cargo workshop` once to place the libraries. Plain Cargo builds do not refresh the placed copies, so run `cargo workshop` again after a pin or the contract version changes.
+
+`LIBRARIES` in `src/main/plugin.rs` names the two. A third Plugin adds its name there, in `crates/workshop/desktop/installer.nsi`, and in the two scripts in `.github/installers`.
 
 ## Building an installer
 
@@ -35,10 +42,10 @@ npm ci --prefix crates/workshop
 The output lands in `target/installer/<triple>/`:
 
 - `publish/`: the installer, and under `--sign` the updater files and their `.sig` signatures. Windows gets `Runvil_<version>_x64-setup.exe`, macOS `Runvil_<version>_<aarch64|x86_64>-setup.dmg`, and Linux `Runvil_<version>_<amd64|aarch64>-setup.run`.
-- `payload/` (macOS and Linux): the installed items, `Runvil.app` and `Runvil Gateway.app`, or `Runvil.AppImage` and `runvil-gateway`. The std Plugin's library is inside Workshop's item.
+- `payload/` (macOS and Linux): the installed items, `Runvil.app` and `Runvil Gateway.app`, or `Runvil.AppImage` and `runvil-gateway`. The Plugins' libraries are inside Workshop's item.
 - `ifw/` (macOS and Linux): the Qt IFW definition filled in from `ifw/` in this crate, with the payload copied into its packages. The Plugin directory goes in Workshop's package.
 
-Windows needs nothing more: Tauri builds the NSIS setup from `crates/workshop/desktop/installer.nsi`, with the gateway inside. That template takes the std Plugin's library from `deps` beside the built executable and installs it as `plugins\plugin_std.dll`.
+Windows needs nothing more: Tauri builds the NSIS setup from `crates/workshop/desktop/installer.nsi`, with the gateway inside. That template takes the Plugins' libraries from `deps` beside the built executable and installs them as `plugins\plugin_std.dll` and `plugins\plugin_bashkit.dll`.
 
 Linux also needs Tauri's build packages and the libraries the Qt IFW tools load even without a display, as `installers.yml` installs them on Ubuntu:
 

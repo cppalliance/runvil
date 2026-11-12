@@ -58,14 +58,15 @@ ${StrLoc}
 !define UNINSTALLERHEADERIMAGE "{{uninstaller_header_image}}"
 !define MAINBINARYNAME "{{main_binary_name}}"
 !define MAINBINARYSRCPATH "{{main_binary_path}}"
-; The std Plugin's library. Cargo writes it to `deps` beside the main
-; executable whenever it builds Workshop, so its path is the main
-; executable's with the file name replaced.
+; The libraries of the std Plugin and the bashkit Plugin. Cargo writes
+; each to `deps` beside the main executable whenever it builds Workshop,
+; so its path is the main executable's with the file name replaced.
 !searchreplace STDPLUGINSRCPATH "${MAINBINARYSRCPATH}" "${MAINBINARYNAME}.exe" "deps\plugin_std.dll"
+!searchreplace BASHKITPLUGINSRCPATH "${MAINBINARYSRCPATH}" "${MAINBINARYNAME}.exe" "deps\plugin_bashkit.dll"
 ; A main executable under another name would leave the path unchanged, and
-; the setup would install the executable as the Plugin.
+; the setup would install the executable as each Plugin.
 !if "${STDPLUGINSRCPATH}" == "${MAINBINARYSRCPATH}"
-  !error "cannot find the std Plugin: ${MAINBINARYSRCPATH} does not end in ${MAINBINARYNAME}.exe"
+  !error "cannot find the Plugins' libraries: ${MAINBINARYSRCPATH} does not end in ${MAINBINARYNAME}.exe"
 !endif
 !define BUNDLEID "{{bundle_id}}"
 !define COPYRIGHT "{{copyright}}"
@@ -743,10 +744,12 @@ Section "Runvil Workshop" SecWorkshop
  ; Copy main executable
  File "${MAINBINARYSRCPATH}"
 
- ; Copy the std Plugin's library into the Plugin directory, `plugins`
- ; beside the main executable, where Workshop loads library Plugins from
+ ; Copy the libraries of the std Plugin and the bashkit Plugin into the
+ ; Plugin directory, `plugins` beside the main executable, where Workshop
+ ; loads library Plugins from
  CreateDirectory "$INSTDIR\plugins"
  File "/oname=plugins\plugin_std.dll" "${STDPLUGINSRCPATH}"
+ File "/oname=plugins\plugin_bashkit.dll" "${BASHKITPLUGINSRCPATH}"
 
  ; Copy resources
  {{#each resources_dirs}}
@@ -899,8 +902,9 @@ Section "-Finalize"
  !insertmacro DeleteComponentPayloadIfDeclined ${SecGateway} $INSTDIR\runvil-gateway.exe
  !insertmacro DeleteComponentPayloadIfDeclined ${SecWorkshop} $INSTDIR\${MAINBINARYNAME}.exe
  !insertmacro DeleteComponentPayloadIfDeclined ${SecWorkshop} $INSTDIR\plugins\plugin_std.dll
+ !insertmacro DeleteComponentPayloadIfDeclined ${SecWorkshop} $INSTDIR\plugins\plugin_bashkit.dll
  ; Without /r, RMDir removes the Plugin directory only when it is empty,
- ; which it is only after the line above deleted the one library in it.
+ ; which it is only after the lines above deleted the two libraries in it.
  RMDir "$INSTDIR\plugins"
  ClearErrors
 
@@ -980,9 +984,10 @@ Section "un.Workshop"
  ; Delete the main executable
  Delete "$INSTDIR\${MAINBINARYNAME}.exe"
 
- ; Delete the std Plugin's library, and the Plugin directory unless a
+ ; Delete the Plugins' libraries, and the Plugin directory unless a
  ; library the installer did not put there is left in it
  Delete "$INSTDIR\plugins\plugin_std.dll"
+ Delete "$INSTDIR\plugins\plugin_bashkit.dll"
  RMDir "$INSTDIR\plugins"
 
  ; Delete resources

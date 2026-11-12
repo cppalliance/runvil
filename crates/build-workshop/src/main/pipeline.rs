@@ -50,10 +50,10 @@ pub(super) fn build_workshop(
             profile.push(request.profile.directory());
             // Workshop loads its Plugins from `plugins` beside its own
             // executable in a development tree.
-            plugin::place(&plugin::built_library(&profile, &target), &profile).map_err(
+            plugin::place(&plugin::built_libraries(&profile, &target), &profile).map_err(
                 |reason| {
                     StepError::failed(format!(
-                        "cannot place the std Plugin beside Workshop: {reason}"
+                        "cannot place Workshop's Plugins beside it: {reason}"
                     ))
                 },
             )?;

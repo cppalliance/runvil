@@ -114,8 +114,8 @@ fn print_version() -> ExitCode {
 /// installation loads, as its name and its version, and exit, without
 /// booting the server or opening a window. A library that does not load
 /// goes to stderr with the reason. Workshop keeps no log, so this is how
-/// a person sees why an agent has no file tools, and the release
-/// workflows check the installed std Plugin with it.
+/// a person sees why an agent has no file tools or no shell, and the
+/// release workflows check the installed Plugins with it.
 fn print_plugins() -> ExitCode {
     let directory = match config::load() {
         Ok(config) => config.agents.plugins,

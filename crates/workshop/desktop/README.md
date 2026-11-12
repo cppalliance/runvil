@@ -22,9 +22,14 @@ Workshop loads every library Plugin in its Plugin directory when it starts. The 
 
 `[agents] plugins` in `workshop.toml` names another directory instead.
 
-Each installer puts one library there, the std Plugin, which holds the file tools the built-in chat agent declares: `plugin_std.dll`, `libplugin_std.dylib`, or `libplugin_std.so`. Its code lives in [cppalliance/runvil-plugin-std](https://github.com/cppalliance/runvil-plugin-std), pinned by commit in the root `Cargo.toml`. A Workshop with no Plugin directory, or one whose std library does not load, refuses an agent that requires `std` and says that `runvil/std` is not installed.
+Each installer puts two libraries there, each from a repository of its own, pinned by commit in the root `Cargo.toml`:
 
-`runvil-workshop --plugins` prints each Plugin the installation loads, as its name and its version, and exits. A library that does not load goes to stderr with the reason. Workshop keeps no log, so this is the way to see why an agent has no file tools.
+- The std Plugin, which holds the file tools: `plugin_std.dll`, `libplugin_std.dylib`, or `libplugin_std.so`, from [cppalliance/runvil-plugin-std](https://github.com/cppalliance/runvil-plugin-std).
+- The bashkit Plugin, which holds the shell: `plugin_bashkit.dll`, `libplugin_bashkit.dylib`, or `libplugin_bashkit.so`, from [cppalliance/runvil-plugin-bashkit](https://github.com/cppalliance/runvil-plugin-bashkit).
+
+A Workshop with no Plugin directory, or one whose std library does not load, refuses an agent that requires `std` and says that `runvil/std` is not installed. It does the same for `bash` and the bashkit library.
+
+`runvil-workshop --plugins` prints each Plugin the installation loads, as its name and its version, and exits. A library that does not load goes to stderr with the reason. Workshop keeps no log, so this is the way to see why an agent has no file tools or no shell.
 
 ## Updates
 

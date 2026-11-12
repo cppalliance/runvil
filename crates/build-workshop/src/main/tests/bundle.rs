@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use super::ifw_tests::{ifw_built, ifw_commands, ifw_found, installer_path};
 use super::installer_tests::{
-    bundle, bundled, bundled_plugin, collect_signature, expected_commands, node_found, output,
+    bundle, bundled, bundled_plugins, collect_signature, expected_commands, node_found, output,
     request, version_printed,
 };
 use super::*;
@@ -194,16 +194,19 @@ fn macos_signed_collects_the_payload_and_publishes_workshop_s_updater() {
         version_printed(),
         bundled(
             staged.clone(),
-            vec![
-                macos
-                    .join("Runvil.app")
-                    .join("Contents")
-                    .join("MacOS")
-                    .join("runvil-workshop"),
-                bundled_plugin(environment, target),
-                collect_signature(&updater),
-                updater,
-            ],
+            [
+                vec![
+                    macos
+                        .join("Runvil.app")
+                        .join("Contents")
+                        .join("MacOS")
+                        .join("runvil-workshop"),
+                    collect_signature(&updater),
+                    updater,
+                ],
+                bundled_plugins(environment, target),
+            ]
+            .concat(),
             success(""),
         ),
     ];
@@ -258,10 +261,11 @@ fn macos_unsigned_publishes_only_the_dmg_around_the_pinned_gateway() {
         version_printed(),
         bundled(
             staged,
-            vec![
-                app.join("Contents").join("MacOS").join("runvil-workshop"),
-                bundled_plugin(environment, target),
-            ],
+            [
+                vec![app.join("Contents").join("MacOS").join("runvil-workshop")],
+                bundled_plugins(environment, target),
+            ]
+            .concat(),
             success(""),
         ),
     ];
@@ -293,17 +297,20 @@ fn macos_unsigned_publishes_only_the_dmg_around_the_pinned_gateway() {
         "{plist}"
     );
     assert!(!payload.join("runvil-gateway").exists());
-    // The std Plugin's library sits inside Workshop's bundle, where the
-    // updater replaces it with Workshop, and nowhere beside it.
-    assert!(
-        payload
-            .join("Runvil.app")
-            .join("Contents")
-            .join("Resources")
-            .join("plugins")
-            .join("libplugin_std.dylib")
-            .is_file()
-    );
+    // The Plugins' libraries sit inside Workshop's bundle, where the
+    // updater replaces them with Workshop, and nowhere beside it.
+    for library in ["libplugin_std.dylib", "libplugin_bashkit.dylib"] {
+        assert!(
+            payload
+                .join("Runvil.app")
+                .join("Contents")
+                .join("Resources")
+                .join("plugins")
+                .join(library)
+                .is_file(),
+            "{library}"
+        );
+    }
     assert!(!payload.join("plugins").exists());
     let installer = installer_path(environment, target);
     assert_eq!(
