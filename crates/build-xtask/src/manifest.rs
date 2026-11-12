@@ -2,8 +2,8 @@
 //! requested kinds, both at the top level and under `[target.<cfg>]`.
 //!
 //! Every structural check that reads declared dependencies (the product
-//! matrix, the workshop tiers, the Engine manifest guard) goes through
-//! this one walk and differs only in the kinds it asks for.
+//! matrix, the workshop tiers) goes through this one walk and differs
+//! only in the kinds it asks for.
 
 /// Every dependency table of the given kinds, labeled the way its section
 /// header reads: the plain `<kind>` tables and their `[target.<cfg>.<kind>]`

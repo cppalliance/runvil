@@ -41,12 +41,7 @@ fn the_workspace_relaxes_unsafe_code_only_in_its_owned_crates() {
 #[test]
 fn the_owned_crates_may_relax_unsafe_code_and_text_that_spells_it_passes() {
     let root = tempfile::TempDir::new().expect("tempdir");
-    for dir in [
-        "workshop/desktop",
-        "workshop/gateway-discovery",
-        "harness-internal/plugin-loader",
-        "harness-internal/test-plugin",
-    ] {
+    for dir in ["workshop/desktop", "workshop/gateway-discovery"] {
         write_crate(root.path(), dir, &[("lib.rs", RELAXES)]);
     }
     write_crate(
@@ -71,7 +66,7 @@ fn each_way_of_relaxing_unsafe_code_outside_the_owned_crates_is_reported_at_its_
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
-        "runvil-internal/lua",
+        "workshop/status",
         &[(
             "lib.rs",
             "//! Local inference.\n\
@@ -100,7 +95,7 @@ fn a_source_file_that_does_not_parse_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
-        "runvil-internal/lua",
+        "workshop/status",
         &[("lib.rs", "fn broken( {\n")],
     );
     let violations = unsafe_allowlist_violations(root.path());
@@ -116,14 +111,14 @@ fn a_crate_whose_manifest_does_not_parse_is_still_scanned() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
-        "runvil-internal/lua",
+        "workshop/status",
         &[("lib.rs", "#[allow(unsafe_code)]\nmod sys {}\n")],
     );
     std::fs::write(
         root.path()
             .join("crates")
-            .join("runvil-internal")
-            .join("lua")
+            .join("workshop")
+            .join("status")
             .join("Cargo.toml"),
         "not [valid toml",
     )

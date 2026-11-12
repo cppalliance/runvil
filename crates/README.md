@@ -1,3 +1,3 @@
 # Crates
 
-This directory holds the workspace's crates. The crates at this level are the public layer: the Engine's public API, the Harness and the pieces a Host plugs into it, the vocabulary and protocol code each product family publishes, and the build tooling. Each product family keeps its private crates in a container directory of its own, and code in one family reaches another family only through a crate at this level.
+This directory holds the workspace's crates. The crates at this level are the build tooling. Workshop keeps its crates in a container directory of its own, `workshop/`, and only the build tooling may depend into it.

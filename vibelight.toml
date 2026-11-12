@@ -7,7 +7,6 @@ exclude = [
     "crates/build-user-guide",  # build tooling
     "crates/build-workshop",  # run by the cargo alias `workshop`
     "crates/build-xtask",  # run by the cargo alias `xtask`
-    "crates/harness-internal/test-plugin",  # a test fixture or helper
 ]
 out = ".vibelight"
 # Doc text that repeats on purpose, so the doc-text leads ignore it.

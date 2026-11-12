@@ -1,6 +1,6 @@
 # Runvil
 
-Multi-crate Rust workspace for the Engine, the Harness that runs it, and Workshop, a Host. The Gateway is a separate product in its own repository, `cppalliance/runvil-gateway`.
+Multi-crate Rust workspace for Workshop, a Host, and the tooling that builds its installers. The Engine and the Harness are in their own repository, `cppalliance/runvil-harness`, which the root `Cargo.toml` pins by commit. The Gateway is a separate product in its own repository, `cppalliance/runvil-gateway`.
 
 ## Definitions
 
@@ -18,7 +18,6 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 
 - "Host", in any capitalization, means only the Host. Other senses use another word: "machine", "real files", "Engine globals", "Engine call", the part's own name ("the desktop app"), or a verb such as run, serve, embed, or hold.
 - "Engine", "Harness", and "Plugin" mean only the defined terms. Anything else gets a qualified lowercase name, such as the Gateway's speech engine or a Tauri plugin. This repository's own checks are "structural checks", "test support", or "fixtures".
-- Engine crates call the code that steps a run "the caller" and never mention the Host. They name the Harness only to say that a responsibility belongs to it, never how the Harness performs it.
 - Names defined elsewhere keep their own meaning (the HTTP `Host` header, Cargo's `harness = false`), crate names are written as they are, and quotations of people stay verbatim.
 - `crates/workshop/ui/test/docs-claims.mjs` enforces these rules in every `AGENTS.md`, every `## Invariants` crate doc, and every `.cursor/rules` file.
 
@@ -36,7 +35,6 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 - A Cargo feature gates a real constraint such as a toolchain requirement or heavy native build, not product shape. Feature-disabled builds must not leak optional types into core paths.
 - Runtime and serve paths never compile native dependencies or invoke build tools.
 - Unsafe code stays in its explicitly owned boundary.
-- Engine and Harness crates report every failure as the universal `Error` in `runvil-types`, which `runvil-engine` and `runvil` re-export. A new failure is a new `ErrorCode` variant in its hundreds family with a never-used number, plus an `ErrorFact` variant only when no key names the value. No other error enum or struct, `thiserror` derive, or `impl std::error::Error`; a foreign cause joins through `Error::with_cause`. Allowed: `VfsError` in `runvil-vfs`, throwaway test error types, crate-private `Err` markers that the caller turns into `Error`, and pairs such as `InjectFailure`.
 - Comments explain a non-obvious constraint, ordering requirement, or workaround. A platform or external-bug workaround cites its upstream issue URL.
 - JSON that reaches a recorder or a replay comparison round-trips exactly: object keys sorted, numbers finite, parsed with `float_roundtrip`. A value derived and then logged is rounded to its meaningful precision at the source.
 
@@ -45,8 +43,7 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 - Tests: `cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features`, and `cargo nextest run --locked -p workshop -p workshop-server -p workshop-server-api`.
 - Lint: `cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features`, and `cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets`, both with `CARGO_BUILD_WARNINGS=deny`. Clippy covers `cargo check`, so never run a standalone `cargo check --workspace`.
 - Format: `cargo fmt --all --check`.
-- Docs: `cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api` and `cargo doc -p runvil-engine --no-deps` (default features), both with `RUSTDOCFLAGS="-D warnings"`. Clippy does not run rustdoc lints, so never skip these.
-- Facade surface: `cargo +<nightly> xtask api --check`, with the nightly named in `crates/build-xtask/src/api/toolchain.rs` and `CARGO_BUILD_WARNINGS` unset (`Remove-Item Env:CARGO_BUILD_WARNINGS` in PowerShell). It checks both facades, and fails when a surface names an item its facade does not re-export or differs from its listing, `crates/runvil-engine/public-api.txt` or `crates/runvil/public-api.txt`.
+- Docs: `cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api`, with `RUSTDOCFLAGS="-D warnings"`. Clippy does not run rustdoc lints, so never skip this.
 - Custom lints: `cargo dylint --all -- --locked --workspace --all-targets --all-features`, with `cargo-dylint` and `dylint-link` installed. The lints and their UI tests live in `cppalliance/dylints`, at the `rev` the root `Cargo.toml`'s `[workspace.metadata.dylint]` pins; a new lint lands there first.
 - Structural checks: `cargo test -p build-xtask`.
 - Wording: `node --test crates/workshop/ui/test/docs-claims.mjs`, from any directory, no `npm ci` needed.
@@ -57,8 +54,8 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 - Pseudo-random test input comes only from a fixed seed that the failure prints. Temporary directory names come from the test's name, the process id, and a counter.
 - A file holds one concept and has no length limit. Split a file only when it holds a second unrelated concept. Size limits sit on functions and types, and clippy and `cargo test -p build-xtask` enforce them. Split an oversized type by responsibility; a new entry in the allowlist in `crates/build-xtask/src/type_size.rs` is a plan decision with a reason, never a way to make a change pass.
 - Production code uses the standard module layout: `foo.rs`, with `foo/bar.rs` for its children. No `#[path]`, and no inline `mod` blocks. A module never has exactly one child file (tests aside): merge it, or make it a peer module `foo_bar.rs` declared beside `foo.rs`.
-- Test code goes at the bottom of the file under test in a `#[cfg(test)] mod tests { }` block when practical (if in doubt, beside), and otherwise in `foo-tests.rs` beside it, wired with `#[path = "foo-tests.rs"] mod tests;`. A big test file may split by topic into siblings named after it, `<stem>-<topic>.rs` (so `foo-tests-topic.rs`). These are the only files wired with `#[path]`, apart from the cfg-selected platform files in `crates/runvil-internal/vfs/src/real.rs`, so a hyphen in a file name means test code. Top-level `tests/` and `benches/` trees follow Cargo's conventions.
-- Crates outside the Engine and Harness keep their older layout until their own pass.
+- Test code goes at the bottom of the file under test in a `#[cfg(test)] mod tests { }` block when practical (if in doubt, beside), and otherwise in `foo-tests.rs` beside it, wired with `#[path = "foo-tests.rs"] mod tests;`. A big test file may split by topic into siblings named after it, `<stem>-<topic>.rs` (so `foo-tests-topic.rs`). These are the only files wired with `#[path]`, so a hyphen in a file name means test code. Top-level `tests/` and `benches/` trees follow Cargo's conventions.
+- The crates in this repository keep their older layout until their own pass.
 
 ## SPA and CSS Rules
 

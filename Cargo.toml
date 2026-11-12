@@ -1,38 +1,40 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "crates/runvil-internal/types", "crates/runvil-internal/runtime", "crates/runvil-internal/lua", "crates/runvil-internal/markdown", "crates/runvil-internal/prompt", "crates/runvil-internal/vfs", "crates/runvil-internal/model-client", "crates/workshop/desktop", "crates/workshop/server", "crates/workshop/server-api", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/workshop/plugin-std", "crates/workshop/plugin-bashkit", "crates/harness-internal/runner", "crates/harness-internal/plugin-loader", "crates/harness-internal/test-plugin"]
-# crates/runvil-internal, crates/workshop, and crates/harness-internal
-# are manifestless containers holding their families' private crates.
+members = ["crates/*", "crates/workshop/desktop", "crates/workshop/server", "crates/workshop/server-api", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/workshop/plugin-std", "crates/workshop/plugin-bashkit"]
+# crates/workshop is a manifestless container holding Workshop's crates.
 # Cargo prunes excluded subtrees from member globs, so a "crates/workshop/*"
 # glob beside the exclude below would match nothing; the container crates
 # are enumerated explicitly instead.
-exclude = ["crates/runvil-internal", "crates/workshop", "crates/harness-internal"]
-# Plain `cargo build`/`cargo test` build the Engine and its facades: they
-# compile on a fresh macOS or Linux clone with no native toolkit, no
-# CUDA, and no Tauri system packages. The desktop app is an explicit
-# choice: `cargo build -p workshop`.
-default-members = ["crates/runvil", "crates/runvil-engine", "crates/runvil-plugin", "crates/harness-gateway-client"]
+exclude = ["crates/workshop"]
+# Plain `cargo build`/`cargo test` build every crate but the desktop app,
+# the server it embeds, and the server's facade: the rest compile on a
+# fresh macOS or Linux clone with no Node install and no Tauri system
+# packages. The desktop app is an explicit choice: `cargo build -p workshop`.
+default-members = ["crates/build-ui", "crates/build-user-guide", "crates/build-workshop", "crates/build-xtask", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/workshop/plugin-std", "crates/workshop/plugin-bashkit"]
 
 [workspace.package]
 version = "0.3.0"
 edition = "2024"
-# The Engine crates' floor, which CI's msrv job builds them at:
-# `runvil-lua` calls the atomics' `try_update`, stable since 1.95.
-rust-version = "1.95"
 license = "BSL-1.0"
 repository = "https://github.com/cppalliance/runvil"
 
 [workspace.dependencies]
 base64 = "0.22"
-bytes = "1"
-runvil-engine = { path = "crates/runvil-engine" }
-runvil-runtime = { path = "crates/runvil-internal/runtime" }
-runvil-plugin = { path = "crates/runvil-plugin" }
-# The C Plugin contract, version 0.4, from its own repository, pinned by
-# commit. `version` beside `git` keeps cargo-deny's wildcard check quiet.
-runvil-plugin-sys = { version = "0.4.0", git = "https://github.com/cppalliance/runvil-plugin-api", rev = "03a9fa37d2fe690d42ee0aa5c7a8289173e8e0f2" }
-# The safe layer over that contract, at the same commit. Only the library
-# Plugin crates under `crates/workshop/` name it, for `export_plugin!`.
+# The Engine and the Harness, from their own repository, pinned by commit:
+# the `runvil` facade, which is the one crate a Host depends on, the
+# standard Gateway client, and the two Rust Plugins that Workshop links
+# in. All four name one commit, because two commits would be two copies
+# of every type the crates share. `version` beside `git` keeps cargo-deny's
+# wildcard check quiet.
+runvil = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "732429962c5873458213bb0072a0828a40ee4fb6" }
+harness-gateway-client = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "732429962c5873458213bb0072a0828a40ee4fb6" }
+plugin-web = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "732429962c5873458213bb0072a0828a40ee4fb6" }
+plugin-mcp = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "732429962c5873458213bb0072a0828a40ee4fb6" }
+# The safe layer over the C Plugin contract, version 0.4, from its own
+# repository, pinned by commit. Only the library Plugin crates under
+# `crates/workshop/` name it, for `export_plugin!`. The commit is the one
+# runvil-harness pins the contract's `runvil-plugin-sys` at: that crate
+# sets `links`, so Cargo refuses two commits of the contract in one build.
 runvil-plugin-sdk = { version = "0.4.0", git = "https://github.com/cppalliance/runvil-plugin-api", rev = "03a9fa37d2fe690d42ee0aa5c7a8289173e8e0f2" }
 # The std Plugin, from its own repository, pinned by commit, which must be
 # built against the contract commit above. default-features off drops its
@@ -47,19 +49,7 @@ std-plugin = { package = "plugin-std", version = "0.1.0", git = "https://github.
 # `std-plugin`: the crate's own library has the name of the file Workshop
 # ships, `plugin_bashkit`.
 bashkit-plugin = { package = "plugin-bashkit", version = "0.1.0", git = "https://github.com/cppalliance/runvil-plugin-bashkit", rev = "0864f1ff9cc1f4fad6c96f1e9f6d8a3ab85e9580", default-features = false }
-runvil-types = { path = "crates/runvil-internal/types" }
 workshop-gateway-discovery = { path = "crates/workshop/gateway-discovery" }
-runvil = { path = "crates/runvil" }
-harness-gateway-client = { path = "crates/harness-gateway-client" }
-harness-runner = { path = "crates/harness-internal/runner" }
-harness-plugin-loader = { path = "crates/harness-internal/plugin-loader" }
-plugin-web = { path = "crates/plugin-web" }
-plugin-mcp = { path = "crates/plugin-mcp" }
-runvil-lua = { path = "crates/runvil-internal/lua" }
-runvil-markdown = { path = "crates/runvil-internal/markdown" }
-runvil-model-client = { path = "crates/runvil-internal/model-client" }
-runvil-prompt = { path = "crates/runvil-internal/prompt" }
-runvil-vfs = { path = "crates/runvil-internal/vfs" }
 workshop-server = { path = "crates/workshop/server" }
 workshop-server-api = { path = "crates/workshop/server-api" }
 workshop-gateway = { path = "crates/workshop/gateway" }
@@ -74,12 +64,10 @@ workshop-agents = { path = "crates/workshop/agents" }
 workshop-user-state = { path = "crates/workshop/user-state" }
 workshop-plugin-std = { path = "crates/workshop/plugin-std" }
 workshop-plugin-bashkit = { path = "crates/workshop/plugin-bashkit" }
-# default-features off: both users (the parser and build-xtask's doctest
-# scan) read only the core event stream, never the `html` renderer or the
-# `getopts` binary.
+# default-features off: build-xtask's doctest scan reads only the core
+# event stream, never the `html` renderer or the `getopts` binary.
 pulldown-cmark = { version = "0.12", default-features = false }
 serde = { version = "1", features = ["derive"] }
-serde_yaml_ng = "0.10"
 # `float_roundtrip` makes `from_str` reproduce the exact `f64` that
 # `to_string` printed, so a payload the run log stores reads back bit-for-bit.
 serde_json = { version = "1", features = ["float_roundtrip"] }
@@ -92,48 +80,30 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 # `system-proxy` makes reqwest honor Windows registry and macOS proxies.
 reqwest = { version = "0.13", default-features = false, features = ["json", "query", "rustls", "stream", "system-proxy"] }
 rand = "0.9"
-readabilityrs = "0.1"
-htmd = "0.5"
-mime = "0.3"
-encoding_rs = "0.8"
 url = "2"
 # Percent-decoding for path parameters; already in the tree as url's own core.
 percent-encoding = "2"
-ipnet = "2"
 dunce = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time", "sync"] }
 thiserror = "2"
 anyhow = "1"
 axum = { version = "0.8", features = ["multipart", "ws"] }
-# Pinned to 3.9.0, which fixes RUSTSEC-2026-0457, -0461, and -0462. `plugin-mcp`
-# was written against 3.5.1 (its `ClientConfig` handler,
-# `send_cancellable_request`, and `RequestHandle` fields). default-features off
-# drops `server` and `macros`; `base64` still arrives through `client-side-sse`,
-# which `transport-streamable-http-client` turns on. Each crate that uses it
-# names the features it needs.
-rmcp = { version = "=3.9.0", default-features = false }
 # 0.29 rather than the newer 0.30 so the resolver unifies with the copy axum's
 # `ws` feature already pulls in, instead of compiling two.
 tokio-tungstenite = "0.29"
 async-trait = "0.1"
-flate2 = "1"
 futures-util = "0.3"
-mlua = { version = "0.12", features = ["lua55", "vendored", "serialize", "send"] }
 # 1.x rather than 0.8 so the resolver unifies with the copy tauri-utils
 # already pulls in, instead of compiling two toml lines (and the 0.8 line's
 # exclusive toml_edit 0.19 and winnow 0.5 tail).
 toml = "1"
-# Parses the facades' source for build-xtask's shape check;
-# `full` is the feature that parses items and `use` trees. 3 is the newest
-# major the lockfile already carries.
+# Parses each crate's sources for build-xtask's structural checks; `full`
+# is the feature that parses items. 3 is the newest major the lockfile
+# already carries.
 syn = { version = "3", features = ["full"] }
 # `span-locations` makes a span parsed outside a proc macro report its line,
-# which the shape check prints with every violation.
+# which the structural checks print with every violation.
 proc-macro2 = { version = "1", features = ["span-locations"] }
-# The rustdoc JSON model `cargo xtask api` reads. Exact pin: each release
-# matches one `format_version`, so it moves only together with the pinned
-# nightly in build-xtask's `api/toolchain.rs`.
-rustdoc-types = "=0.61.0"
 tracing = "0.1"
 tower = { version = "0.5", features = ["util"] }
 arc-swap = "1"
@@ -150,7 +120,6 @@ tempfile = "3"
 # C build in a serve path), and `fts` is unused; the workspace schema is
 # three plain tables.
 turso = { version = "=0.7.2", default-features = false }
-time = { version = "0.3", features = ["formatting"] }
 sha2 = "0.11"
 # `cargo workshop manifest` checks each updater signature as the Tauri
 # updater does; 0.2.5 is the copy tauri-plugin-updater already pulls in.
@@ -158,8 +127,6 @@ minisign-verify = "0.2.5"
 # Signs the manifest tests' fixtures with a key generated per run. A
 # dev-dependency only: the release key never leaves CI.
 minisign = "0.9"
-# Loads plugin dynamic libraries without linking them into Cargo builds.
-libloading = "0.8"
 socket2 = { version = "0.6", features = ["all"] }
 # Cross-platform Ctrl-C handling for the Workshop build orchestrator.
 ctrlc = "3.5"
@@ -167,11 +134,6 @@ ctrlc = "3.5"
 # detection; both are already in the tree transitively.
 libc = "0.2"
 windows-sys = { version = "0.61", default-features = false }
-# Benchmark framework for the executor and Lua-boundary benches; dev-only.
-criterion = "0.5"
-# The Engine's GetDynamicTools pattern search; already in the tree through
-# criterion, readabilityrs, and turso.
-regex = "1"
 # Tauri v2 desktop framework for workshop. tauri is pinned to the
 # minor because `with_webview` exposes webview2-com/webkit2gtk types that may
 # shift in a Tauri minor release (the upstream guidance for `with_webview`).

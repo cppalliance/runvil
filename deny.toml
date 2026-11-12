@@ -71,13 +71,15 @@ crate = "serde_json"
 deny = ["preserve_order"]
 
 [sources]
-# Only crates.io is an allowed registry. The three git sources are the C
-# Plugin contract's own repository, the std Plugin's, and the bashkit
-# Plugin's, each of which Cargo.toml pins by commit.
+# Only crates.io is an allowed registry. The four git sources are the
+# repository of the Engine and the Harness, the C Plugin contract's own
+# repository, the std Plugin's, and the bashkit Plugin's, each of which
+# Cargo.toml pins by commit.
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
+    "https://github.com/cppalliance/runvil-harness",
     "https://github.com/cppalliance/runvil-plugin-api",
     "https://github.com/cppalliance/runvil-plugin-std",
     "https://github.com/cppalliance/runvil-plugin-bashkit",

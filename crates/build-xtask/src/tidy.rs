@@ -1,10 +1,6 @@
 //! Tidy-style architecture checks for the workshop server decomposition,
-//! the Harness family, the sans-I/O Engine (dependency guard, clippy
-//! guard, and `test-support` leak guard, run from `engine_guards`), the
-//! `runvil-engine` and `runvil` facades' source shape (run from
-//! `facade_shape`), the `doc(hidden)` ban over both facades and their
-//! containers (run from `doc_hidden`), the doctest ban over every
-//! workspace crate (run from `no_doctests`), the `Debug` trait's one
+//! the product boundary (run from `product`), the doctest ban over
+//! every workspace crate (run from `no_doctests`), the `Debug` trait's one
 //! spelling over every workspace crate (run from `debug_spelling`), the
 //! unsafe allowlist (run from `unsafe_allowlist`), and the type-size
 //! limits over every workspace crate (run from `type_size`).
@@ -55,9 +51,8 @@ const FEATURES: &[Tiered] = &[
 const SERVER: &[Tiered] = &[("workshop-server", "server")];
 
 /// Marker in a crate's `lib.rs` (or `main.rs`) crate docs. Mandatory for
-/// every `workshop-*`, `harness-*`, and `plugin-*` crate (see
-/// [`family_requires_marker`]);
-/// optional on any other crate. The `new-crate` scaffolder emits it.
+/// every `workshop-*` crate (see [`family_requires_marker`]); optional on
+/// any other crate. The `new-crate` scaffolder emits it.
 const INVARIANT_MARKER: &str = "//! ## Invariants";
 
 /// Runs every check and returns all violations.
@@ -68,13 +63,6 @@ pub(crate) fn all_violations(root: &Path) -> Vec<String> {
     violations.extend(lint_inheritance_violations(root));
     violations.extend(crate::unsafe_allowlist::unsafe_allowlist_violations(root));
     violations.extend(crate::product::product_boundary_violations(root));
-    violations.extend(crate::harness_bans::harness_tokio_bans(
-        &root.join("crates").join("harness-internal"),
-        &root.join("crates").join("runvil"),
-    ));
-    violations.extend(crate::engine_guards::engine_guard_violations(root));
-    violations.extend(crate::facade_shape::facade_shape_violations(root));
-    violations.extend(crate::doc_hidden::doc_hidden_violations(root));
     violations.extend(crate::no_doctests::no_doctests_violations(root));
     violations.extend(crate::debug_spelling::debug_spelling_violations(root));
     violations.extend(crate::type_size::type_size_violations(root));
@@ -244,7 +232,7 @@ fn lint_inheritance_violations(root: &Path) -> Vec<String> {
     violations
 }
 
-/// Check that every crate the families bind by name has the marker.
+/// Check that every `workshop-*` crate has the marker.
 ///
 /// A manifest the walk could not read, parse, or find a package name in is
 /// reported as itself, not skipped: a crate with no readable name cannot be
@@ -259,7 +247,7 @@ fn marker_violations(root: &Path) -> Vec<String> {
         if family_requires_marker(&krate.package) && !has_marker(&root.join(&krate.dir)) {
             violations.push(format!(
                 "{}: src/lib.rs lacks the `{INVARIANT_MARKER}` marker required of every \
-                 workshop-*, harness-*, and plugin-* crate",
+                 workshop-* crate",
                 krate.package
             ));
         }
@@ -267,15 +255,11 @@ fn marker_violations(root: &Path) -> Vec<String> {
     violations
 }
 
-/// Whether a package name places the crate in a family that must have the
-/// marker: `workshop-*`, `harness-*`, and `plugin-*`. The Tauri desktop app
-/// (the `workshop` package) and the `runvil` facade fall outside every
-/// prefix, so they are exempt.
+/// Whether a package name places the crate in the family that must have
+/// the marker: `workshop-*`. The Tauri desktop app (the `workshop`
+/// package) falls outside the prefix, so it is exempt.
 fn family_requires_marker(name: &str) -> bool {
-    name != "workshop"
-        && ["workshop-", "harness-", "plugin-"]
-            .iter()
-            .any(|prefix| name.starts_with(prefix))
+    name.starts_with("workshop-")
 }
 
 /// Whether a crate's `lib.rs` or `main.rs` crate docs have the marker.

@@ -18,11 +18,9 @@ use syn::{Meta, Token};
 
 /// The crate directories, relative to the workspace root, that own an
 /// unsafe boundary and may relax `unsafe_code` in the module that holds it.
-const OWNED: [&str; 4] = [
+const OWNED: [&str; 2] = [
     "crates/workshop/desktop",
     "crates/workshop/gateway-discovery",
-    "crates/harness-internal/plugin-loader",
-    "crates/harness-internal/test-plugin",
 ];
 
 /// Runs the allowlist over every `.rs` file in every workspace crate
@@ -105,7 +103,7 @@ fn source_violations(file: &Path, text: &str) -> Vec<String> {
 /// Walks `tokens` at every depth, macro bodies included, and records the
 /// line of each `#[...]` or `#![...]` attribute that expects or allows a
 /// lint `is_lint` accepts.
-pub(crate) fn collect_relaxations(
+fn collect_relaxations(
     tokens: TokenStream,
     is_lint: &dyn Fn(&syn::Path) -> bool,
     lines: &mut Vec<usize>,

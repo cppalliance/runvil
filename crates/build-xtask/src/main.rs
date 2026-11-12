@@ -5,24 +5,13 @@
 //! - Tier: tooling. The tidy-style
 //!   architecture checks run as tests (`cargo test -p build-xtask`);
 //!   `cargo xtask tidy` prints the same report on demand.
-//! - `cargo xtask api` reads rustdoc JSON, so it runs only on the nightly
-//!   pinned in `api/toolchain.rs`; its fixtures that build rustdoc JSON are
-//!   `#[ignore]`d on stable.
 
-mod api;
 mod debug_spelling;
-mod doc_hidden;
-mod engine_clippy;
-mod engine_deps;
-mod engine_guards;
-mod facade_shape;
-mod harness_bans;
 mod manifest;
 mod new_crate;
 mod no_doctests;
 mod product;
 mod site;
-mod test_support_leak;
 mod tidy;
 mod type_size;
 mod unsafe_allowlist;
@@ -50,7 +39,6 @@ fn main() -> ExitCode {
             },
             None => usage(),
         },
-        Some("api") => api::run(root, &args[2..]),
         Some("site") => site::run(
             root,
             std::env::var_os(site::DOCS_VAR).as_deref(),
@@ -75,7 +63,6 @@ fn main() -> ExitCode {
 fn usage() -> ExitCode {
     eprintln!(
         "usage: cargo xtask new-crate <workshop-name> | cargo xtask tidy | \
-         cargo +<pinned nightly> xtask api [--check | --bless] | \
          cargo xtask site [--books-only]"
     );
     ExitCode::from(2)

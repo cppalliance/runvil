@@ -48,7 +48,9 @@ pub(crate) const DOCS_VAR: &str = "RUNVIL_DOCS";
 
 /// The rustdoc sites: the folder under `target/site/`, the crate it
 /// documents, with default features, the facade as dependents read it, and
-/// the few broad words its landing row shows under Covers.
+/// the few broad words its landing row shows under Covers. The crates come
+/// from runvil-harness, so each site documents the commit the root
+/// `Cargo.toml` pins.
 const RUSTDOC_SITES: [(&str, &str, &str); 5] = [
     (
         "runvil-engine",

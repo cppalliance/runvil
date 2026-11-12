@@ -70,48 +70,36 @@ fn write_crate(root: &Path, dir: &str, name: &str, lib_docs: &str) {
     std::fs::write(src.join("lib.rs"), lib_docs).expect("lib.rs writes");
 }
 
-const MARKED: &str = "//! Effect loop.\n//!\n//! ## Invariants\n//!\n//! - none\n";
-const UNMARKED: &str = "//! Effect loop, with no invariants block.\n";
+const MARKED: &str = "//! Status bar.\n//!\n//! ## Invariants\n//!\n//! - none\n";
+const UNMARKED: &str = "//! Status bar, with no invariants block.\n";
 
 #[test]
-fn a_harness_crate_without_the_marker_is_a_violation() {
+fn a_workshop_crate_without_the_marker_is_a_violation() {
     let root = tempfile::TempDir::new().expect("tempdir");
-    write_crate(root.path(), "harness/runner", "harness-runner", UNMARKED);
+    write_crate(root.path(), "workshop/status", "workshop-status", UNMARKED);
     let violations = marker_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations[0].contains("harness-runner") && violations[0].contains(INVARIANT_MARKER),
+        violations[0].contains("workshop-status") && violations[0].contains(INVARIANT_MARKER),
         "the crate and the missing marker are named: {violations:?}"
     );
 }
 
 #[test]
-fn a_plugin_crate_without_the_marker_is_a_violation() {
+fn a_workshop_crate_whose_manifest_has_no_package_name_is_reported_not_skipped() {
     let root = tempfile::TempDir::new().expect("tempdir");
-    write_crate(root.path(), "plugin-web", "plugin-web", UNMARKED);
-    let violations = marker_violations(root.path());
-    assert_eq!(violations.len(), 1, "{violations:?}");
-    assert!(
-        violations[0].contains("plugin-web") && violations[0].contains(INVARIANT_MARKER),
-        "the crate and the missing marker are named: {violations:?}"
-    );
-}
-
-#[test]
-fn a_harness_crate_whose_manifest_has_no_package_name_is_reported_not_skipped() {
-    let root = tempfile::TempDir::new().expect("tempdir");
-    write_crate(root.path(), "harness/runner", "harness-runner", UNMARKED);
+    write_crate(root.path(), "workshop/status", "workshop-status", UNMARKED);
     let manifest = root
         .path()
         .join("crates")
-        .join("harness")
-        .join("runner")
+        .join("workshop")
+        .join("status")
         .join("Cargo.toml");
     std::fs::write(&manifest, "[lints]\nworkspace = true\n").expect("the manifest rewrites");
     let violations = marker_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations[0].contains("runner") && violations[0].contains("no package name"),
+        violations[0].contains("status") && violations[0].contains("no package name"),
         "the directory and the failure mode are named: {violations:?}"
     );
 }
@@ -145,9 +133,9 @@ fn the_workshop_desktop_app_without_the_marker_passes() {
 }
 
 #[test]
-fn an_unmarked_crate_outside_the_families_is_left_alone() {
+fn an_unmarked_crate_outside_the_workshop_family_is_left_alone() {
     let root = tempfile::TempDir::new().expect("tempdir");
-    write_crate(root.path(), "runvil-internal/vfs", "runvil-vfs", UNMARKED);
+    write_crate(root.path(), "build-ui", "build-ui", UNMARKED);
     assert!(marker_violations(root.path()).is_empty());
 }
 
@@ -165,8 +153,8 @@ fn write_root_manifest(root: &Path) {
 fn crates_that_inherit_the_workspace_lints_pass_with_or_without_the_marker() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_root_manifest(root.path());
-    write_crate(root.path(), "runvil-internal/vfs", "runvil-vfs", UNMARKED);
-    write_crate(root.path(), "harness/runner", "harness-runner", MARKED);
+    write_crate(root.path(), "build-ui", "build-ui", UNMARKED);
+    write_crate(root.path(), "workshop/status", "workshop-status", MARKED);
     let violations = lint_inheritance_violations(root.path());
     assert!(violations.is_empty(), "{violations:?}");
 }
@@ -175,20 +163,19 @@ fn crates_that_inherit_the_workspace_lints_pass_with_or_without_the_marker() {
 fn an_unmarked_crate_with_its_own_lint_table_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_root_manifest(root.path());
-    write_crate(root.path(), "runvil-internal/vfs", "runvil-vfs", UNMARKED);
+    write_crate(root.path(), "build-ui", "build-ui", UNMARKED);
     std::fs::write(
         root.path()
             .join("crates")
-            .join("runvil-internal")
-            .join("vfs")
+            .join("build-ui")
             .join("Cargo.toml"),
-        "[package]\nname = \"runvil-vfs\"\n[lints.clippy]\npedantic = \"warn\"\n",
+        "[package]\nname = \"build-ui\"\n[lints.clippy]\npedantic = \"warn\"\n",
     )
     .expect("the manifest rewrites");
     let violations = lint_inheritance_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations[0].contains("vfs") && violations[0].contains("[lints] workspace = true"),
+        violations[0].contains("build-ui") && violations[0].contains("[lints] workspace = true"),
         "every crate, not only a marked one, must inherit: {violations:?}"
     );
 }
@@ -210,7 +197,7 @@ fn a_lint_inheritance_scan_that_finds_no_crate_fails() {
 fn a_crate_whose_manifest_does_not_parse_is_held_to_lint_inheritance_not_skipped() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_root_manifest(root.path());
-    write_crate(root.path(), "runvil-internal/vfs", "runvil-vfs", UNMARKED);
+    write_crate(root.path(), "build-ui", "build-ui", UNMARKED);
     let dir = root.path().join("crates").join("broken");
     std::fs::create_dir_all(&dir).expect("the crate directory creates");
     std::fs::write(dir.join("Cargo.toml"), "not [valid toml").expect("the manifest writes");
