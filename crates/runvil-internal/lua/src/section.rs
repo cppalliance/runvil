@@ -3,6 +3,8 @@
 //! sections `require` loads.
 
 use std::num::NonZeroU32;
+use std::ops::Range;
+use std::sync::Arc;
 
 use mlua::{MultiValue, Value};
 
@@ -62,13 +64,46 @@ pub(crate) fn resolve_section_target(value: Value) -> mlua::Result<String> {
     }
 }
 
-/// What a prompt read sees of one section.
+/// What a prompt read sees of one section: its own raw Markdown, read in
+/// place from the prompt text the run shares, so a read copies only what
+/// it returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SectionText {
-    /// The section's own raw Markdown.
-    pub markdown: String,
+    /// The text the Markdown is a stretch of.
+    text: Arc<str>,
+    /// The bytes of `text` the Markdown covers.
+    range: Range<usize>,
+    /// The line of the prompt file the Markdown starts on.
+    line: NonZeroU32,
     /// Its pre-parsed list items; empty for a section that isn't a list.
     pub items: Vec<String>,
+}
+
+impl SectionText {
+    /// A section's Markdown: the bytes `range` of `text`, which start on
+    /// `line` of the prompt file, and the section's list `items`.
+    #[must_use]
+    pub fn new(text: Arc<str>, range: Range<usize>, line: NonZeroU32, items: Vec<String>) -> Self {
+        Self {
+            text,
+            range,
+            line,
+            items,
+        }
+    }
+
+    /// The section's own raw Markdown. A range that does not lie in the
+    /// text reads as empty.
+    #[must_use]
+    pub fn markdown(&self) -> &str {
+        self.text.get(self.range.clone()).unwrap_or_default()
+    }
+
+    /// The line of the prompt file the Markdown starts on.
+    #[must_use]
+    pub fn line(&self) -> NonZeroU32 {
+        self.line
+    }
 }
 
 /// What a prompt read found for a well-formed path.

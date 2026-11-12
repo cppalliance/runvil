@@ -21,6 +21,14 @@ impl BodyText {
         &self.text[self.range.clone()]
     }
 
+    /// The shared copy this stretch reads from, and the bytes of it the
+    /// stretch covers: what a holder keeps to read the text later without
+    /// copying it.
+    #[must_use]
+    pub fn shared(&self) -> (Arc<str>, Range<usize>) {
+        (Arc::clone(&self.text), self.range.clone())
+    }
+
     /// Locates `part` inside `text` by its byte offset.
     ///
     /// Returns `None` when `part` is not a subslice of `text`.

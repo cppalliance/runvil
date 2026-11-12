@@ -507,10 +507,13 @@ fn a_prompt_read_says_which_library_made_it() {
                     "no `{path}` for {reader}"
                 )))
             } else {
-                SectionRead::Found(SectionText {
-                    markdown: format!("{path} for {reader}"),
-                    items: vec!["one".to_owned()],
-                })
+                let markdown = format!("{path} for {reader}");
+                SectionRead::Found(SectionText::new(
+                    Arc::from(markdown.as_str()),
+                    0..markdown.len(),
+                    NonZeroU32::MIN,
+                    vec!["one".to_owned()],
+                ))
             };
             log.lock()
                 .expect("the reads lock must not be poisoned")

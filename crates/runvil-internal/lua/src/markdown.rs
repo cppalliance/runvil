@@ -14,11 +14,14 @@
 //! (`blocks`), reads a list of blocks the author passes (`walk`), and
 //! runs the lookups over those tables (`lookup`). Every function is pure,
 //! and a lookup returns the tables that are already inside the list it
-//! was given.
+//! was given. The `prompt` reads take the same selector and index, read by
+//! [`Selection`], over the blocks of one section of the running prompt.
 
 mod blocks;
 mod lookup;
 mod walk;
+
+pub(crate) use blocks::block_table;
 
 use mlua::{Lua, LuaSerdeExt, LuaString, MultiValue, Table, Value};
 use runvil_markdown::{Path, Pick, Selector, pick};

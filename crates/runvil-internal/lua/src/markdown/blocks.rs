@@ -31,7 +31,7 @@ pub(super) fn list_table(lua: &Lua, blocks: &[Block]) -> mlua::Result<Table> {
 /// # Errors
 /// Returns the Lua failure of building a table, the memory limit's among
 /// them.
-pub(super) fn block_table(lua: &Lua, block: &Block) -> mlua::Result<Table> {
+pub(crate) fn block_table(lua: &Lua, block: &Block) -> mlua::Result<Table> {
     let table = lua.create_table()?;
     table.raw_set("kind", block.kind().name())?;
     table.raw_set("line", block.line())?;

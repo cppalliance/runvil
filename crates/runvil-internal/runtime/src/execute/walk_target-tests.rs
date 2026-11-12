@@ -92,7 +92,7 @@ fn a_jump_from_the_h1_lands_on_a_top_level_section_and_never_descends() {
 /// its not-found error.
 fn read(prompt: &Prompt, origin: Origin<'_>, path: &str) -> std::result::Result<String, String> {
     match read_section(path, prompt, origin, None).expect("the path is well-formed") {
-        SectionRead::Found(text) => Ok(text.markdown),
+        SectionRead::Found(text) => Ok(text.markdown().to_owned()),
         SectionRead::Missing(error) => Err(error.to_string()),
     }
 }
@@ -140,7 +140,7 @@ fn a_path_in_a_librarys_code_starts_at_the_library_whatever_section_is_running()
         let sibling = resolve_jump_target("../Lib", &prompt, origin, from).expect("a sibling");
         assert_eq!(sibling.pos, at(&prompt, "/Lib"));
         let text = read_section("Helpers", &prompt, origin, from).expect("a well-formed path");
-        assert!(matches!(text, SectionRead::Found(text) if text.markdown == "x"));
+        assert!(matches!(text, SectionRead::Found(text) if text.markdown() == "x"));
         let miss = read_section("Niece", &prompt, origin, from).expect("a well-formed path");
         let SectionRead::Missing(error) = miss else {
             panic!("the library has no such child");

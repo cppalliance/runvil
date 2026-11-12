@@ -26,6 +26,7 @@ pub fn synthetic_section(name: &str, level: u8, blocks: Vec<Block>) -> Section {
         children: Vec::new(),
         items: Vec::new(),
         markdown: BodyText::from_owned(String::new()),
+        markdown_line: NonZeroU32::MIN,
     }
 }
 

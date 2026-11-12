@@ -174,16 +174,15 @@ impl<'a> SectionWalker<'a> {
             self.check_unique_sibling(&sibling_lines, &name, h, heading_abs_line)?;
             sibling_lines.push((name.clone(), heading_abs_line));
 
+            let markdown = fence::trim_leading_blank_lines(h.content).trim_end();
             result.push(Section {
                 name,
                 level,
                 blocks,
                 children,
                 items,
-                markdown: body_text(
-                    self.shared,
-                    fence::trim_leading_blank_lines(h.content).trim_end(),
-                )?,
+                markdown: body_text(self.shared, markdown)?,
+                markdown_line: file_line_of(self.shared, markdown, self.frontmatter_lines)?,
             });
         }
         Ok(result)

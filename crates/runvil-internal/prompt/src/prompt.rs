@@ -48,6 +48,8 @@ pub struct Section {
     pub(crate) items: Vec<BodyText>,
     /// The section's own raw Markdown, without its heading line or children.
     pub(crate) markdown: BodyText,
+    /// The 1-based line of the prompt file that `markdown` starts on.
+    pub(crate) markdown_line: NonZeroU32,
 }
 
 impl Section {
@@ -86,6 +88,20 @@ impl Section {
     #[must_use]
     pub fn markdown(&self) -> &str {
         self.markdown.as_str()
+    }
+
+    /// The section's own raw Markdown as a stretch of the shared prompt
+    /// text, which a reader takes without copying it.
+    #[must_use]
+    pub fn markdown_text(&self) -> &BodyText {
+        &self.markdown
+    }
+
+    /// The 1-based line of the prompt file that the section's own raw
+    /// Markdown starts on.
+    #[must_use]
+    pub fn markdown_line(&self) -> NonZeroU32 {
+        self.markdown_line
     }
 
     /// The prologue: the first block, when it is Lua.

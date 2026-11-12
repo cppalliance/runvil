@@ -152,6 +152,12 @@ fn section_markdown_is_the_sections_own_content() {
     );
     assert_eq!(section.children[0].markdown(), "child text");
     assert_eq!(prompt.sections[1].markdown(), "");
+    // The Markdown starts on a line of the file, after the frontmatter,
+    // the heading, and the blank lines under it.
+    assert_eq!(section.markdown_line().get(), 11);
+    assert_eq!(section.children[0].markdown_line().get(), 25);
+    let (shared, range) = section.markdown_text().shared();
+    assert_eq!(&shared[range], own, "the stretch reads in place");
 }
 
 #[test]
