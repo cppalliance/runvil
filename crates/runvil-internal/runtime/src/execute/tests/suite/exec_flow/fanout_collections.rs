@@ -16,7 +16,7 @@ fn fanout_returns_structured_results() {
         .section(
             "Parent",
             "
-            local r = tasks.fanout('Worker', prompt.list('Items'))
+            local r = tasks.fanout('Worker', prompt.section('Items', 'list').items)
             assert(r[1].text == 'alpha-1')
             assert(r[1].ok == true)
             assert(r[1].item == 'alpha')
@@ -49,7 +49,7 @@ fn off_walk_worker_runs_as_a_fanout_arm() {
         .section(
             "Parent",
             "
-            local r = tasks.fanout('Worker', prompt.list('Items'))
+            local r = tasks.fanout('Worker', prompt.section('Items', 'list').items)
             return r[1].text .. ',' .. r[2].text",
         )
         .prose("### Worker", "---\n\n```lua\nreturn item .. '-done'\n```")
@@ -135,9 +135,9 @@ fn fanout_collection_hash_members_arrive_as_pair_tables() {
     assert_eq!(Scenario::new(source).run().text(), "ok");
 }
 
-/// An empty collection is an error: no work is likely a bug (a list section
-/// that parsed empty, a wrong variable), so the fanout is rejected before
-/// any scheduling rather than returning zero results.
+/// An empty collection is an error: no work is likely a bug, such as a
+/// wrong variable, so the fanout is rejected before any scheduling rather
+/// than returning zero results.
 #[test]
 fn fanout_collection_empty_errors() {
     let trace = Scenario::new(item_worker("tasks.fanout('Worker', {})")).run();
@@ -250,9 +250,10 @@ fn fanout_niece_worker_is_not_visible() {
     );
 }
 
-/// The two-string form errors at the boundary, pointing at `prompt.list`.
+/// The two-string form errors at the boundary, and the error says how to
+/// read the items of a list in a section.
 #[test]
-fn fanout_string_second_parameter_errors_pointing_at_prompt_list() {
+fn fanout_string_second_parameter_errors_naming_the_read_that_gives_a_lists_items() {
     let source = PromptSource::new()
         .section("Parent", "tasks.fanout('Worker', 'Items')")
         .section("### Worker", "return item")
@@ -260,12 +261,11 @@ fn fanout_string_second_parameter_errors_pointing_at_prompt_list() {
     let trace = Scenario::new(source.build()).run();
     let rendered = trace.error().to_string();
     assert!(
-        rendered.contains("tasks.fanout's second parameter is a collection"),
+        rendered.contains(
+            "tasks.fanout's second parameter is a collection, got string; for the items of a \
+             list in a section, pass prompt.section(path, \"list\").items"
+        ),
         "error was: {rendered}"
-    );
-    assert!(
-        rendered.contains("prompt.list(path)"),
-        "the error must point at prompt.list: {rendered}"
     );
 }
 
@@ -312,18 +312,25 @@ fn fanout_table_keyed_member_errors() {
     );
 }
 
-/// A list section is not a worker template; naming one as the worker errors.
+/// A section that holds only a list is an ordinary section: named as the
+/// worker or by `call`, it is entered like any section with no Lua, and it
+/// runs nothing of its own.
 #[test]
-fn fanout_worker_that_is_a_list_section_errors() {
+fn a_section_that_holds_only_a_list_runs_as_a_worker_with_nothing_to_run() {
     let source = PromptSource::new()
-        .section("Parent", "tasks.fanout('Items', {'x'})")
-        .prose("### Items", "- a\n- b");
-    let trace = Scenario::new(source.build()).run();
-    let error = trace.error();
-    assert!(
-        error
-            .to_string()
-            .contains("is a list section, not a worker template"),
-        "error was: {error}"
+        .section(
+            "Parent",
+            "
+            local arms = tasks.fanout('Items', {'x', 'y'})
+            local called = call('Items')
+            return #arms .. '|' .. tostring(arms[1]) .. '|' .. tostring(arms[2].ok) .. '|'
+              .. tostring(called) .. '|' .. table.concat(prompt.section('Items', 'list').items, ',')",
+        )
+        .prose("### Items", "- a\n-\n- b");
+    assert_eq!(
+        Scenario::new(source.build()).run().text(),
+        "2||true||a,,b",
+        "each arm and the call run no Lua and reply nothing, and the list still reads, a bullet \
+         with no content as the empty item"
     );
 }

@@ -676,7 +676,6 @@ pub runvil::ErrorCode::InvalidRange = 608
 pub runvil::ErrorCode::InvalidValue = 106
 pub runvil::ErrorCode::Io = 618
 pub runvil::ErrorCode::IsADirectory = 604
-pub runvil::ErrorCode::ListEmptyItem = 104
 pub runvil::ErrorCode::LuaCompile = 202
 pub runvil::ErrorCode::LuaQuota = 203
 pub runvil::ErrorCode::LuaRuntime = 201

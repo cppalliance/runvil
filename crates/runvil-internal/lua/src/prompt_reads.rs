@@ -6,9 +6,9 @@
 //! Markdown is parsed by the rules `markdown.parse` follows, with `line`
 //! counting lines of the prompt file. Both forms raise when the section
 //! or the block is not there. `prompt.section_or` is the same read, and
-//! returns nil for that miss. `prompt.list(path)` returns a list section's
-//! items. All of them raise for a path the caller's reader refuses, for a
-//! target that is not a string, and for a malformed selector or index.
+//! returns nil for that miss. Both raise for a path the caller's reader
+//! refuses, for a target that is not a string, and for a malformed
+//! selector or index.
 //!
 //! The reader looks a path up from a place: the library whose code made
 //! the read, or the section that is running when a section's own code
@@ -63,22 +63,10 @@ where
     E: std::error::Error + Send + Sync + 'static,
 {
     let section = reader(lua, read, from.clone(), "prompt.section", true)?;
-    let section_or = reader(lua, read, from.clone(), "prompt.section_or", false)?;
-    let read = Arc::clone(read);
-    let list = lua.create_function(move |lua, target: Value| {
-        let path = resolve_section_target(target)?;
-        match read(path.clone(), from.clone()).map_err(mlua::Error::external)? {
-            SectionRead::Missing(_) => Ok(Value::Nil),
-            SectionRead::Found(text) if text.items.is_empty() => Err(mlua::Error::external(
-                format!("section `{}` has no pre-parsed items", path.trim()),
-            )),
-            SectionRead::Found(text) => pack_sequence(lua, text.items).map(Value::Table),
-        }
-    })?;
+    let section_or = reader(lua, read, from, "prompt.section_or", false)?;
     let prompt = lua.create_table()?;
     prompt.raw_set("section", section)?;
     prompt.raw_set("section_or", section_or)?;
-    prompt.raw_set("list", list)?;
     Ok(prompt)
 }
 
@@ -157,13 +145,4 @@ fn own_selection(function: &str, selector: &Value, n: &Value) -> mlua::Result<Op
 fn own_blocks(text: &SectionText) -> Vec<Block> {
     let first_line = usize::try_from(text.line().get()).unwrap_or(usize::MAX);
     parse_body(text.markdown(), first_line)
-}
-
-/// Collects owned values into a 1-based Lua sequence table.
-fn pack_sequence(lua: &Lua, values: Vec<String>) -> mlua::Result<Table> {
-    let table = lua.create_table_with_capacity(values.len(), 0)?;
-    for (index, value) in values.into_iter().enumerate() {
-        table.raw_set(index + 1, value)?;
-    }
-    Ok(table)
 }

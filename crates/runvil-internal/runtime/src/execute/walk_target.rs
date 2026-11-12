@@ -23,7 +23,7 @@ use crate::{Result, error};
 
 /// What a prompt read sees of the section `path` names: its own raw
 /// Markdown, read in place from the shared prompt text, with the file line
-/// it starts on and its pre-parsed list items, or the not-found error when
+/// it starts on, or the not-found error when
 /// the path names no section. A relative path starts at the library `from`
 /// names, when a library's code made the read, and otherwise at `origin`,
 /// the section that is running.
@@ -46,16 +46,10 @@ pub(super) fn read_section(
     };
     let section = found_section(prompt, &pos)?;
     let (text, range) = section.markdown_text().shared();
-    let items = section
-        .items()
-        .iter()
-        .map(|item| item.as_str().to_owned())
-        .collect();
     Ok(SectionRead::Found(SectionText::new(
         text,
         range,
         section.markdown_line(),
-        items,
     )))
 }
 

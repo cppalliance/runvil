@@ -512,7 +512,6 @@ fn a_prompt_read_says_which_library_made_it() {
                     Arc::from(markdown.as_str()),
                     0..markdown.len(),
                     NonZeroU32::MIN,
-                    vec!["one".to_owned()],
                 ))
             };
             log.lock()
@@ -524,7 +523,7 @@ fn a_prompt_read_says_which_library_made_it() {
     install(
         &vm,
         kit(&["at_load = prompt.section('T')\n\
-               function later() return prompt.section_or('T') .. '+' .. prompt.list('L')[1] end\n\
+               function later() return prompt.section_or('T') .. '+' .. prompt.section('L', 'prose').text end\n\
                function users() return _G.prompt.section('T') end\n\
                function miss() return select(2, pcall(prompt.section, 'Missing')) end\n\
                function users_miss() return select(2, pcall(_G.prompt.section, 'Missing')) end"]),
@@ -536,7 +535,7 @@ fn a_prompt_read_says_which_library_made_it() {
     );
     assert_eq!(
         value.as_deref(),
-        Some("T for the section|T for kit|T for kit+one|T for the section")
+        Some("T for the section|T for kit|T for kit+L for kit|T for the section")
     );
     assert_eq!(
         *reads.lock().expect("the reads lock must not be poisoned"),

@@ -9,7 +9,7 @@ runvil: 0
 ## Research
 
 ```lua
-local replies = tasks.fanout("Worker", prompt.list("Topics"))
+local replies = tasks.fanout("Worker", prompt.section("Topics", "list").items)
 local files = store.glob("arm-*.md")
 -- The ordered merge: the join delivers arm results in collection order,
 -- never finish order, so the parent's merge is deterministic by

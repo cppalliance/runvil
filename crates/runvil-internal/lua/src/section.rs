@@ -75,21 +75,14 @@ pub struct SectionText {
     range: Range<usize>,
     /// The line of the prompt file the Markdown starts on.
     line: NonZeroU32,
-    /// Its pre-parsed list items; empty for a section that isn't a list.
-    pub items: Vec<String>,
 }
 
 impl SectionText {
     /// A section's Markdown: the bytes `range` of `text`, which start on
-    /// `line` of the prompt file, and the section's list `items`.
+    /// `line` of the prompt file.
     #[must_use]
-    pub fn new(text: Arc<str>, range: Range<usize>, line: NonZeroU32, items: Vec<String>) -> Self {
-        Self {
-            text,
-            range,
-            line,
-            items,
-        }
+    pub fn new(text: Arc<str>, range: Range<usize>, line: NonZeroU32) -> Self {
+        Self { text, range, line }
     }
 
     /// The section's own raw Markdown. A range that does not lie in the

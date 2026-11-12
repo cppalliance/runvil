@@ -9,7 +9,7 @@ use runvil_engine::Prompt;
 
 use super::support::TestResult;
 
-const INVALID_FIXTURES: [(&str, ErrorCode, &str); 6] = [
+const INVALID_FIXTURES: [(&str, ErrorCode, &str); 5] = [
     ("missing-h1", ErrorCode::StructureInvalid, "requires an H1"),
     (
         "unrecognized-lua-label",
@@ -30,11 +30,6 @@ const INVALID_FIXTURES: [(&str, ErrorCode, &str); 6] = [
         "malformed-epilog",
         ErrorCode::LuaCompile,
         "section `Transform` epilog",
-    ),
-    (
-        "list-h3-non-list-content",
-        ErrorCode::ListEmptyItem,
-        "empty bullet item",
     ),
 ];
 

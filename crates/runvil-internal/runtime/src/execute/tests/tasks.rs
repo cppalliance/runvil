@@ -304,29 +304,5 @@ fn spawn_shares_calls_depth_cap() {
     assert_eq!(starts, 8, "depths 1 through 8 start; depth 9 is refused");
 }
 
-#[test]
-fn spawn_rejects_a_list_section_target_with_the_worker_message() {
-    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
-        # Lists\n\n\
-        ## Parent\n\n\
-        ```lua\n\
-        local ok, err = pcall(tasks.spawn, 'Items')\n\
-        assert(not ok, 'a list section is not a worker template')\n\
-        return tostring(err)\n\
-        ```\n\n\
-        ### Items\n\n\
-        - a\n\
-        - b\n";
-    let rig = Rig::run(scheduler_scenario(md));
-    assert_eq!(
-        rig.trace().text(),
-        refused(
-            12,
-            "section `Items` is a list section, not a worker template"
-        ),
-        "the caught error ends the run normally"
-    );
-}
-
 #[path = "tasks-chain-end.rs"]
 mod chain_end;

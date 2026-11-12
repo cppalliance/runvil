@@ -32,7 +32,6 @@ mod error;
 mod fence;
 mod finder;
 mod frontmatter;
-mod list;
 mod parse;
 mod position;
 mod prompt;

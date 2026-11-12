@@ -1,7 +1,7 @@
 //! Defines [`BodyText`], a stretch of prompt text that sections and blocks read in place.
 //!
 //! The parser makes one shared copy of the prompt body, and every section's
-//! Markdown, list item, and prose block points into it.
+//! Markdown and prose block points into it.
 
 use std::fmt;
 use std::ops::Range;

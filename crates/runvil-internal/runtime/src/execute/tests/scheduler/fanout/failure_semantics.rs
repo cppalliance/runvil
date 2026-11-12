@@ -38,28 +38,6 @@ fn fanout_empty_collection_errors_before_any_scheduling() {
     );
 }
 
-#[test]
-fn fanout_worker_that_is_a_list_section_errors() {
-    // Pin of the worker-template guard: a resolved list section is not a
-    // worker template.
-    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
-        # Fanout\n\n\
-        ## Parent\n\n\
-        ```lua\ntasks.fanout('Items', {'x'})\n```\n\n\
-        ### Items\n\n\
-        - a\n\
-        - b\n";
-    let trace = scheduler_scenario(md).run();
-
-    let error = trace.error();
-    assert!(
-        error
-            .to_string()
-            .contains("is a list section, not a worker template"),
-        "error was: {error}"
-    );
-}
-
 /// Alpha and Beta ping-pong calls through nested call chains, and the
 /// chain that lands at depth 8 calls fanout, on prompt line 13, where each
 /// arm would run one level deeper than the cap allows.

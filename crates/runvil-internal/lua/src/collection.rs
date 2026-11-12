@@ -20,15 +20,17 @@ use crate::order::{KeyError, SortKey, sort_key};
 /// Lua values; the `spawn` request converts each one at its own boundary.
 ///
 /// # Errors
-/// Returns a `LuaRuntime` failure when the value is not a table (the message points
-/// at `prompt.list` for the list-section case), when a member is a
+/// Returns a `LuaRuntime` failure when the value is not a table (the message says
+/// how to read the items of a list in a section), when a member is a
 /// function, userdata, or thread (the error names the member's index), or
 /// when a hash key is not a string, number, or boolean.
 pub(crate) fn collection_members(lua: &Lua, collection: &Value) -> Result<Table> {
     let Value::Table(table) = collection else {
-        return Err(make_lua_runtime_error(
-            "tasks.fanout's second parameter is a collection; for a list section use prompt.list(path), which returns nil when the path names no section".to_owned(),
-        ));
+        return Err(make_lua_runtime_error(format!(
+            "tasks.fanout's second parameter is a collection, got {}; for the items of a list \
+             in a section, pass prompt.section(path, \"list\").items",
+            collection.type_name()
+        )));
     };
     let border = table.raw_len();
     let members = lua
@@ -148,13 +150,22 @@ mod tests {
     #[test]
     fn collection_members_rejects_a_non_table() {
         let lua = mlua::Lua::new();
-        for source in ["return 'Items'", "return 5", "return true"] {
+        for (source, kind) in [
+            ("return 'Items'", "string"),
+            ("return 5", "integer"),
+            ("return true", "boolean"),
+            ("return nil", "nil"),
+        ] {
             let value = eval(&lua, source);
             let error =
                 collection_members(&lua, &value).expect_err("a non-table is not a collection");
-            assert!(
-                error.to_string().contains("prompt.list(path)"),
-                "the error must point at prompt.list for {source}: {error}"
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "tasks.fanout's second parameter is a collection, got {kind}; for the items \
+                     of a list in a section, pass prompt.section(path, \"list\").items"
+                ),
+                "{source}"
             );
         }
     }

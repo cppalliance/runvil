@@ -8,7 +8,7 @@ use runvil_types::error::{Error, ErrorCode};
 
 use crate::fence::{self, LuaRole, RawBlock};
 use crate::position::{body_text, file_line_of, line_add, newlines_before, nz_source_line};
-use crate::{Block, BodyText, Result, Section, error, list};
+use crate::{Block, Result, Section, error};
 use runvil_lua::LuaProgram;
 
 /// A heading with its title and the prose/Lua that follows it (before the next
@@ -141,12 +141,12 @@ impl<'a> SectionWalker<'a> {
     ///
     /// Each section's checks run in a fixed order that decides which error a
     /// malformed prompt reports: its level, its name, its blocks, its children,
-    /// its list items, and last its name against earlier siblings.
+    /// and last its name against earlier siblings.
     ///
     /// # Errors
     /// Returns a `StructureInvalid` failure at the heading for an orphan
     /// heading, an empty heading, or duplicate sibling names, and the
-    /// failure for malformed section content. Propagates a Lua compile
+    /// failure for a malformed `lua` fence. Propagates a Lua compile
     /// failure, and an `Internal` failure from invalid or overflowing
     /// source-line calculations, from a fence split that disagrees with the
     /// Markdown parser, or from section text that is not a slice of
@@ -170,7 +170,6 @@ impl<'a> SectionWalker<'a> {
             let blocks = self.build_heading_blocks(h, &name, &location)?;
             self.pos += 1;
             let children = self.build_sections(level)?;
-            let items = self.list_items(&blocks, &name)?;
             self.check_unique_sibling(&sibling_lines, &name, h, heading_abs_line)?;
             sibling_lines.push((name.clone(), heading_abs_line));
 
@@ -180,7 +179,6 @@ impl<'a> SectionWalker<'a> {
                 level,
                 blocks,
                 children,
-                items,
                 markdown: body_text(self.shared, markdown)?,
                 markdown_line: file_line_of(self.shared, markdown, self.frontmatter_lines)?,
             });
@@ -317,56 +315,6 @@ impl<'a> SectionWalker<'a> {
             }
         }
         Ok(blocks)
-    }
-
-    /// Returns the section's list items, or none when it is not a list.
-    ///
-    /// A section is a list when it has no Lua and [`list::bullet_items`] returns
-    /// items.
-    ///
-    /// # Errors
-    /// Returns a `ListEmptyItem` failure at the first marker with no content.
-    fn list_items(&self, blocks: &[Block], name: &str) -> Result<Vec<BodyText>> {
-        let has_no_lua = blocks
-            .iter()
-            .all(|block| matches!(block, Block::Prose { .. }));
-        let prose_for_items = blocks.iter().find_map(|block| match block {
-            Block::Prose { text, .. } => Some(text.as_str()),
-            Block::Lua(_) => None,
-        });
-        if has_no_lua
-            && let Some(prose) = prose_for_items
-            && let Some(items) =
-                list::bullet_items(prose, |marker| self.make_empty_item_error(marker, name))?
-        {
-            items
-                .into_iter()
-                .map(|item| body_text(self.shared, item))
-                .collect()
-        } else {
-            Ok(Vec::new())
-        }
-    }
-
-    /// Builds the failure for a list item with no content at `marker`, its
-    /// marker sliced from `shared`, or with no location when `marker` is not
-    /// a slice of it.
-    fn make_empty_item_error(&self, marker: &str, name: &str) -> Error {
-        let message = format!("empty bullet item in list section `{name}`");
-        match marker
-            .as_ptr()
-            .addr()
-            .checked_sub(self.shared.as_ptr().addr())
-        {
-            Some(start) => error::make_failure_at_error(
-                ErrorCode::ListEmptyItem,
-                message,
-                self.shared,
-                start..start + marker.len(),
-                self.frontmatter_lines,
-            ),
-            None => error::make_failure_error(ErrorCode::ListEmptyItem, message),
-        }
     }
 
     /// Names a section in its Lua block locations.

@@ -7,10 +7,9 @@
 //! outer arm's chain, hierarchical ids are identical across two runs
 //! whose arms finish in different orders, and three arms each running
 //! `models.loop` hold three model rounds in flight at once. The exhausted
-//! stub, empty collection, list-section worker, claims violation across
-//! arms, and the fanout-inside-a-`call`-child id nesting are pinned in
-//! `scheduler`. An arm parks on a model round the rig holds until the
-//! test releases it.
+//! stub, empty collection, claims violation across arms, and the
+//! fanout-inside-a-`call`-child id nesting are pinned in `scheduler`. An
+//! arm parks on a model round the rig holds until the test releases it.
 
 use std::collections::BTreeMap;
 

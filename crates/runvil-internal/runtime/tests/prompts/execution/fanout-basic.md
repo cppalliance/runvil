@@ -9,7 +9,7 @@ runvil: 0
 ## Research
 
 ```lua
-local replies = tasks.fanout("Worker", prompt.list("Topics"))
+local replies = tasks.fanout("Worker", prompt.section("Topics", "list").items)
 return table.concat(replies, "\n")
 ```
 

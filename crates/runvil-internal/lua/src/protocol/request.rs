@@ -56,8 +56,7 @@ pub enum Request {
     },
     /// `tasks.spawn(target, opts?)`, and each arm of the `fanout` shim:
     /// start a task chain over the target's slice and return at once. The
-    /// chain shares `call`'s target resolution and depth cap, and refuses a
-    /// list section as the target (the worker-template check).
+    /// chain shares `call`'s target resolution and depth cap.
     Spawn {
         /// The target's section path, as the author wrote it.
         target: String,

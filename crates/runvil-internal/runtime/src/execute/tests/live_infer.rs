@@ -123,7 +123,7 @@ fn tool_objects_and_roles_reach_section_call_and_fanout_vms() {
             require '/bindings'
             local direct = binding_names()
             local called = call('../Called')
-            local arms = tasks.fanout('Worker', prompt.list('Items'))
+            local arms = tasks.fanout('Worker', prompt.section('Items', 'list').items)
             return direct .. '|' .. called .. '|' .. table.concat(arms, ',')",
         )
         .section(

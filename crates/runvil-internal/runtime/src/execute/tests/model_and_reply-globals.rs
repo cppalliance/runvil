@@ -102,7 +102,7 @@ fn fanout_arm_sees_the_model_name_in_sys_model_after_the_scope_install() {
             .section(
                 "Parent",
                 "
-                local r = tasks.fanout('Worker', prompt.list('Items'))
+                local r = tasks.fanout('Worker', prompt.section('Items', 'list').items)
                 return table.concat(r, ',')",
             )
             .prose(

@@ -19,7 +19,7 @@ const FANOUT_CROSS_ARM_APPEND: &str =
 /// task the shim spawns, so its `Task started` reports under the caller.
 const CALLER_SECTION: &str = "Research";
 
-/// The worker-template section name both fanout arms execute under: an
+/// The name of the worker section both fanout arms execute under: an
 /// arm's terminal task observation reports under it. The stream keys arm
 /// events by section, not by `sys.index` (which the runtime injects only
 /// into arm Lua), so the exact per-arm index pairing is proven by the arms'

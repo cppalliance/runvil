@@ -43,9 +43,6 @@ pub struct Section {
     pub(crate) blocks: Vec<Block>,
     /// Child sections nested under this one (deeper heading levels).
     pub(crate) children: Vec<Section>,
-    /// The list items of a list section, which has at least one; empty for
-    /// every other section.
-    pub(crate) items: Vec<BodyText>,
     /// The section's own raw Markdown, without its heading line or children.
     pub(crate) markdown: BodyText,
     /// The 1-based line of the prompt file that `markdown` starts on.
@@ -75,12 +72,6 @@ impl Section {
     #[must_use]
     pub fn children(&self) -> &[Section] {
         &self.children
-    }
-
-    /// Returns the list items of a list section; empty for every other section.
-    #[must_use]
-    pub fn items(&self) -> &[BodyText] {
-        &self.items
     }
 
     /// The section's own raw Markdown: from just after its heading line to the next
@@ -137,12 +128,6 @@ impl Section {
             [.., Block::Lua(program)] => Some(program),
             _ => None,
         }
-    }
-
-    /// Returns whether this is a list section, which has at least one item.
-    #[must_use]
-    pub fn is_list(&self) -> bool {
-        !self.items.is_empty()
     }
 }
 

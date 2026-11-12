@@ -334,3 +334,38 @@ fn an_uncaught_strict_read_in_the_h1_body_fails_the_gate_before_any_section_runs
         "no section runs after a failed gate"
     );
 }
+
+/// The items of a section's list follow the block rules: the markers are
+/// removed, a nested bullet stays in its parent's item, and a bullet with
+/// no content is the item `""`.
+#[test]
+fn the_items_of_a_sections_list_follow_the_block_rules() {
+    let source = format!(
+        "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+         # H1\n\n\
+         ## Main\n\n\
+         ```lua\n{}\n```\n\n\
+         ### Bullets\n\n\
+         - first\n  - nested\n-\n- last\n\n\
+         ### Numbers\n\n\
+         1. one\n2. two\n{REPORT}",
+        probes(
+            &[
+                r#"prompt.section("Bullets", "list").items"#,
+                r#"prompt.section("Bullets", "list").ordered"#,
+                r#"prompt.section("Numbers", "list").items"#,
+                r#"prompt.section("Numbers", "list").ordered"#,
+            ],
+            "local probed = true",
+        ),
+    );
+    assert_probes(
+        &source,
+        &[
+            r#"["first\n- nested","","last"]"#,
+            "false",
+            r#"["one","two"]"#,
+            "true",
+        ],
+    );
+}

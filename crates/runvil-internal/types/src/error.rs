@@ -114,10 +114,7 @@ impl Error {
 /// parts.
 fn location(error: &Error) -> Option<String> {
     match error.code {
-        ErrorCode::FrontmatterInvalid
-        | ErrorCode::StructureInvalid
-        | ErrorCode::FenceInvalid
-        | ErrorCode::ListEmptyItem => {
+        ErrorCode::FrontmatterInvalid | ErrorCode::StructureInvalid | ErrorCode::FenceInvalid => {
             let parts: Vec<String> = [
                 error
                     .facts
@@ -299,8 +296,6 @@ pub enum ErrorCode {
     StructureInvalid = 102,
     /// A `lua` fence is unclosed or breaks the strict fence rule.
     FenceInvalid = 103,
-    /// A list section has an empty item.
-    ListEmptyItem = 104,
     /// The prompt declares a `runvil:` major this build does not support.
     UnsupportedVersion = 105,
     /// A value is missing, or failed to parse or validate, such as an id, a
@@ -462,7 +457,6 @@ impl ErrorCode {
             ErrorCode::FrontmatterInvalid => "frontmatter_invalid",
             ErrorCode::StructureInvalid => "structure_invalid",
             ErrorCode::FenceInvalid => "fence_invalid",
-            ErrorCode::ListEmptyItem => "list_empty_item",
             ErrorCode::UnsupportedVersion => "unsupported_version",
             ErrorCode::InvalidValue => "invalid_value",
             ErrorCode::LuaRuntime => "lua_runtime",
@@ -539,7 +533,6 @@ impl ErrorCode {
             "frontmatter_invalid" => ErrorCode::FrontmatterInvalid,
             "structure_invalid" => ErrorCode::StructureInvalid,
             "fence_invalid" => ErrorCode::FenceInvalid,
-            "list_empty_item" => ErrorCode::ListEmptyItem,
             "unsupported_version" => ErrorCode::UnsupportedVersion,
             "invalid_value" => ErrorCode::InvalidValue,
             "lua_runtime" => ErrorCode::LuaRuntime,
@@ -634,9 +627,6 @@ impl ErrorCode {
             ErrorCode::FenceInvalid => {
                 "A Lua code fence is malformed. Open it with exactly ```lua and close it with \
                  exactly ```."
-            }
-            ErrorCode::ListEmptyItem => {
-                "A list section has an empty item. Fill it in or remove it."
             }
             ErrorCode::UnsupportedVersion => {
                 "The prompt declares a `runvil:` version this build does not support. Declare a \

@@ -47,8 +47,6 @@ impl Prompt {
     ///   fact: `label`, `opener`, `closer`, or `lookalike`. Lines inside the
     ///   body of another fenced code block are never inspected, so a
     ///   document can show a Lua fence as an example.
-    /// - `ListEmptyItem` when a section made up only of list items has an
-    ///   empty item.
     /// - `LuaCompile` when a Lua block in the H1 or in a section fails to
     ///   compile as Lua.
     /// - `Internal` when the parser fails through no fault of the prompt:

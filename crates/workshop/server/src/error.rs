@@ -79,7 +79,6 @@ impl AppError {
             ErrorCode::FrontmatterInvalid => "parse_frontmatter",
             ErrorCode::StructureInvalid => "parse_structure",
             ErrorCode::FenceInvalid => "parse_fence",
-            ErrorCode::ListEmptyItem => "parse_list",
             ErrorCode::LuaCompile => "parse_lua",
             ErrorCode::Internal => "parse_internal",
             // Any other code has no wire code of its own.

@@ -294,7 +294,6 @@ fn kind_of(code: ErrorCode) -> ErrorKind {
         ErrorCode::FrontmatterInvalid
         | ErrorCode::StructureInvalid
         | ErrorCode::FenceInvalid
-        | ErrorCode::ListEmptyItem
         | ErrorCode::UnsupportedVersion
         | ErrorCode::InvalidValue
         | ErrorCode::ToolSchemaInvalid

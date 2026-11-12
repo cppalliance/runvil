@@ -57,25 +57,6 @@ fn multiple_breaks_each_reset_the_pending_buffer() {
 }
 
 #[test]
-fn list_items_below_a_leading_break_parse() {
-    let body = "---\n\n- alpha\n- beta";
-    let prompt = parse_ok(&PromptSource::new().prose("Items", body).build());
-    let section = &prompt.sections[0];
-    assert!(section.is_list());
-    assert_eq!(section.items(), ["alpha", "beta"]);
-}
-
-#[test]
-fn a_break_resets_list_item_capture() {
-    // List items parse from the pending buffer: markers above a break are
-    // commentary, and only the markers below the last break parse.
-    let body = "- alpha\n\n---\n\n- beta";
-    let prompt = parse_ok(&PromptSource::new().prose("Items", body).build());
-    let section = &prompt.sections[0];
-    assert_eq!(section.items(), ["beta"]);
-}
-
-#[test]
 fn h1_break_resets_prose_and_lua_fence_below_stays_live() {
     // The H1 follows the same reset rule: Markdown above the break is
     // commentary that leaves an empty prose block, and a `lua` fence below

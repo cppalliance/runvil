@@ -88,11 +88,10 @@ fn an_error_is_a_cancel_exactly_when_its_code_is_canceled() {
 }
 
 /// Every code, in declaration order.
-const ALL: [ErrorCode; 69] = [
+const ALL: [ErrorCode; 68] = [
     ErrorCode::FrontmatterInvalid,
     ErrorCode::StructureInvalid,
     ErrorCode::FenceInvalid,
-    ErrorCode::ListEmptyItem,
     ErrorCode::UnsupportedVersion,
     ErrorCode::InvalidValue,
     ErrorCode::LuaRuntime,
@@ -167,7 +166,6 @@ fn family(code: ErrorCode) -> u16 {
         ErrorCode::FrontmatterInvalid
         | ErrorCode::StructureInvalid
         | ErrorCode::FenceInvalid
-        | ErrorCode::ListEmptyItem
         | ErrorCode::UnsupportedVersion
         | ErrorCode::InvalidValue => 1,
         ErrorCode::LuaRuntime

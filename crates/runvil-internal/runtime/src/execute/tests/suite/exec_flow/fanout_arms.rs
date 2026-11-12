@@ -1,4 +1,4 @@
-//! Control flow inside a fanout arm: `prompt.list`, `call`, nested
+//! Control flow inside a fanout arm: the `prompt` reads, `call`, nested
 //! `fanout`, and `jump` over the worker's visible set, the depth cap
 //! across the arm boundary, and an arm's text when it replies nothing.
 
@@ -8,16 +8,16 @@ use super::*;
 use crate::execute::tests::context::arm_fanout;
 use crate::test_support::at_line;
 
-/// `prompt.list` inside a fanout arm reads a list section's items: the arm
-/// resolves like any section (the worker's siblings minus the worker, plus
-/// its children).
+/// A `prompt` read inside a fanout arm reads the items of a sibling's
+/// list: the arm resolves like any section (the worker's siblings minus
+/// the worker, plus its children).
 #[test]
-fn prompt_list_inside_a_fanout_arm_reads_items() {
+fn a_prompt_read_inside_a_fanout_arm_reads_a_siblings_list() {
     let source = arm_fanout()
         .section(
             "### Worker",
             "
-            local items = prompt.list('../Items')
+            local items = prompt.section('../Items', 'list').items
             return item .. ':' .. table.concat(items, ',')",
         )
         .prose("### Items", "- x\n- y");
@@ -215,12 +215,12 @@ fn jump_inside_a_fanout_arm_to_the_workers_parent_errors() {
     );
 }
 
-/// `call` and `prompt.list` inside an arm naming the worker's parent as a
-/// neighbor both miss: `call` errors not-found, which the arm catches with
-/// `pcall` and asserts on, and `prompt.list` reads `nil`. A path from the
-/// top reads the parent.
+/// `call` and a `prompt` read inside an arm naming the worker's parent as
+/// a neighbor both miss: `call` errors not-found, which the arm catches
+/// with `pcall` and asserts on, and `prompt.section_or` reads `nil`. A
+/// path from the top reads the parent.
 #[test]
-fn call_raises_and_list_reads_nil_for_the_workers_parent_in_a_fanout_arm() {
+fn call_raises_and_a_read_misses_for_the_workers_parent_in_a_fanout_arm() {
     let source = arm_fanout()
         .section(
             "### Worker",
@@ -229,10 +229,10 @@ fn call_raises_and_list_reads_nil_for_the_workers_parent_in_a_fanout_arm() {
               local ok_call, err_call = pcall(call, path)
               assert(not ok_call, 'call of the parent must fail')
               assert(tostring(err_call):find('not found', 1, true), 'call error must be not-found: ' .. tostring(err_call))
-              assert(prompt.list(path) == nil, 'prompt.list of the parent must read nil')
+              assert(prompt.section_or(path, 'list') == nil, 'a read of the parent must read nil')
             end
             assert(prompt.section('/Parent') ~= nil, 'a path from the top reads the parent')
-            assert(prompt.list('../Items')[1] == 'x', 'a sibling reads')
+            assert(prompt.section('../Items', 'list').items[1] == 'x', 'a sibling reads')
             return item .. ':rejected'",
         )
         .prose("### Items", "- x");

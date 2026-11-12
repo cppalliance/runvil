@@ -233,21 +233,6 @@ fn a_fence_violation_names_the_rule_it_breaks() {
 }
 
 #[test]
-fn an_empty_list_item_is_list_empty_item_at_its_marker() {
-    let error = failure_of(&in_section("- alpha\n  1.\n- beta\n"));
-    let message = "empty bullet item in list section `S`";
-    assert_eq!(error.code, ErrorCode::ListEmptyItem);
-    assert_eq!(error.message, message);
-    assert_eq!(
-        location(&error),
-        Some((FILE, 11, 3, 11, 5)),
-        "the marker itself, past its indent"
-    );
-    assert_eq!(error.facts, BTreeMap::from([(ErrorFact::Name, "x".into())]));
-    assert_eq!(error.prose, prose_at(ErrorCode::ListEmptyItem, 11, message));
-}
-
-#[test]
 fn a_lua_compile_failure_is_located_at_the_line_its_diagnostic_names() {
     // The block's source starts on file line 11, and the compiler reports
     // its second line, file line 12.

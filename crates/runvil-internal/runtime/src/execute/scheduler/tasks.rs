@@ -574,8 +574,7 @@ impl Scheduler {
 
     /// The fallible half of spawn dispatch: `call`'s depth cap against the
     /// spawner's call-depth field, `call`'s target resolution over the
-    /// spawner's visible set, the worker-template check (a list section is
-    /// not a target), then the task chain one level deeper under the
+    /// spawner's visible set, then the task chain one level deeper under the
     /// spawn's `args` and `var` snapshot, with its own access capability (a
     /// concurrent thread of execution, forked from the spawner's so the
     /// spawn is the happens-before edge; every delivery of the task joins
@@ -627,12 +626,6 @@ impl Scheduler {
             .ok_or(error::make_internal_error(
                 "a resolved worker is absent from its slice",
             ))?;
-        if worker.is_list() {
-            return Err(error::make_lua_runtime_error(format!(
-                "section `{}` is a list section, not a worker template",
-                worker.name()
-            )));
-        }
         // The access spawns before the chain exists: a store refusal here
         // is the last fallible step that can leave nothing behind, so it
         // runs ahead of the id allocation and the arena push rather than

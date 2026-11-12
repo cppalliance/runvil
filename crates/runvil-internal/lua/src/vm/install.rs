@@ -91,9 +91,9 @@ impl SectionVm {
         Arc::clone(&self.store_conflict)
     }
 
-    /// Installs `call`, `jump`, and the `prompt` reads (`prompt.section`,
-    /// `prompt.section_or`, and `prompt.list`) as persistent globals for
-    /// the section's whole lifecycle.
+    /// Installs `call`, `jump`, and the `prompt` reads (`prompt.section`
+    /// and `prompt.section_or`) as persistent globals for the section's
+    /// whole lifecycle.
     ///
     /// Test-only: production installs `jump` and the `prompt` reads through
     /// [`install_control_globals`](Self::install_control_globals)

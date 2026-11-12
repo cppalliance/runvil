@@ -32,7 +32,6 @@ fn section_text(markdown: &str, line: u32) -> SectionText {
         Arc::from(markdown),
         0..markdown.len(),
         NonZeroU32::new(line).expect("a prompt line is at least 1"),
-        Vec::new(),
     )
 }
 
