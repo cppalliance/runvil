@@ -26,10 +26,10 @@ base64 = "0.22"
 # in. All four name one commit, because two commits would be two copies
 # of every type the crates share. `version` beside `git` keeps cargo-deny's
 # wildcard check quiet.
-runvil = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "732429962c5873458213bb0072a0828a40ee4fb6" }
-harness-gateway-client = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "732429962c5873458213bb0072a0828a40ee4fb6" }
-plugin-web = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "732429962c5873458213bb0072a0828a40ee4fb6" }
-plugin-mcp = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "732429962c5873458213bb0072a0828a40ee4fb6" }
+runvil = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "5bca6f9fd9b398d5f221a5893570b8085bc283da" }
+harness-gateway-client = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "5bca6f9fd9b398d5f221a5893570b8085bc283da" }
+plugin-web = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "5bca6f9fd9b398d5f221a5893570b8085bc283da" }
+plugin-mcp = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "5bca6f9fd9b398d5f221a5893570b8085bc283da" }
 # The safe layer over the C Plugin contract, version 0.4, from its own
 # repository, pinned by commit. Only the library Plugin crates under
 # `crates/workshop/` name it, for `export_plugin!`. The commit is the one
