@@ -22,8 +22,9 @@
 //! it holds and drops them when it ends. The run reaches the gateway only
 //! through its per-run broker, which follows the live gateway binding and
 //! sends each round to the dropdown's current pick. Each run's filesystem
-//! is an in-memory root, with the language guide demo's read-only mount
-//! beside it while that demo's switch is on (`language_guide`). The run's
+//! is an in-memory root, with a read-only mount beside it for each of two
+//! demos whose switch is on: the language guide, and the machine's C
+//! drive (`language_guide`). Both switches are committed as off. The run's
 //! setup carries the Host state ([`bindings`]): the menu's pick and the
 //! workspace's granted roots, read once the menu's catalog holds a
 //! chat-capable model. Status-bar reporting stays in the server

@@ -262,7 +262,7 @@ static PLUGIN_DIRS: AtomicUsize = AtomicUsize::new(0);
 const STD_LIBRARY: &str = "plugin_std";
 
 /// The bashkit Plugin's library, as Cargo names it.
-const BASHKIT_LIBRARY: &str = "plugin_bashkit";
+pub(super) const BASHKIT_LIBRARY: &str = "plugin_bashkit";
 
 /// The file name of the dynamic library `library`.
 fn library_file(library: &str) -> String {
@@ -274,7 +274,7 @@ fn library_file(library: &str) -> String {
 /// library beside this test executable, because the crate depends on the
 /// `workshop-plugin-*` crate that exports it. The directory's name comes
 /// from the test, the process id, and a counter.
-fn plugin_dir_of(test: &str, library: &str) -> (tempfile::TempDir, PathBuf) {
+pub(super) fn plugin_dir_of(test: &str, library: &str) -> (tempfile::TempDir, PathBuf) {
     let prefix = format!(
         "{test}-{}-{}-",
         std::process::id(),
