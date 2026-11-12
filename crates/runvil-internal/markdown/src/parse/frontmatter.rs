@@ -2,13 +2,17 @@
 
 use serde_json::Value as Json;
 
+use super::BLANK;
+
 /// The frontmatter split off the front of a text.
 pub(super) struct Opening {
     /// The YAML mapping, as a JSON object.
     pub(super) data: Json,
-    /// The lines the frontmatter takes, both delimiters included.
+    /// The lines the frontmatter takes: both delimiters, the lines
+    /// between them, and the blank lines after.
     pub(super) lines: usize,
-    /// The byte the rest of the text starts at.
+    /// The byte the rest of the text starts at: its first line that is
+    /// not blank, or the end of the text.
     pub(super) end: usize,
 }
 
@@ -20,23 +24,31 @@ pub(super) struct Opening {
 /// the prompt parser's: the opening line may have spaces on either side of
 /// its dashes, and the closing line only after them. In every other case
 /// the text has no frontmatter and its first lines are ordinary Markdown.
+///
+/// The frontmatter takes the blank lines after its closing delimiter, as
+/// every block takes the blank lines after it.
 pub(super) fn split(text: &str) -> Option<Opening> {
-    let mut lines = text.split_inclusive('\n');
-    let first = lines.next()?;
+    let mut rest = text.split_inclusive('\n');
+    let first = rest.next()?;
     if first.trim() != "---" {
         return None;
     }
     let mut end = first.len();
+    let mut lines = 1;
     let mut yaml = String::new();
-    for (index, line) in lines.enumerate() {
+    while let Some(line) = rest.next() {
         end += line.len();
+        lines += 1;
         if line.trim_end() == "---" {
             let data: Json = serde_yaml_ng::from_str(&yaml).ok()?;
-            return data.is_object().then_some(Opening {
-                data,
-                lines: index + 2,
-                end,
-            });
+            if !data.is_object() {
+                return None;
+            }
+            for blank in rest.take_while(|line| line.trim_matches(BLANK).is_empty()) {
+                end += blank.len();
+                lines += 1;
+            }
+            return Some(Opening { data, lines, end });
         }
         yaml.push_str(line);
     }
@@ -51,11 +63,26 @@ mod tests {
 
     #[test]
     fn a_mapping_between_two_delimiters_is_split_off_with_its_lines_counted() {
-        let text = "---\ntitle: Notes\ntags: [a, b]\n---\n\nBody.\n";
+        let text = "---\ntitle: Notes\ntags: [a, b]\n---\nBody.\n";
         let opening = split(text).unwrap();
         assert_eq!(opening.data, json!({"title": "Notes", "tags": ["a", "b"]}));
         assert_eq!(opening.lines, 4);
-        assert_eq!(&text[opening.end..], "\nBody.\n");
+        assert_eq!(&text[opening.end..], "Body.\n");
+    }
+
+    #[test]
+    fn the_blank_lines_after_the_closing_delimiter_are_split_off_with_it() {
+        let text = "---\na: 1\n---\n\n \t\n  Body.\n\nMore.\n";
+        let opening = split(text).unwrap();
+        assert_eq!(opening.lines, 5);
+        // The first line that is not blank keeps its indentation.
+        assert_eq!(&text[opening.end..], "  Body.\n\nMore.\n");
+        // Blank lines alone after the delimiter are all taken, with or
+        // without a final line ending.
+        for text in ["---\na: 1\n---\n\n\n", "---\na: 1\n---\n\n  "] {
+            let opening = split(text).unwrap();
+            assert_eq!((opening.lines, opening.end), (5, text.len()), "{text:?}");
+        }
     }
 
     #[test]

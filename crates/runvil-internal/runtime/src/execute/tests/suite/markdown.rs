@@ -1,6 +1,7 @@
 //! The `markdown` global in a running prompt: text from the store and
-//! from a `prompt` read parsed into blocks, a parse result carried to a
-//! later section in `var`, and parsed sections as a fanout collection.
+//! from a `prompt` read parsed into blocks and written back as the same
+//! text, a parse result carried to a later section in `var`, and parsed
+//! sections as a fanout collection.
 
 use runvil_prompt::test_support::PromptSource;
 
@@ -31,8 +32,36 @@ fn a_stored_file_is_read_then_parsed_and_one_section_is_written_back_as_text() {
     );
     assert_eq!(
         Scenario::new(source.build()).run().text(),
-        "Short and plain.|true|Notes,Abstract,Data|nil"
+        "Short and plain.\n\n|true|Notes,Abstract,Data|nil",
+        "a section's blocks are written with the blank lines that followed them"
     );
+}
+
+#[test]
+fn a_stored_file_is_parsed_and_written_back_as_the_same_text() {
+    let source = PromptSource::new().section(
+        "Main",
+        &format!(
+            "
+            store.write('notes.md', '{NOTES}')
+            local text = store.read('notes.md')
+            local paper = markdown.parse(text)
+            local sources = {{}}
+            for index, block in ipairs(markdown.select(paper, '*')) do
+              sources[index] = block.source
+            end
+            store.write('copy.md', markdown.render(paper))
+            return table.concat({{
+              tostring(store.read('copy.md') == text),
+              tostring(table.concat(sources) == text),
+              #sources,
+              #text,
+            }}, '|')"
+        ),
+    );
+    // The file is five blocks and 76 bytes, so the comparisons are not of
+    // empty text.
+    assert_eq!(Scenario::new(source.build()).run().text(), "true|true|5|76");
 }
 
 #[test]
@@ -67,7 +96,14 @@ fn the_text_a_prompt_read_returns_parses_and_its_fence_parses_again() {
 #[test]
 fn a_parse_result_kept_in_var_works_with_every_function_in_a_later_section() {
     let source = PromptSource::new()
-        .section("Parse", &format!("var.doc = markdown.parse('{NOTES}')"))
+        .section(
+            "Parse",
+            &format!(
+                "
+                var.text = '{NOTES}'
+                var.doc = markdown.parse(var.text)"
+            ),
+        )
         .section(
             "Use",
             "
@@ -77,12 +113,15 @@ fn a_parse_result_kept_in_var_works_with_every_function_in_a_later_section() {
               markdown.section(doc, '//Data', 'fence').lang,
               tostring(markdown.section_or(doc, '/Notes/Missing')),
               #markdown.select(doc, 'section'),
-              markdown.render(markdown.section(doc, '//Abstract').blocks),
+              #markdown.select(doc, '*'),
+              markdown.render(markdown.section(doc, '//Data').blocks),
+              tostring(markdown.render(doc) == var.text),
             }, '|')",
         );
     assert_eq!(
         Scenario::new(source.build()).run().text(),
-        "Short and plain.|json|nil|3|Short and plain."
+        "Short and plain.|json|nil|3|5|```json\n{ \"ok\": true }\n```\n|true",
+        "the copy kept in var holds every source, so it is written back as the text"
     );
 }
 

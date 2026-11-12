@@ -1,16 +1,16 @@
-//! Blocks as Lua tables, in both directions.
+//! Blocks as Lua tables, and the tables written back as text.
 //!
 //! [`list_table`] and [`block_table`] build the plain tables a parse hands
-//! to Lua: a block is a record with its `kind`, its `line`, and the fields
-//! of its kind, and every list is marked, so an empty one encodes as `[]`.
-//! [`read`] goes the other way for `markdown.render`, and it is where a
-//! block that cannot be written is refused, by the name of its field.
+//! to Lua: a block is a record with its `kind`, its `line`, its `source`,
+//! and the fields of its kind, and every list is marked, so an empty one
+//! encodes as `[]`. [`write`](fn@write) goes the other way for
+//! `markdown.render`: it writes each block's `source`, and reads no other
+//! field but the `kind` and `blocks` that say what comes next.
 
 use mlua::{Lua, LuaSerdeExt, Table, Value};
-use runvil_markdown::{Block, Kind};
+use runvil_markdown::{Block, Kind, Writer};
 
-use super::walk::{Entry, Walk, whole};
-use crate::json::to_json;
+use super::walk::Walk;
 
 /// Builds the marked list of tables for `blocks`.
 ///
@@ -35,6 +35,7 @@ pub(crate) fn block_table(lua: &Lua, block: &Block) -> mlua::Result<Table> {
     let table = lua.create_table()?;
     table.raw_set("kind", block.kind().name())?;
     table.raw_set("line", block.line())?;
+    table.raw_set("source", block.source())?;
     match block {
         Block::Frontmatter { data, .. } => table.raw_set("data", lua.to_value(data)?)?,
         Block::Section {
@@ -69,141 +70,32 @@ pub(crate) fn block_table(lua: &Lua, block: &Block) -> mlua::Result<Table> {
     Ok(table)
 }
 
-/// Reads the list `value` as the blocks `markdown.render` writes, checking
-/// every field of every block. `opens_text` is whether the list is the
-/// one the function was given, whose first block may be frontmatter. The
-/// blocks' lines are not read, since a writer has no use for them.
+/// Writes the `source` of every block of the list `value` to `writer`, in
+/// order, a section's before those of the blocks under it.
+///
+/// A block's `kind` is read for two things: the writer parts two prose
+/// blocks, and only a section's `blocks` are written. A section with no
+/// `blocks` field holds nothing, as it does for a lookup.
 ///
 /// # Errors
 /// Returns the refusal of a list or a block that cannot be read, and of a
-/// block that cannot be written: an unknown `kind`, a field that is
-/// missing or of the wrong type, a `level` outside 1 to 6, a line break in
-/// a `title`, `info`, or `lang`, a list with no items, and frontmatter
-/// that is not the first block or whose `data` is not a record.
-pub(super) fn read(
-    lua: &Lua,
-    walk: &mut Walk,
-    value: &Value,
-    opens_text: bool,
-) -> mlua::Result<Vec<Block>> {
+/// `source` that is not a string of valid UTF-8.
+pub(super) fn write(walk: &mut Walk, value: &Value, writer: &mut Writer) -> mlua::Result<()> {
     let list = walk.open(value)?;
-    let mut blocks = Vec::new();
     walk.each(&list, &mut |walk, entry| {
-        let first = opens_text && blocks.is_empty();
-        blocks.push(read_block(lua, walk, entry, first)?);
+        let source = walk.text(&entry.field("source")?, "source")?;
+        let kind = entry.string("kind")?;
+        let kind = kind.as_ref().and_then(|kind| kind.to_str().ok());
+        let kind = kind.as_deref().unwrap_or_default();
+        writer.write(kind, &source);
+        if kind == Kind::Section.name() {
+            let blocks = entry.field("blocks")?;
+            if !blocks.is_nil() {
+                write(walk, &blocks, writer)?;
+            }
+        }
         Ok(())
     })?;
     walk.close();
-    Ok(blocks)
-}
-
-/// Reads one block. `first` is whether it is the first block of the text.
-fn read_block(lua: &Lua, walk: &mut Walk, entry: &Entry, first: bool) -> mlua::Result<Block> {
-    let name = walk.text(&entry.field("kind")?, "kind")?;
-    let Some(kind) = Kind::from_name(&name) else {
-        return Err(walk.refuse(format!(
-            "{}.kind must be one of {}, got \"{name}\"",
-            walk.block_name(),
-            Kind::ALL.map(Kind::name).join(", ")
-        )));
-    };
-    Ok(match kind {
-        Kind::Frontmatter => {
-            if !first {
-                return Err(walk.refuse(format!(
-                    "{} is frontmatter, which must be the first block",
-                    walk.block_name()
-                )));
-            }
-            let data = entry.field("data")?;
-            let json = match &data {
-                Value::Table(_) => to_json(lua, walk.function(), false, &data)?,
-                other => return Err(not_a_record(walk, other.type_name())),
-            };
-            if !json.is_object() {
-                return Err(not_a_record(walk, "a list"));
-            }
-            Block::Frontmatter {
-                line: 0,
-                data: json,
-            }
-        }
-        Kind::Section => Block::Section {
-            line: 0,
-            level: level(walk, &entry.field("level")?)?,
-            title: one_line(walk, entry, "title")?,
-            blocks: read(lua, walk, &entry.field("blocks")?, false)?,
-        },
-        Kind::Prose => Block::Prose {
-            line: 0,
-            text: walk.text(&entry.field("text")?, "text")?,
-        },
-        Kind::Fence => Block::Fence {
-            line: 0,
-            lang: one_line(walk, entry, "lang")?,
-            info: one_line(walk, entry, "info")?,
-            text: walk.text(&entry.field("text")?, "text")?,
-        },
-        Kind::List => {
-            let ordered = match entry.field("ordered")? {
-                Value::Boolean(ordered) => ordered,
-                other => {
-                    return Err(walk.refuse(format!(
-                        "{}.ordered must be a boolean, got {}",
-                        walk.block_name(),
-                        other.type_name()
-                    )));
-                }
-            };
-            let items = walk.strings(&entry.field("items")?, "items")?;
-            if items.is_empty() {
-                return Err(walk.refuse(format!(
-                    "{}.items must hold at least one item",
-                    walk.block_name()
-                )));
-            }
-            Block::List {
-                line: 0,
-                ordered,
-                items,
-            }
-        }
-        Kind::Rule => Block::Rule { line: 0 },
-    })
-}
-
-/// The refusal of frontmatter `data` that is `got` and not a record.
-fn not_a_record(walk: &Walk, got: &str) -> mlua::Error {
-    walk.refuse(format!(
-        "{}.data must be a record, got {got}",
-        walk.block_name()
-    ))
-}
-
-/// Reads a section's `level`: a whole number from 1 to 6.
-fn level(walk: &Walk, value: &Value) -> mlua::Result<u8> {
-    if let Some(level @ 1..=6) = whole(value).and_then(|level| u8::try_from(level).ok()) {
-        return Ok(level);
-    }
-    let got = match value {
-        Value::Integer(integer) => integer.to_string(),
-        Value::Number(number) => number.to_string(),
-        other => other.type_name().to_owned(),
-    };
-    Err(walk.refuse(format!(
-        "{}.level must be an integer from 1 to 6, got {got}",
-        walk.block_name()
-    )))
-}
-
-/// Reads the field `field` as text that sits on one line of the output.
-fn one_line(walk: &mut Walk, entry: &Entry, field: &str) -> mlua::Result<String> {
-    let text = walk.text(&entry.field(field)?, field)?;
-    if text.contains(['\n', '\r']) {
-        return Err(walk.refuse(format!(
-            "{}.{field} must not hold a line break",
-            walk.block_name()
-        )));
-    }
-    Ok(text)
+    Ok(())
 }

@@ -3,19 +3,22 @@
 //! `markdown.parse(text)` reads text into a list of blocks. A block is a
 //! plain record and a list is a marked list, so a parse result passes
 //! `json.encode`, can be stored in `var`, and can be a `tasks.fanout`
-//! collection. `markdown.section` finds the one section a path names, or
-//! one block of it that a selector picks, and raises when it is not there.
-//! `markdown.section_or` is the same lookup and returns nil for that miss.
-//! `markdown.select` collects every block a selector matches, and
-//! `markdown.render` writes blocks back as text.
+//! collection. Each block holds its `source`, the lines it was read
+//! from, and the sources of a parse are the text. `markdown.section`
+//! finds the one section a path names, or one block of it that a selector
+//! picks, and raises when it is not there. `markdown.section_or` is the
+//! same lookup and returns nil for that miss. `markdown.select` collects
+//! every block a selector matches, all of them for `*`, and
+//! `markdown.render` writes the sources of blocks back as one text.
 //!
 //! `runvil-markdown` parses, writes, and holds the path and selector
-//! grammars. This module turns its blocks into tables and back
-//! (`blocks`), reads a list of blocks the author passes (`walk`), and
-//! runs the lookups over those tables (`lookup`). Every function is pure,
-//! and a lookup returns the tables that are already inside the list it
-//! was given. The `prompt` reads take the same selector and index, read by
-//! [`Selection`], over the blocks of one section of the running prompt.
+//! grammars. This module turns its blocks into tables and writes tables
+//! back (`blocks`), reads a list of blocks the author passes (`walk`),
+//! and runs the lookups over those tables (`lookup`). Every function is
+//! pure, and a lookup returns the tables that are already inside the list
+//! it was given. The `prompt` reads take the same selector and index,
+//! read by [`Selection`], over the blocks of one section of the running
+//! prompt.
 
 mod blocks;
 mod lookup;
@@ -24,7 +27,7 @@ mod walk;
 pub(crate) use blocks::block_table;
 
 use mlua::{Lua, LuaSerdeExt, LuaString, MultiValue, Table, Value};
-use runvil_markdown::{Path, Pick, Selector, pick};
+use runvil_markdown::{Path, Pick, Selector, Writer, pick};
 
 use self::lookup::Match;
 use self::walk::{Walk, whole};
@@ -218,9 +221,13 @@ fn select(lua: &Lua, (blocks, selector): (Value, Value)) -> mlua::Result<Table> 
     Ok(list)
 }
 
-/// `markdown.render(blocks)`: `blocks` written as Markdown text.
+/// `markdown.render(blocks)`: the `source` of every block of `blocks`, at
+/// any depth and in file order, as one text. The writer parts two blocks
+/// that would otherwise run together, and adds nothing between two blocks
+/// of one parse.
 fn render(lua: &Lua, blocks: &Value) -> mlua::Result<LuaString> {
     let mut walk = Walk::new(lua, "markdown.render");
-    let blocks = blocks::read(lua, &mut walk, blocks, true)?;
-    lua.create_string(runvil_markdown::render(&blocks))
+    let mut writer = Writer::new();
+    blocks::write(&mut walk, blocks, &mut writer)?;
+    lua.create_string(writer.finish())
 }

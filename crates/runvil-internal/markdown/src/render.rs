@@ -1,152 +1,96 @@
 //! Blocks to text.
 
-use serde_json::Value as Json;
+use crate::parse::BLANK;
+use crate::{Block, Kind};
 
-use crate::Block;
-
-/// Writes a list of blocks as Markdown, each block in one fixed style.
+/// Writes a list of blocks as Markdown: the source of each block in file
+/// order, a section's before those of the blocks under it.
 ///
-/// Blocks are joined by one blank line, and the result has no trailing
-/// newline. Nothing is escaped: a block's strings are written as they
-/// are, so blocks that [`parse`](fn@crate::parse) produced read back as the
-/// same blocks apart from their lines. The one exception is a title whose
-/// text Markdown reads as markup.
-///
-/// Every list of blocks is written. Whether one can be read back is the
-/// caller's to check: a level from 1 to 6, no line break in a title or an
-/// info string, at least one item in a list, and frontmatter only as the
-/// first block, with a mapping as its data.
+/// Nothing is rebuilt from a block's other fields, so the blocks that
+/// [`parse`](fn@crate::parse) gave are written as the text they were read
+/// from. Blocks put together any other way are written through a
+/// [`Writer`], which keeps two of them from running into each other.
 #[must_use]
 pub fn render(blocks: &[Block]) -> String {
-    let mut out = String::new();
-    write_blocks(&mut out, blocks, true);
-    out
+    let mut writer = Writer::new();
+    write_blocks(&mut writer, blocks);
+    writer.finish()
 }
 
-/// Writes `blocks` with one blank line between each two. `top` is whether
-/// they are the list given to [`render`], whose first line opens the
-/// text.
-fn write_blocks(out: &mut String, blocks: &[Block], top: bool) {
-    // The list before this block, when there is one right before it: its
-    // type, and whether it took the second marker.
-    let mut before: Option<(bool, bool)> = None;
-    for (at, block) in blocks.iter().enumerate() {
-        if at > 0 {
-            out.push_str("\n\n");
+/// Writes `blocks` and the blocks under them to `writer`.
+fn write_blocks(writer: &mut Writer, blocks: &[Block]) {
+    for block in blocks {
+        writer.write(block.kind().name(), block.source());
+        if let Block::Section { blocks, .. } = block {
+            write_blocks(writer, blocks);
         }
-        let mut list = None;
-        match block {
-            Block::Frontmatter { data, .. } => write_frontmatter(out, data),
-            Block::Section {
-                level,
-                title,
-                blocks,
-                ..
-            } => write_section(out, *level, title, blocks),
-            Block::Prose { text, .. } => out.push_str(text),
-            Block::Fence {
-                lang, info, text, ..
-            } => write_fence(out, if info.is_empty() { lang } else { info }, text),
-            Block::List { ordered, items, .. } => {
-                // A list right after a list of the same type takes the
-                // second marker, so the two stay separate lists.
-                let second = before == Some((*ordered, false));
-                write_list(out, *ordered, second, items);
-                list = Some((*ordered, second));
-            }
-            // `***` at the very start, so the text never opens with a
-            // line that could start frontmatter.
-            Block::Rule { .. } => out.push_str(if top && at == 0 { "***" } else { "---" }),
-        }
-        before = list;
     }
 }
 
-/// Writes frontmatter: the data as YAML between two `---` lines. The
-/// keys of a mapping are written in sorted order, the order a JSON object
-/// keeps them in.
-fn write_frontmatter(out: &mut String, data: &Json) {
-    out.push_str("---\n");
-    out.push_str(&serde_yaml_ng::to_string(data).unwrap_or_default());
-    out.push_str("---");
-}
-
-/// Writes a section: its heading, then its blocks.
-fn write_section(out: &mut String, level: u8, title: &str, blocks: &[Block]) {
-    out.push_str(&"#".repeat(usize::from(level)));
-    if !title.is_empty() {
-        out.push(' ');
-        out.push_str(title);
-    }
-    if !blocks.is_empty() {
-        out.push_str("\n\n");
-        write_blocks(out, blocks, false);
-    }
-}
-
-/// Writes a fence around `text`, with `label` after the opening fence.
+/// Writes the sources of blocks one after another as one text.
 ///
-/// The fence is of backticks, one longer than the longest run of them in
-/// `text` and at least three. A label that holds a backtick cannot follow
-/// a backtick fence, so the fence is then of tildes.
-fn write_fence(out: &mut String, label: &str, text: &str) {
-    let mark = if label.contains('`') { '~' } else { '`' };
-    let fence = mark.to_string().repeat(3.max(longest_run(text, mark) + 1));
-    out.push_str(&fence);
-    out.push_str(label);
-    out.push('\n');
-    if !text.is_empty() {
-        out.push_str(text);
-        out.push('\n');
-    }
-    out.push_str(&fence);
+/// A source is written as it is. The writer adds a line ending of its own
+/// in two cases, neither of which occurs between two blocks of one parse,
+/// so a parsed document is written exactly:
+///
+/// 1. Every block starts on a new line. When the text so far does not end
+///    with a line ending, one is written first. Of parsed blocks, only
+///    the last of a text can lack one.
+/// 2. A blank line sits between two prose blocks, which would otherwise
+///    read as one paragraph. When neither the text so far ends with a
+///    blank line nor the block starts with one, one is written first.
+///    Parsed prose is a maximal run, so no two prose blocks of one parse
+///    are neighbors.
+///
+/// Whether any other two blocks need a blank line depends on their text,
+/// and the writer does not decide that.
+#[derive(Debug, Default)]
+pub struct Writer {
+    /// The text written so far.
+    out: String,
+    /// Whether the last block written was prose.
+    after_prose: bool,
 }
 
-/// Returns the length of the longest run of `mark` in `text`.
-fn longest_run(text: &str, mark: char) -> usize {
-    let mut longest = 0;
-    let mut run = 0;
-    for c in text.chars() {
-        run = if c == mark { run + 1 } else { 0 };
-        longest = longest.max(run);
+impl Writer {
+    /// A writer that has written nothing.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
     }
-    longest
-}
 
-/// Writes a list, one item per marker: `-` or `1.`, or `*` or `1)` when
-/// the list takes the `second` marker.
-fn write_list(out: &mut String, ordered: bool, second: bool, items: &[String]) {
-    for (at, item) in items.iter().enumerate() {
-        if at > 0 {
-            out.push('\n');
+    /// Writes the source of one block whose `kind` field is `kind`. The
+    /// blocks under a section are written after it, each by its own call.
+    /// An empty source writes nothing.
+    pub fn write(&mut self, kind: &str, source: &str) {
+        if source.is_empty() {
+            return;
         }
-        let marker = match (ordered, second) {
-            (false, false) => "-".to_owned(),
-            (false, true) => "*".to_owned(),
-            (true, false) => format!("{}.", at + 1),
-            (true, true) => format!("{})", at + 1),
-        };
-        write_item(out, &marker, item);
+        let prose = kind == Kind::Prose.name();
+        if !self.out.is_empty() {
+            if !self.out.ends_with('\n') {
+                self.out.push('\n');
+            }
+            let parted = is_blank(self.out.split_inclusive('\n').next_back())
+                || is_blank(source.split_inclusive('\n').next());
+            if prose && self.after_prose && !parted {
+                self.out.push('\n');
+            }
+        }
+        self.out.push_str(source);
+        self.after_prose = prose;
+    }
+
+    /// The text written.
+    #[must_use]
+    pub fn finish(self) -> String {
+        self.out
     }
 }
 
-/// Writes one item after its marker. Each later line is indented to sit
-/// under the first, and an empty item is its marker alone.
-fn write_item(out: &mut String, marker: &str, item: &str) {
-    let indent = " ".repeat(marker.len() + 1);
-    let mut lines = item.split('\n');
-    out.push_str(marker);
-    if let Some(first) = lines.next().filter(|first| !first.is_empty()) {
-        out.push(' ');
-        out.push_str(first);
-    }
-    for line in lines {
-        out.push('\n');
-        if !line.is_empty() {
-            out.push_str(&indent);
-            out.push_str(line);
-        }
-    }
+/// Whether `line` is a blank line. No line is not one.
+fn is_blank(line: Option<&str>) -> bool {
+    line.is_some_and(|line| line.trim_matches(BLANK).is_empty())
 }
 
 #[cfg(test)]

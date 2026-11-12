@@ -7,6 +7,8 @@ use crate::Block;
 struct Open {
     /// The heading's line.
     line: usize,
+    /// The heading's source.
+    source: String,
     /// The heading's level.
     level: u8,
     /// The heading's title.
@@ -24,10 +26,16 @@ pub(super) fn fold(flat: Vec<Flat>, mut root: Vec<Block>) -> Vec<Block> {
     let mut open: Vec<Open> = Vec::new();
     for entry in flat {
         match entry {
-            Flat::Heading { line, level, title } => {
+            Flat::Heading {
+                line,
+                source,
+                level,
+                title,
+            } => {
                 close(&mut open, &mut root, level);
                 open.push(Open {
                     line,
+                    source,
                     level,
                     title,
                     blocks: Vec::new(),
@@ -45,6 +53,7 @@ fn close(open: &mut Vec<Open>, root: &mut Vec<Block>, level: u8) {
     while let Some(section) = open.pop_if(|section| section.level >= level) {
         let block = Block::Section {
             line: section.line,
+            source: section.source,
             level: section.level,
             title: section.title,
             blocks: section.blocks,
@@ -71,13 +80,17 @@ mod tests {
     fn heading(level: u8, title: &str) -> Flat {
         Flat::Heading {
             line: 0,
+            source: format!("{} {title}\n", "#".repeat(usize::from(level))),
             level,
             title: title.to_owned(),
         }
     }
 
     fn rule() -> Flat {
-        Flat::Leaf(Block::Rule { line: 0 })
+        Flat::Leaf(Block::Rule {
+            line: 0,
+            source: "---\n".to_owned(),
+        })
     }
 
     /// The tree as nested text: a section is `title(members)` and a rule
@@ -131,7 +144,26 @@ mod tests {
 
     #[test]
     fn the_tree_follows_the_blocks_it_was_given() {
-        let root = vec![Block::Rule { line: 0 }];
+        let root = vec![Block::Rule {
+            line: 0,
+            source: "---\n".to_owned(),
+        }];
         assert_eq!(shape(&fold(vec![heading(1, "A")], root)), "- A()");
+    }
+
+    #[test]
+    fn a_section_keeps_its_headings_source_and_folding_moves_no_source() {
+        let flat = vec![heading(2, "A"), rule(), heading(3, "B"), heading(1, "C")];
+        let tree = fold(flat, Vec::new());
+        let [
+            Block::Section { source, blocks, .. },
+            Block::Section { source: last, .. },
+        ] = tree.as_slice()
+        else {
+            panic!("the tree is two sections");
+        };
+        assert_eq!((source.as_str(), last.as_str()), ("## A\n", "# C\n"));
+        let sources: Vec<&str> = blocks.iter().map(Block::source).collect();
+        assert_eq!(sources, ["---\n", "### B\n"]);
     }
 }

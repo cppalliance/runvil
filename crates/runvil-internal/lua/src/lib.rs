@@ -17,7 +17,8 @@
 //! array (`json.array`). A persistent `markdown` table parses Markdown
 //! text into plain tables (`markdown.parse`), finds a section or a block
 //! in them (`markdown.section`, `markdown.section_or`, and
-//! `markdown.select`), and writes them back as text (`markdown.render`).
+//! `markdown.select`), and writes their sources back as the text they
+//! were read from (`markdown.render`).
 //!
 //! The chunk's top-level return value becomes the section's result (the finish
 //! case of the exit rule). The `var` table is read back afterward as JSON for

@@ -8,6 +8,13 @@ use serde_json::Value as Json;
 /// heading, subsections included, so the list is a tree. Every block
 /// records the line it starts on: a 1-based line of the text that was
 /// parsed.
+///
+/// Every block also holds its `source`: the lines it was read from,
+/// exactly as written and each with its line ending, and the blank lines
+/// after them. Blank lines at the very top of the text are in the first
+/// block's source. A section's source is its heading's, since the blocks
+/// under the heading hold their own. So no character is in two sources,
+/// and the sources of a document, in file order, are the whole text.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Block {
     /// The YAML mapping that opens the text. It is only ever the first
@@ -15,6 +22,9 @@ pub enum Block {
     Frontmatter {
         /// The line of the opening `---`.
         line: usize,
+        /// Both delimiter lines, the lines between them, and the blank
+        /// lines after.
+        source: String,
         /// The mapping, as a JSON object.
         data: Json,
     },
@@ -22,6 +32,8 @@ pub enum Block {
     Section {
         /// The heading's line.
         line: usize,
+        /// The heading's lines and the blank lines after them.
+        source: String,
         /// The heading's level, 1 to 6.
         level: u8,
         /// The heading's text with inline markup removed, trimmed.
@@ -35,7 +47,9 @@ pub enum Block {
     Prose {
         /// The first non-blank line of the run.
         line: usize,
-        /// The source as written, without leading blank lines or trailing
+        /// The run's lines and the blank lines after them.
+        source: String,
+        /// The source without leading blank lines or trailing
         /// whitespace. It is never empty.
         text: String,
     },
@@ -43,6 +57,9 @@ pub enum Block {
     Fence {
         /// The line of the opening fence.
         line: usize,
+        /// Both fence lines, the lines between them, and the blank lines
+        /// after.
+        source: String,
         /// The first word of the info string, or empty.
         lang: String,
         /// The whole info string, trimmed.
@@ -55,6 +72,9 @@ pub enum Block {
     List {
         /// The line of the first marker.
         line: usize,
+        /// The list's lines, markers included, and the blank lines after
+        /// them.
+        source: String,
         /// Whether the list is numbered.
         ordered: bool,
         /// Each item's source with its marker removed.
@@ -64,6 +84,8 @@ pub enum Block {
     Rule {
         /// The break's line.
         line: usize,
+        /// The break's line and the blank lines after it.
+        source: String,
     },
 }
 
@@ -90,7 +112,21 @@ impl Block {
             | Block::Prose { line, .. }
             | Block::Fence { line, .. }
             | Block::List { line, .. }
-            | Block::Rule { line } => *line,
+            | Block::Rule { line, .. } => *line,
+        }
+    }
+
+    /// The lines the block was read from, as written. A section's are
+    /// its heading's.
+    #[must_use]
+    pub fn source(&self) -> &str {
+        match self {
+            Block::Frontmatter { source, .. }
+            | Block::Section { source, .. }
+            | Block::Prose { source, .. }
+            | Block::Fence { source, .. }
+            | Block::List { source, .. }
+            | Block::Rule { source, .. } => source,
         }
     }
 }
@@ -158,15 +194,26 @@ mod tests {
     }
 
     #[test]
-    fn a_block_reports_its_kind_and_its_line() {
-        let block = Block::Rule { line: 7 };
-        assert_eq!((block.kind(), block.line()), (Kind::Rule, 7));
+    fn a_block_reports_its_kind_its_line_and_its_source() {
+        let block = Block::Rule {
+            line: 7,
+            source: "---\n\n".to_owned(),
+        };
+        assert_eq!(
+            (block.kind(), block.line(), block.source()),
+            (Kind::Rule, 7, "---\n\n")
+        );
+        // A section's source is its heading's, not its members'.
         let block = Block::Section {
             line: 3,
+            source: "## A\n".to_owned(),
             level: 2,
             title: "A".to_owned(),
-            blocks: Vec::new(),
+            blocks: vec![block],
         };
-        assert_eq!((block.kind(), block.line()), (Kind::Section, 3));
+        assert_eq!(
+            (block.kind(), block.line(), block.source()),
+            (Kind::Section, 3, "## A\n")
+        );
     }
 }

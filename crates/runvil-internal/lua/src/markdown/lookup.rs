@@ -4,7 +4,7 @@
 //! A lookup returns the tables that are already inside the list it was
 //! given, so it copies nothing. It reads only `kind`, `title`, `blocks`,
 //! `lang`, and `line`, and a block whose `kind` it does not know matches
-//! nothing.
+//! no selector but `*`, which matches every block.
 
 use std::collections::HashSet;
 use std::ffi::c_void;
@@ -134,15 +134,20 @@ fn search_list(
 /// The `kind` of a section.
 const SECTION: &str = "section";
 
-/// Whether `selector` matches the block `entry`, whose `kind` is `kind`.
-/// The block's `lang` is read only for a selector that names a language.
-fn selects(selector: &Selector, kind: &str, entry: &Entry) -> mlua::Result<bool> {
+/// Whether `selector` matches the block `entry`, and whether the block
+/// is a section. The block's `kind` is the empty text when it has none,
+/// which only `*` matches, and its `lang` is read only for a selector
+/// that names a language.
+fn selects(selector: &Selector, entry: &Entry) -> mlua::Result<(bool, bool)> {
+    let kind = entry.string("kind")?;
+    let kind = kind.as_ref().and_then(|kind| kind.to_str().ok());
+    let kind = kind.as_deref().unwrap_or_default();
     let lang = match selector {
-        Selector::Kind(_) => None,
+        Selector::Any | Selector::Kind(_) => None,
         Selector::Fence(_) => entry.string("lang")?,
     };
     let lang = lang.as_ref().and_then(|lang| lang.to_str().ok());
-    Ok(selector.matches(kind, lang.as_deref()))
+    Ok((selector.matches(kind, lang.as_deref()), kind == SECTION))
 }
 
 /// Finds the blocks `selector` matches among the direct members of the
@@ -162,13 +167,8 @@ pub(super) fn members(
     }
     let data = walk.open(blocks)?;
     walk.each(&data, &mut |_, entry| {
-        let Some(kind) = entry.string("kind")? else {
-            return Ok(());
-        };
-        let Ok(kind) = kind.to_str() else {
-            return Ok(());
-        };
-        if selects(selector, &kind, entry)? {
+        let (selected, _) = selects(selector, entry)?;
+        if selected {
             kept.push(Match {
                 found: entry.found.clone(),
                 line: entry.line()?,
@@ -195,16 +195,11 @@ pub(super) fn every(
 ) -> mlua::Result<()> {
     let data = walk.open(list)?;
     walk.each(&data, &mut |walk, entry| {
-        let Some(kind) = entry.string("kind")? else {
-            return Ok(());
-        };
-        let Ok(kind) = kind.to_str() else {
-            return Ok(());
-        };
-        if selects(selector, &kind, entry)? {
+        let (selected, section) = selects(selector, entry)?;
+        if selected {
             kept.push(entry.found.clone());
         }
-        if *kind == *SECTION {
+        if section {
             let blocks = entry.field("blocks")?;
             if !blocks.is_nil() {
                 every(walk, &blocks, selector, kept)?;

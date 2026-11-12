@@ -42,9 +42,21 @@ fn every_function_reads_through_blocks_kept_in_var() {
             ("markdown.select(var.doc, 'list')[2].ordered", "true"),
             (
                 "markdown.render(markdown.section(var.doc, '/Guide/Usage').blocks)",
-                r#""1. first\n2. second""#,
+                r#""1. first\n2. second\n""#,
             ),
-            ("markdown.render(var.doc) == markdown.render(md)", "true"),
+            // The stored copy keeps every source, so it is still written
+            // back as the text.
+            ("markdown.render(var.doc) == guide_text", "true"),
+            ("#markdown.select(var.doc, '*')", "16"),
+            (
+                "markdown.select(var.doc, '*')[4].source",
+                r#""Intro text\non two lines.\n\n""#,
+            ),
+            // So does a copy that went through JSON text.
+            (
+                "markdown.render(json.decode(json.encode(md))) == guide_text",
+                "true",
+            ),
             // A section's `blocks` read through the view narrows a lookup.
             (
                 "markdown.section(var.doc[3].blocks, '/Usage', 'list').items[2]",
@@ -107,7 +119,7 @@ fn a_list_whose_data_only_a_function_can_read_is_refused() {
 fn a_list_that_contains_itself_is_refused() {
     let vm = markdown_vm();
     vm.exec(
-        "loop = { { kind = 'section', title = 'A' } }\n\
+        "loop = { { kind = 'section', title = 'A', source = '# A\\n' } }\n\
          loop[1].blocks = loop",
     );
     assert_raises(
@@ -118,12 +130,16 @@ fn a_list_that_contains_itself_is_refused() {
                 "markdown.select: blocks[1].blocks contains itself",
             ),
             (
+                "markdown.select(loop, '*')",
+                "markdown.select: blocks[1].blocks contains itself",
+            ),
+            (
                 "markdown.section(loop, '//A[2]')",
                 "markdown.section: blocks[1].blocks contains itself",
             ),
             (
                 "markdown.render(loop)",
-                "markdown.render: blocks[1].level must be an integer from 1 to 6, got nil",
+                "markdown.render: blocks[1].blocks contains itself",
             ),
         ],
     );
@@ -138,7 +154,7 @@ fn a_list_nested_past_the_depth_limit_is_refused() {
         "function deep(levels)\n\
            local list = {}\n\
            for _ = 2, levels do\n\
-             list = { { kind = 'section', level = 1, title = 'A', blocks = list } }\n\
+             list = { { kind = 'section', level = 1, title = 'A', source = '# A\\n', blocks = list } }\n\
            end\n\
            return list\n\
          end",
@@ -147,7 +163,8 @@ fn a_list_nested_past_the_depth_limit_is_refused() {
         &vm,
         &[
             ("#markdown.select(deep(127), 'section')", "126"),
-            ("#markdown.render(deep(127)) > 0", "true"),
+            ("#markdown.select(deep(127), '*')", "126"),
+            ("#markdown.render(deep(127))", "504"),
         ],
     );
     let name = format!("blocks{}", "[1].blocks".repeat(127));
@@ -182,7 +199,7 @@ fn a_shared_list_walked_past_the_budget_is_refused() {
     vm.exec(
         "shared = {}\n\
          for _ = 1, 17 do\n\
-           local section = { kind = 'section', level = 1, title = 'A', blocks = shared }\n\
+           local section = { kind = 'section', level = 1, title = 'A', source = '# A\\n', blocks = shared }\n\
            shared = { section, section }\n\
          end",
     );

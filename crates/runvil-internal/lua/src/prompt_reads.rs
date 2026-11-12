@@ -4,7 +4,8 @@
 //! `prompt.section(path, selector [, n])` returns one block of it as a
 //! table built for the call: the block the selector picks once the
 //! Markdown is parsed by the rules `markdown.parse` follows, with `line`
-//! counting lines of the prompt file. Both forms raise when the section
+//! counting lines of the prompt file and `source` holding the block's
+//! lines of that Markdown. Both forms raise when the section
 //! or the block is not there. `prompt.section_or` is the same read, and
 //! returns nil for that miss. Both raise for a path the caller's reader
 //! refuses, for a target that is not a string, and for a malformed

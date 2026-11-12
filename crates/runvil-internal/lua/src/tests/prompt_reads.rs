@@ -179,6 +179,91 @@ fn a_selector_picks_one_block_of_the_sections_own_content() {
 }
 
 #[test]
+fn a_star_picks_among_every_block_of_the_sections_own_content() {
+    let vm = reading_vm();
+    assert_values(
+        &vm,
+        &[
+            // A section with one block needs no index.
+            ("prompt.section('Rules', '*').text", r#""Be brief.""#),
+            ("prompt.section('Template', '*', 1).kind", r#""prose""#),
+            ("prompt.section('Template', '*', 2).lang", r#""markdown""#),
+            ("prompt.section('Topics', '*', -1).ordered", "true"),
+            ("prompt.section('Topics', '*', 3).line", "47"),
+            ("prompt.section_or('Topics', '*', 5)", "nil"),
+            ("prompt.section_or('Empty', '*')", "nil"),
+        ],
+    );
+    assert_raises(
+        &vm,
+        &[
+            (
+                "prompt.section('Template', '*')",
+                "prompt.section: selector \"*\" matches 2 blocks, at lines 23 and 25; add an \
+                 index, such as 1 for the first",
+            ),
+            (
+                "prompt.section('Empty', '*')",
+                "prompt.section: no block in section `Empty` matches selector \"*\"",
+            ),
+        ],
+    );
+}
+
+#[test]
+fn the_sources_of_a_sections_blocks_are_its_markdown() {
+    let vm = reading_vm();
+    vm.exec(
+        "function joined(path)\n\
+           local parts = {}\n\
+           while true do\n\
+             local block = prompt.section_or(path, '*', #parts + 1)\n\
+             if not block then break end\n\
+             parts[#parts + 1] = block.source\n\
+           end\n\
+           return #parts, table.concat(parts)\n\
+         end",
+    );
+    for (path, blocks) in [
+        ("Rules", 1),
+        ("Template", 2),
+        ("Topics", 4),
+        ("Lookalike", 3),
+    ] {
+        let joined: String = vm.eval(&format!(
+            "local count, text = joined('{path}')\n\
+             assert(count == {blocks}, count)\n\
+             assert(text == markdown.render(markdown.parse(text)))\n\
+             return tostring(text == prompt.section('{path}'))"
+        ));
+        assert_eq!(joined, "true", "{path}");
+    }
+    assert_values(
+        &vm,
+        &[
+            // Each source is the block's lines and the blank lines after.
+            (
+                "prompt.section('Template', 'prose').source",
+                r#""Fill in this outline.\n\n""#,
+            ),
+            (
+                "prompt.section('Topics', 'list', 1).source",
+                r#""- allocators\n  - arenas\n- coroutines\n-\n\n""#,
+            ),
+            // The last block of a section ends where its Markdown does.
+            (
+                "prompt.section('Template', 'fence').source",
+                r#""```markdown\n# Title\n\n## Summary\n```""#,
+            ),
+            (
+                "prompt.section('Lookalike', 'rule', 1).source",
+                r#""---\n\n""#,
+            ),
+        ],
+    );
+}
+
+#[test]
 fn a_blocks_line_counts_lines_of_the_prompt_file() {
     let vm = reading_vm();
     assert_values(
@@ -203,11 +288,11 @@ fn the_block_is_a_plain_table_built_for_the_call() {
         &[
             (
                 "prompt.section('Template', 'prose')",
-                r#"{"kind":"prose","line":23,"text":"Fill in this outline."}"#,
+                r#"{"kind":"prose","line":23,"source":"Fill in this outline.\n\n","text":"Fill in this outline."}"#,
             ),
             (
                 "prompt.section('Topics', 'list', 2)",
-                r#"{"items":["one","two"],"kind":"list","line":51,"ordered":true}"#,
+                r#"{"items":["one","two"],"kind":"list","line":51,"ordered":true,"source":"1. one\n2. two"}"#,
             ),
             // Each call builds a new table, so editing one changes nothing
             // else.
@@ -341,7 +426,7 @@ fn a_malformed_selector_or_index_raises_from_both_before_the_path_is_looked_up()
                 (
                     "'fences', 1",
                     "unknown kind \"fences\"; kinds are frontmatter, section, prose, fence, list, \
-                     rule",
+                     rule, and * selects every block",
                 ),
                 (
                     "'list lua'",

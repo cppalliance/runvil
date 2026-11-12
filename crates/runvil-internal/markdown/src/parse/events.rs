@@ -18,6 +18,23 @@ pub(super) struct Mark {
     pub(super) what: What,
 }
 
+impl Mark {
+    /// Returns the mark with its range ended where its construct ends.
+    ///
+    /// The library ends a list where the next block starts. That is past
+    /// the link definitions that follow the list, and past the
+    /// indentation of the paragraph after it. It ends an item where the
+    /// item ends, so a list ends with its last item.
+    fn ended(mut self) -> Self {
+        if let What::List { items, .. } = &self.what
+            && let Some(last) = items.last()
+        {
+            self.range.end = self.range.end.min(last.range.end);
+        }
+        self
+    }
+}
+
 /// What a [`Mark`] records.
 pub(super) enum What {
     /// A heading.
@@ -94,7 +111,7 @@ impl Reader {
             Event::End(_) => {
                 self.depth = self.depth.saturating_sub(1);
                 if self.depth == 0 {
-                    self.marks.extend(self.open.take());
+                    self.marks.extend(self.open.take().map(Mark::ended));
                 }
             }
             Event::Rule if self.depth == 0 => self.marks.push(Mark {
@@ -188,6 +205,29 @@ mod tests {
                 ("---\n", "rule"),
             ]
         );
+    }
+
+    #[test]
+    fn a_list_ends_with_its_last_item_and_not_where_the_next_block_starts() {
+        // A link definition after a list is not in it, with or without a
+        // blank line between, and neither is the next paragraph's
+        // indentation.
+        for (body, list) in [
+            ("-\n[ref]: http://x\ntext\n", "-\n"),
+            ("- a\n\n[ref]: http://x\ntext\n", "- a\n\n"),
+            ("- a\n  - b\n\n[ref]: http://x\n   tail\n", "- a\n  - b\n\n"),
+            ("-\n\n   text\n", "-\n"),
+            ("- a\n\n text\n", "- a\n\n"),
+            (
+                "1. a\n\n   ```\n   x\n   ```\n\n[r]: http://x\nnext\n",
+                "1. a\n\n   ```\n   x\n   ```\n\n",
+            ),
+        ] {
+            assert_eq!(covered(body), [(list, "list")], "{body:?}");
+        }
+        // A line that continues an item is in it.
+        let body = "- a\n[ref]: http://x\n\n  more\n";
+        assert_eq!(covered(body), [(body, "list")]);
     }
 
     #[test]

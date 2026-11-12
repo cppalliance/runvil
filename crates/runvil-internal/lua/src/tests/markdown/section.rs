@@ -279,6 +279,51 @@ fn an_index_picks_among_several_blocks() {
 }
 
 #[test]
+fn a_star_picks_among_every_block_of_the_sections_own_blocks() {
+    let vm = markdown_vm();
+    assert_values(
+        &vm,
+        &[
+            // Usage holds one block, so no index is needed.
+            ("markdown.section(md, '/Guide/Usage', '*').ordered", "true"),
+            (
+                "markdown.section(md, '/Guide/Templates', '*', 1).text",
+                r#""Use these.""#,
+            ),
+            (
+                "markdown.section(md, '/Guide/Templates', '*', 2).lang",
+                r#""lua""#,
+            ),
+            // A subsection is one of its section's blocks, and the blocks
+            // under it are not counted.
+            (
+                "markdown.section(md, '/Guide/Templates', '*', -1).title",
+                r#""Extras""#,
+            ),
+            ("markdown.section_or(md, '/Guide/Templates', '*', 7)", "nil"),
+            ("markdown.section(md, '/Guide', '*', 4) == usage", "true"),
+        ],
+    );
+    assert_raises(
+        &vm,
+        &[
+            (
+                "markdown.section(md, '/Guide', '*')",
+                r#"markdown.section: selector "*" matches 4 blocks, at lines 10, 13, 16, and 42; add an index, such as 1 for the first"#,
+            ),
+            (
+                "markdown.section(md, '/Guide/Templates', '*', 7)",
+                r#"markdown.section: selector "*" matches 6 blocks in "/Guide/Templates"; there is no block 7"#,
+            ),
+            (
+                "markdown.section(nested, '//B[1]', '*')",
+                r#"markdown.section: no block in "//B[1]" matches selector "*""#,
+            ),
+        ],
+    );
+}
+
+#[test]
 fn a_block_that_is_not_there_raises_from_section_and_is_nil_from_section_or() {
     let vm = markdown_vm();
     let misses = [
@@ -391,12 +436,12 @@ fn a_malformed_path_selector_or_index_raises_from_both_whether_or_not_the_sectio
             ("md", "path must be a string, got nil".to_owned()),
             (
                 "md, '/Guide', 'fences', 1",
-                r#"unknown kind "fences"; kinds are frontmatter, section, prose, fence, list, rule"#
+                r#"unknown kind "fences"; kinds are frontmatter, section, prose, fence, list, rule, and * selects every block"#
                     .to_owned(),
             ),
             (
                 "md, '/Guide/Nope', 'fences', 1",
-                r#"unknown kind "fences"; kinds are frontmatter, section, prose, fence, list, rule"#
+                r#"unknown kind "fences"; kinds are frontmatter, section, prose, fence, list, rule, and * selects every block"#
                     .to_owned(),
             ),
             (

@@ -8,7 +8,7 @@
 //!    names the library, and it knows nothing of lines or blocks.
 //! 2. `flat` turns those marks into the body's blocks in file order: the
 //!    text between two marks is prose, and every line number is counted
-//!    here. Nothing above it sees a byte range.
+//!    and every source is cut here. Nothing above it sees a byte range.
 //! 3. `tree` folds that sequence into sections.
 //!
 //! `frontmatter` splits the YAML mapping off the front before the layers
@@ -23,6 +23,9 @@ use std::borrow::Cow;
 
 use crate::Block;
 
+/// The characters that leave a Markdown line blank.
+pub(crate) const BLANK: [char; 3] = [' ', '\t', '\n'];
+
 /// Parses Markdown text into blocks.
 ///
 /// The text is read as CommonMark with no extensions. A byte order mark
@@ -30,6 +33,11 @@ use crate::Block;
 /// `\n`. Only a top-level heading, fence, list, or rule becomes a block of
 /// its kind; everything else is prose, so every non-blank line belongs to
 /// exactly one block. Any text is a document: nothing here fails.
+///
+/// Each block's source is the lines it was read from and the blank lines
+/// after them, so the sources in file order are the text as it was read,
+/// which is what [`render`](fn@crate::render) writes. Text that holds
+/// nothing but blank lines is the one exception: it has no block.
 #[must_use]
 pub fn parse(text: &str) -> Vec<Block> {
     let text = normalize(text);
@@ -37,6 +45,7 @@ pub fn parse(text: &str) -> Vec<Block> {
         Some(opening) => {
             let root = vec![Block::Frontmatter {
                 line: 1,
+                source: text.get(..opening.end).unwrap_or_default().to_owned(),
                 data: opening.data,
             }];
             let rest = text.get(opening.end..).unwrap_or_default();
@@ -50,7 +59,8 @@ pub fn parse(text: &str) -> Vec<Block> {
 /// content, into blocks.
 ///
 /// `first_line` is the line number of the text's first line, so each
-/// block's line counts in the file the text was cut from.
+/// block's line counts in the file the text was cut from. The sources are
+/// the text, as [`parse`]'s are.
 #[must_use]
 pub fn parse_body(text: &str, first_line: usize) -> Vec<Block> {
     body(&normalize(text), first_line, Vec::new())

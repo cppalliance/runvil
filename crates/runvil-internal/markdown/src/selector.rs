@@ -1,4 +1,5 @@
-//! Selectors: the word that names a kind of block.
+//! Selectors: the word that names a kind of block, or `*` for every
+//! block.
 
 use crate::index::{at_lines, position};
 use crate::{Block, Kind};
@@ -6,6 +7,8 @@ use crate::{Block, Kind};
 /// What a selector matches.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Selector {
+    /// Every block, of whatever kind. It is written `*`.
+    Any,
     /// Every block of one kind.
     Kind(Kind),
     /// A fence whose language is exactly this one. The empty string is a
@@ -13,28 +16,36 @@ pub enum Selector {
     Fence(String),
 }
 
+/// The word that selects every block.
+const ANY: &str = "*";
+
 impl Selector {
-    /// Reads a selector: a kind, or `fence` and a language. The language
-    /// `""`, written as two quote characters, is that of a fence with
-    /// none. Whitespace around the selector and extra spaces between its
-    /// two words are ignored.
+    /// Reads a selector: `*`, a kind, or `fence` and a language. The
+    /// language `""`, written as two quote characters, is that of a fence
+    /// with none. Whitespace around the selector and extra spaces between
+    /// its two words are ignored.
     ///
     /// # Errors
-    /// Returns the message for a first word that is no kind, a language
-    /// on a kind other than `fence`, or more than one language.
+    /// Returns the message for a first word that is neither `*` nor a
+    /// kind, a language on anything other than `fence`, or more than one
+    /// language.
     pub fn parse(given: &str) -> Result<Selector, String> {
         let mut words = given.split_whitespace();
         let word = words.next().unwrap_or_default();
-        let Some(kind) = Kind::from_name(word) else {
+        let kind = Kind::from_name(word);
+        if kind.is_none() && word != ANY {
             let kinds = Kind::ALL.map(Kind::name).join(", ");
-            return Err(format!("unknown kind \"{word}\"; kinds are {kinds}"));
-        };
+            return Err(format!(
+                "unknown kind \"{word}\"; kinds are {kinds}, and {ANY} selects every block"
+            ));
+        }
         match (kind, words.next(), words.next()) {
-            (_, None, _) => Ok(Selector::Kind(kind)),
-            (Kind::Fence, Some(lang), None) => Ok(Selector::Fence(
+            (None, None, _) => Ok(Selector::Any),
+            (Some(kind), None, _) => Ok(Selector::Kind(kind)),
+            (Some(Kind::Fence), Some(lang), None) => Ok(Selector::Fence(
                 if lang == "\"\"" { "" } else { lang }.to_owned(),
             )),
-            (Kind::Fence, Some(_), Some(_)) => Err(format!(
+            (Some(Kind::Fence), Some(_), Some(_)) => Err(format!(
                 "a fence selector takes one language, got \"{given}\""
             )),
             _ => Err(format!(
@@ -46,12 +57,14 @@ impl Selector {
     /// Whether the selector matches a block whose `kind` field is `kind`
     /// and whose `lang` field, when it has one, is `lang`.
     ///
-    /// A kind compares by its name, so a `kind` that names none matches
-    /// nothing. A language compares exactly and case-sensitively, and a
-    /// block with no `lang` has no language to match.
+    /// `*` matches whatever `kind` holds. A kind compares by its name, so
+    /// a `kind` that names none matches no other selector. A language
+    /// compares exactly and case-sensitively, and a block with no `lang`
+    /// has no language to match.
     #[must_use]
     pub fn matches(&self, kind: &str, lang: Option<&str>) -> bool {
         match self {
+            Selector::Any => true,
             Selector::Kind(wanted) => wanted.name() == kind,
             Selector::Fence(wanted) => kind == Kind::Fence.name() && lang == Some(wanted.as_str()),
         }
@@ -189,9 +202,17 @@ mod tests {
     fn fence(lang: &str) -> Block {
         Block::Fence {
             line: 1,
+            source: format!("```{lang}\n```\n"),
             lang: lang.to_owned(),
             info: lang.to_owned(),
             text: String::new(),
+        }
+    }
+
+    fn rule() -> Block {
+        Block::Rule {
+            line: 1,
+            source: "---\n".to_owned(),
         }
     }
 
@@ -201,6 +222,20 @@ mod tests {
             assert_eq!(Selector::parse(kind.name()), Ok(Selector::Kind(kind)));
         }
         assert_eq!(Selector::parse("  list\t"), Ok(Selector::Kind(Kind::List)));
+    }
+
+    #[test]
+    fn a_star_alone_selects_every_block() {
+        assert_eq!(Selector::parse("*"), Ok(Selector::Any));
+        assert_eq!(Selector::parse(" *\t"), Ok(Selector::Any));
+        assert!(Selector::Any.selects(&fence("lua")));
+        assert!(Selector::Any.selects(&rule()));
+        // Whatever the `kind` field holds, a name of no kind included.
+        assert!(Selector::Any.matches("note", None));
+        assert!(Selector::Any.matches("", None));
+        for given in ["**", "*fence", "* *"] {
+            assert!(Selector::parse(given).is_err(), "{given:?}");
+        }
     }
 
     #[test]
@@ -232,7 +267,8 @@ mod tests {
             assert_eq!(
                 Selector::parse(given),
                 Err(format!(
-                    "unknown kind \"{word}\"; kinds are frontmatter, section, prose, fence, list, rule"
+                    "unknown kind \"{word}\"; kinds are frontmatter, section, prose, fence, list, \
+                     rule, and * selects every block"
                 )),
                 "{given:?}"
             );
@@ -246,6 +282,10 @@ mod tests {
             Err("only a fence selector takes a language, got \"list lua\"".to_owned())
         );
         assert_eq!(
+            Selector::parse("* lua"),
+            Err("only a fence selector takes a language, got \"* lua\"".to_owned())
+        );
+        assert_eq!(
             Selector::parse("prose a b"),
             Err("only a fence selector takes a language, got \"prose a b\"".to_owned())
         );
@@ -257,11 +297,11 @@ mod tests {
 
     #[test]
     fn a_kind_matches_every_block_of_that_kind() {
-        let any = Selector::Kind(Kind::Fence);
-        assert!(any.selects(&fence("lua")));
-        assert!(any.selects(&fence("")));
-        assert!(!any.selects(&Block::Rule { line: 1 }));
-        assert!(Selector::Kind(Kind::Rule).selects(&Block::Rule { line: 1 }));
+        let fences = Selector::Kind(Kind::Fence);
+        assert!(fences.selects(&fence("lua")));
+        assert!(fences.selects(&fence("")));
+        assert!(!fences.selects(&rule()));
+        assert!(Selector::Kind(Kind::Rule).selects(&rule()));
         assert!(!Selector::Kind(Kind::Rule).matches("break", None));
     }
 

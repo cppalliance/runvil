@@ -1,36 +1,45 @@
-//! Block constructors and sample texts for this crate's tests.
+//! Block constructors, sample texts, and seeded generated texts for this
+//! crate's tests.
 
 use serde_json::Value as Json;
 
 use crate::Block;
 
-/// A frontmatter block on line 1.
+/// A frontmatter block on line 1, with no source.
 pub(crate) fn frontmatter(data: Json) -> Block {
-    Block::Frontmatter { line: 1, data }
+    Block::Frontmatter {
+        line: 1,
+        source: String::new(),
+        data,
+    }
 }
 
-/// A section block.
+/// A section block, with no source.
 pub(crate) fn section(line: usize, level: u8, title: &str, blocks: Vec<Block>) -> Block {
     Block::Section {
         line,
+        source: String::new(),
         level,
         title: title.to_owned(),
         blocks,
     }
 }
 
-/// A prose block.
+/// A prose block, with no source.
 pub(crate) fn prose(line: usize, text: &str) -> Block {
     Block::Prose {
         line,
+        source: String::new(),
         text: text.to_owned(),
     }
 }
 
-/// A fence block whose language is the first word of `info`.
+/// A fence block whose language is the first word of `info`, with no
+/// source.
 pub(crate) fn fence(line: usize, info: &str, text: &str) -> Block {
     Block::Fence {
         line,
+        source: String::new(),
         lang: info
             .split_whitespace()
             .next()
@@ -41,66 +50,196 @@ pub(crate) fn fence(line: usize, info: &str, text: &str) -> Block {
     }
 }
 
-/// A bullet list block.
+/// A bullet list block, with no source.
 pub(crate) fn bullets(line: usize, items: &[&str]) -> Block {
     Block::List {
         line,
+        source: String::new(),
         ordered: false,
         items: items.iter().map(|item| (*item).to_owned()).collect(),
     }
 }
 
-/// A numbered list block.
+/// A numbered list block, with no source.
 pub(crate) fn numbered(line: usize, items: &[&str]) -> Block {
     Block::List {
         line,
+        source: String::new(),
         ordered: true,
         items: items.iter().map(|item| (*item).to_owned()).collect(),
     }
 }
 
-/// A rule block.
+/// A rule block, with no source.
 pub(crate) fn rule(line: usize) -> Block {
-    Block::Rule { line }
+    Block::Rule {
+        line,
+        source: String::new(),
+    }
 }
 
-/// `blocks` with every line set to zero, for comparing two parses whose
-/// lines differ.
-pub(crate) fn without_lines(blocks: &[Block]) -> Vec<Block> {
+/// `block` with `source` as its source.
+pub(crate) fn sourced(mut block: Block, source: &str) -> Block {
+    match &mut block {
+        Block::Frontmatter { source: own, .. }
+        | Block::Section { source: own, .. }
+        | Block::Prose { source: own, .. }
+        | Block::Fence { source: own, .. }
+        | Block::List { source: own, .. }
+        | Block::Rule { source: own, .. } => source.clone_into(own),
+    }
+    block
+}
+
+/// `blocks` with every source emptied, for a test that states a parse by
+/// its other fields, as the constructors above build them.
+pub(crate) fn without_sources(blocks: &[Block]) -> Vec<Block> {
     blocks
         .iter()
         .cloned()
-        .map(|block| match block {
-            Block::Frontmatter { data, .. } => Block::Frontmatter { line: 0, data },
+        .map(|block| match sourced(block, "") {
             Block::Section {
+                line,
+                source,
                 level,
                 title,
                 blocks,
-                ..
             } => Block::Section {
-                line: 0,
+                line,
+                source,
                 level,
                 title,
-                blocks: without_lines(&blocks),
+                blocks: without_sources(&blocks),
             },
-            Block::Prose { text, .. } => Block::Prose { line: 0, text },
-            Block::Fence {
-                lang, info, text, ..
-            } => Block::Fence {
-                line: 0,
-                lang,
-                info,
-                text,
-            },
-            Block::List { ordered, items, .. } => Block::List {
-                line: 0,
-                ordered,
-                items,
-            },
-            Block::Rule { .. } => Block::Rule { line: 0 },
+            leaf => leaf,
         })
         .collect()
 }
+
+/// Every block of `blocks` in file order, a section before the blocks
+/// under it.
+pub(crate) fn flat(blocks: &[Block]) -> Vec<&Block> {
+    let mut found = Vec::new();
+    for block in blocks {
+        found.push(block);
+        if let Block::Section { blocks, .. } = block {
+            found.extend(flat(blocks));
+        }
+    }
+    found
+}
+
+/// The seed every generated text in this crate's tests starts from. A
+/// failure names it.
+pub(crate) const SEED: u64 = 0x5EED;
+
+/// A `SplitMix64` generator over a fixed seed, so a generated text is the
+/// same on every run.
+pub(crate) struct Seeded(u64);
+
+impl Seeded {
+    /// A generator that starts from `seed`.
+    pub(crate) fn new(seed: u64) -> Self {
+        Self(seed)
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let z = (self.0 ^ (self.0 >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        let z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// A draw in `0..n`.
+    pub(crate) fn below(&mut self, n: usize) -> usize {
+        let draw = self.next_u64() % u64::try_from(n).expect("a usize fits in a u64");
+        usize::try_from(draw).expect("a draw below a usize is a usize")
+    }
+
+    /// A text of up to 24 lines drawn from [`LINES`], about one in three
+    /// of them blank. One text in eight opens with frontmatter, and one
+    /// in four has no final line ending.
+    pub(crate) fn text(&mut self) -> String {
+        let mut lines = Vec::new();
+        if self.below(8) == 0 {
+            lines.extend(["---", "a: 1", "---"]);
+        }
+        for _ in 0..self.below(25) {
+            lines.push(if self.below(3) == 0 {
+                ""
+            } else {
+                LINES[self.below(LINES.len())]
+            });
+        }
+        let mut text = lines.join("\n");
+        if !lines.is_empty() && self.below(4) != 0 {
+            text.push('\n');
+        }
+        text
+    }
+}
+
+/// The lines a generated text is made of. Between them they open,
+/// continue, and close every construct the parser tells apart, and many
+/// read differently after different lines: `---` is a rule, a heading's
+/// underline, or a frontmatter delimiter, and an indented line is code,
+/// a paragraph's next line, or part of a list item.
+const LINES: &[&str] = &[
+    "   ",
+    "\t",
+    "# One",
+    "## Two ##",
+    "### Three",
+    "###### Six",
+    "#",
+    "  ## Indented",
+    "#NotHeading",
+    "## See [API](x) *now*",
+    "Title",
+    "=====",
+    "---",
+    "***",
+    "___",
+    " - - -",
+    "A paragraph line.",
+    "another line  ",
+    "ends with a backslash\\",
+    "h\u{e9}llo \u{2014} w\u{f6}rld",
+    "\u{a0}",
+    "```",
+    "```lua",
+    "~~~",
+    "~~~~",
+    "````md",
+    "  ``` py",
+    "    indented code",
+    "- a",
+    "- b",
+    "* c",
+    "+ d",
+    "1. one",
+    "2. two",
+    "3) three",
+    "10. ten",
+    "  - nested",
+    "   continued",
+    "-",
+    "- [ ] todo",
+    "- # heading in an item",
+    "> quote",
+    "> # quoted heading",
+    "> - quoted item",
+    ">",
+    "<div>",
+    "</div>",
+    "<!--",
+    "-->",
+    "[ref]: http://example.com",
+    "| a | b |",
+    "|---|---|",
+    "a: b",
+    "key: [1, 2]",
+];
 
 /// A document with every kind of block: frontmatter, prose before the
 /// first heading, three levels of section, both kinds of list, fences

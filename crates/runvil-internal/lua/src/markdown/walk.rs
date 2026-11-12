@@ -103,11 +103,6 @@ impl Walk {
         }
     }
 
-    /// The function the walk serves.
-    pub(super) fn function(&self) -> &'static str {
-        self.function
-    }
-
     /// The failure `<function>: <message>`.
     pub(super) fn refuse(&self, message: impl fmt::Display) -> mlua::Error {
         author_refusal(format!("{}: {message}", self.function))
@@ -121,7 +116,7 @@ impl Walk {
     }
 
     /// Spends `count` bytes of text of the budget.
-    pub(super) fn charge_bytes(&mut self, count: usize) -> mlua::Result<()> {
+    fn charge_bytes(&mut self, count: usize) -> mlua::Result<()> {
         self.budget
             .charge_bytes(count)
             .map_err(|_| self.refuse("blocks are too large to walk"))
@@ -129,7 +124,7 @@ impl Walk {
 
     /// The name of the block being read, such as `blocks[2].blocks[1]`.
     /// It is empty when no block is being read.
-    pub(super) fn block_name(&self) -> String {
+    fn block_name(&self) -> String {
         self.at
             .iter()
             .map(|index| format!("blocks[{index}]"))
@@ -253,34 +248,6 @@ impl Walk {
             self.at.pop();
         }
         Ok(())
-    }
-
-    /// Reads the list of strings `value`, the field `field` of the block
-    /// being read, with any view read through.
-    ///
-    /// # Errors
-    /// Returns the refusal of a value that is not a table, and of an item
-    /// that is not a string of valid UTF-8.
-    pub(super) fn strings(&mut self, value: &Value, field: &str) -> mlua::Result<Vec<String>> {
-        let Value::Table(table) = value else {
-            return Err(self.refuse(format!(
-                "{}.{field} must be a list of strings, got {}",
-                self.block_name(),
-                value.type_name()
-            )));
-        };
-        let data = self.data(table, &|walk| format!("{}.{field}", walk.block_name()))?;
-        let mut strings = Vec::new();
-        for index in 1.. {
-            let item: Value = data.raw_get(index)?;
-            if item.is_nil() {
-                break;
-            }
-            self.charge()?;
-            let name = format!("{field}[{index}]");
-            strings.push(self.text(&item, &name)?);
-        }
-        Ok(strings)
     }
 
     /// Reads `value`, the field `field` of the block being read, as text.
