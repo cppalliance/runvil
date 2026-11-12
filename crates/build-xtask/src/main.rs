@@ -43,6 +43,7 @@ fn main() -> ExitCode {
         Some("site") => site::run(
             root,
             std::env::var_os(site::DOCS_VAR).as_deref(),
+            std::env::var_os(site::HARNESS_VAR).as_deref(),
             &args[2..],
         ),
         Some("tidy") => {

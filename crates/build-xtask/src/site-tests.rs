@@ -433,7 +433,7 @@ fn every_guide_book_config_gives_its_landing_title_and_description() {
 fn the_site_without_runvil_docs_fails_naming_it_before_building() {
     for unset in [None, Some(OsStr::new(""))] {
         let root = tempfile::tempdir().expect("tempdir");
-        let error = site(root.path(), unset, &[]).expect_err("RUNVIL_DOCS is unset");
+        let error = site(root.path(), unset, None, &[]).expect_err("RUNVIL_DOCS is unset");
         assert!(error.contains("RUNVIL_DOCS"), "{unset:?}: {error}");
         assert!(!root.path().join("target").exists(), "{unset:?}");
     }
@@ -443,10 +443,70 @@ fn the_site_without_runvil_docs_fails_naming_it_before_building() {
 fn the_site_with_a_missing_docs_root_fails_naming_runvil_docs_and_the_path() {
     let root = tempfile::tempdir().expect("tempdir");
     let missing = root.path().join("no-such-docs");
-    let error = site(root.path(), Some(missing.as_os_str()), &[]).expect_err("missing docs root");
+    let error =
+        site(root.path(), Some(missing.as_os_str()), None, &[]).expect_err("missing docs root");
     assert!(error.contains("RUNVIL_DOCS"), "{error}");
     assert!(error.contains(&missing.display().to_string()), "{error}");
     assert!(!root.path().join("target").exists());
+}
+
+#[test]
+fn the_site_without_runvil_harness_fails_naming_it_before_building() {
+    for unset in [None, Some(OsStr::new(""))] {
+        let root = tempfile::tempdir().expect("tempdir");
+        let docs = tempfile::tempdir().expect("tempdir");
+        let error = site(root.path(), Some(docs.path().as_os_str()), unset, &[])
+            .expect_err("RUNVIL_HARNESS is unset");
+        assert!(error.contains("RUNVIL_HARNESS"), "{unset:?}: {error}");
+        assert!(error.contains("runvil-harness"), "{unset:?}: {error}");
+        assert!(!root.path().join("target").exists(), "{unset:?}");
+    }
+}
+
+#[test]
+fn the_site_with_a_missing_harness_root_fails_naming_runvil_harness_and_the_path() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let docs = tempfile::tempdir().expect("tempdir");
+    let missing = root.path().join("no-such-harness");
+    let error = site(
+        root.path(),
+        Some(docs.path().as_os_str()),
+        Some(missing.as_os_str()),
+        &[],
+    )
+    .expect_err("missing harness root");
+    assert!(error.contains("RUNVIL_HARNESS"), "{error}");
+    assert!(error.contains(&missing.display().to_string()), "{error}");
+    assert!(!root.path().join("target").exists());
+}
+
+#[test]
+fn a_books_only_build_reads_no_harness_checkout() {
+    let docs = tempfile::tempdir().expect("tempdir");
+    let missing = docs.path().join("no-such-harness");
+    for harness in [None, Some(missing.as_os_str())] {
+        let (_, harness_root) = checkouts(
+            Some(docs.path().as_os_str()),
+            harness,
+            Options { books_only: true },
+        )
+        .expect("a books-only build needs only the docs checkout");
+        assert_eq!(harness_root, None, "{harness:?}");
+    }
+}
+
+#[test]
+fn a_full_build_reads_the_docs_and_the_harness_checkouts() {
+    let docs = tempfile::tempdir().expect("tempdir");
+    let harness = tempfile::tempdir().expect("tempdir");
+    let (docs_root, harness_root) = checkouts(
+        Some(docs.path().as_os_str()),
+        Some(harness.path().as_os_str()),
+        Options { books_only: false },
+    )
+    .expect("both checkouts are directories");
+    assert_eq!(docs_root, docs.path());
+    assert_eq!(harness_root.as_deref(), Some(harness.path()));
 }
 
 #[test]

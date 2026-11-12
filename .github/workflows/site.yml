@@ -2,8 +2,9 @@ name: Deploy docs site to Pages
 on:
   push:
     branches: [main, master]
-  # The chapters live in cppalliance/runvil-docs, whose pushes do not
-  # start this workflow, so a nightly run publishes them.
+  # The chapters live in cppalliance/runvil-docs and the documented crates
+  # in cppalliance/runvil-harness. A push to either does not start this
+  # workflow, so a nightly run publishes them.
   schedule:
     - cron: "17 7 * * *"
   workflow_dispatch:
@@ -28,6 +29,7 @@ jobs:
     env:
       MDBOOK_VERSION: 0.4.44
       RUNVIL_DOCS: ${{ github.workspace }}/runvil-docs
+      RUNVIL_HARNESS: ${{ github.workspace }}/runvil-harness
     steps:
       - uses: actions/checkout@v4
 
@@ -35,6 +37,14 @@ jobs:
         with:
           repository: cppalliance/runvil-docs
           path: runvil-docs
+
+      # Only the full site documents the crates; a books-only build reads
+      # no harness checkout.
+      - uses: actions/checkout@v4
+        if: github.event_name != 'pull_request'
+        with:
+          repository: cppalliance/runvil-harness
+          path: runvil-harness
 
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
@@ -46,8 +56,9 @@ jobs:
           wget -q "https://github.com/rust-lang/mdBook/releases/download/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
           tar xzf "mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
 
-      # The ci.yml docs job already builds both facade rustdocs on every PR,
-      # so PR runs build only the books and the landing page.
+      # The documented crates are in cppalliance/runvil-harness, whose own CI
+      # builds their rustdoc on every PR, so PR runs here build only the
+      # books and the landing page.
       - name: Build books
         if: github.event_name == 'pull_request'
         run: MDBOOK="$PWD/mdbook" cargo xtask site --books-only

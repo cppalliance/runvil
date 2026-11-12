@@ -2,7 +2,10 @@
 //! `target/site/`, in this order:
 //!
 //! 1. Checks that `RUNVIL_DOCS` names a directory, the root of the
-//!    `runvil-docs` checkout that holds the book chapters.
+//!    `runvil-docs` checkout that holds the book chapters, and, unless
+//!    `--books-only` is set, that `RUNVIL_HARNESS` names one, the root of
+//!    the `runvil-harness` checkout whose crates the rustdoc sites
+//!    document.
 //! 2. Clears `target/site/` and `target/site-books/`.
 //! 3. Stages one mdBook tree per book, and beside them each book's
 //!    single-file export, into `target/site-books/` by running
@@ -13,10 +16,11 @@
 //!    folder, into `target/site/<book>/`. The folders are read from the
 //!    stage output; no book is named here.
 //! 5. Unless `--books-only` is set, builds every rustdoc site in
-//!    `RUSTDOC_SITES` through the separate `target/site-doc` folder, so the
-//!    developer's `target/doc` is untouched. Each page carries the
-//!    `guide/chrome/banner.html` bar, and each site folder gets an
-//!    `index.html` redirect to its crate.
+//!    `RUSTDOC_SITES` by running `cargo doc` in the `runvil-harness`
+//!    checkout, through the separate `target/site-doc` folder of this
+//!    workspace, so the `target/doc` of neither checkout is touched. Each
+//!    page carries the `guide/chrome/banner.html` bar, and each site
+//!    folder gets an `index.html` redirect to its crate.
 //! 6. Copies `guide/landing/` and the staged exports into `target/site/`,
 //!    then writes the landing page `target/site/index.html`: one table row
 //!    per rustdoc site and per staged book (see `site-landing.rs`).
@@ -28,7 +32,7 @@
 //!    skipped.
 //!
 //! Every path passed to a child process is absolute, built from the
-//! workspace root or made absolute from `RUNVIL_DOCS`.
+//! workspace root or made absolute from `RUNVIL_DOCS` or `RUNVIL_HARNESS`.
 
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
@@ -46,11 +50,15 @@ const USAGE: &str = "usage: cargo xtask site [--books-only]";
 /// checkout.
 pub(crate) const DOCS_VAR: &str = "RUNVIL_DOCS";
 
+/// The environment variable naming the root of the `runvil-harness`
+/// checkout.
+pub(crate) const HARNESS_VAR: &str = "RUNVIL_HARNESS";
+
 /// The rustdoc sites: the folder under `target/site/`, the crate it
 /// documents, with default features, the facade as dependents read it, and
 /// the few broad words its landing row shows under Covers. The crates come
-/// from runvil-harness, so each site documents the commit the root
-/// `Cargo.toml` pins.
+/// from runvil-harness, so each site documents the commit of the checkout
+/// `RUNVIL_HARNESS` names.
 const RUSTDOC_SITES: [(&str, &str, &str); 5] = [
     (
         "runvil-engine",
@@ -82,9 +90,15 @@ struct Options {
 }
 
 /// Runs `cargo xtask site` with the arguments after `site`, reading the
-/// chapters from `docs`, the value of `RUNVIL_DOCS`.
-pub(crate) fn run(root: &Path, docs: Option<&OsStr>, args: &[String]) -> ExitCode {
-    match site(root, docs, args) {
+/// chapters from `docs`, the value of `RUNVIL_DOCS`, and documenting the
+/// crates in `harness`, the value of `RUNVIL_HARNESS`.
+pub(crate) fn run(
+    root: &Path,
+    docs: Option<&OsStr>,
+    harness: Option<&OsStr>,
+    args: &[String],
+) -> ExitCode {
+    match site(root, docs, harness, args) {
         Ok(site) => {
             println!("site: built {}", site.display());
             ExitCode::SUCCESS
@@ -98,33 +112,56 @@ pub(crate) fn run(root: &Path, docs: Option<&OsStr>, args: &[String]) -> ExitCod
 
 /// Builds the site for the workspace at `root` as [`run`] does, returning
 /// its folder. Nothing is cleared or built until the arguments parse and
-/// `docs` names a directory.
-fn site(root: &Path, docs: Option<&OsStr>, args: &[String]) -> Result<PathBuf, String> {
+/// each checkout the build reads is a directory.
+fn site(
+    root: &Path,
+    docs: Option<&OsStr>,
+    harness: Option<&OsStr>,
+    args: &[String],
+) -> Result<PathBuf, String> {
     let options = parse_args(args)?;
-    let docs = docs_root(docs)?;
-    build(root, &docs, options)
+    let (docs, harness) = checkouts(docs, harness, options)?;
+    build(root, &docs, harness.as_deref())
 }
 
-/// The absolute form of `docs`, the value of `RUNVIL_DOCS`, or an
-/// error naming the variable when it is unset, empty, or names no
-/// directory.
-fn docs_root(docs: Option<&OsStr>) -> Result<PathBuf, String> {
-    const HELP: &str = "set it to the root of a runvil-docs checkout";
-    let Some(docs) = docs.filter(|docs| !docs.is_empty()) else {
-        return Err(format!("site: {DOCS_VAR} is not set; {HELP}"));
+/// The checkouts a build with `options` reads, each absolute: the docs
+/// root, from `docs`, and the harness root, from `harness`. A books-only
+/// build documents no crate, so it reads no harness checkout and returns
+/// `None` for it.
+fn checkouts(
+    docs: Option<&OsStr>,
+    harness: Option<&OsStr>,
+    options: Options,
+) -> Result<(PathBuf, Option<PathBuf>), String> {
+    let docs = checkout_root(DOCS_VAR, "runvil-docs", docs)?;
+    let harness = if options.books_only {
+        None
+    } else {
+        Some(checkout_root(HARNESS_VAR, "runvil-harness", harness)?)
     };
-    let docs = std::path::absolute(docs).map_err(|error| {
+    Ok((docs, harness))
+}
+
+/// The absolute form of `value`, the value of the variable `var`, or an
+/// error naming the variable when it is unset, empty, or names no
+/// directory. `repository` is the repository whose checkout `var` names.
+fn checkout_root(var: &str, repository: &str, value: Option<&OsStr>) -> Result<PathBuf, String> {
+    let help = format!("set it to the root of a {repository} checkout");
+    let Some(value) = value.filter(|value| !value.is_empty()) else {
+        return Err(format!("site: {var} is not set; {help}"));
+    };
+    let root = std::path::absolute(value).map_err(|error| {
         format!(
-            "site: {DOCS_VAR} names {}, which has no absolute form ({error}); {HELP}",
-            Path::new(docs).display()
+            "site: {var} names {}, which has no absolute form ({error}); {help}",
+            Path::new(value).display()
         )
     })?;
-    if docs.is_dir() {
-        Ok(docs)
+    if root.is_dir() {
+        Ok(root)
     } else {
         Err(format!(
-            "site: {DOCS_VAR} names {}, which is not a directory; {HELP}",
-            docs.display()
+            "site: {var} names {}, which is not a directory; {help}",
+            root.display()
         ))
     }
 }
@@ -138,8 +175,10 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
 }
 
 /// Builds the site for the workspace at `root` from the chapters in the
-/// absolute docs root `docs`, returning its folder.
-fn build(root: &Path, docs: &Path, options: Options) -> Result<PathBuf, String> {
+/// absolute docs root `docs`, returning its folder. `harness` is the
+/// absolute root of the harness checkout, or `None` for a books-only
+/// build.
+fn build(root: &Path, docs: &Path, harness: Option<&Path>) -> Result<PathBuf, String> {
     let target = root.join("target");
     let site = target.join("site");
     let staged = target.join("site-books");
@@ -167,8 +206,8 @@ fn build(root: &Path, docs: &Path, options: Options) -> Result<PathBuf, String> 
         )?;
     }
 
-    if !options.books_only {
-        build_rustdoc(root, &cargo, &site)?;
+    if let Some(harness) = harness {
+        build_rustdoc(root, harness, &cargo, &site)?;
     }
 
     copy_dir(&root.join("guide").join("landing"), &site)?;
@@ -176,12 +215,13 @@ fn build(root: &Path, docs: &Path, options: Options) -> Result<PathBuf, String> 
     let landing = site.join("index.html");
     fs::write(&landing, landing::page(&staged, &books)?)
         .map_err(|error| format!("site: cannot write {}: {error}", landing.display()))?;
-    check_links(&site, options.books_only)?;
+    check_links(&site, harness.is_none())?;
     Ok(site)
 }
 
-/// Builds every rustdoc site into `site/<dir>/`.
-fn build_rustdoc(root: &Path, cargo: &OsStr, site: &Path) -> Result<(), String> {
+/// Builds every rustdoc site into `site/<dir>/`, documenting the crates of
+/// the checkout at `harness` into this workspace's `target/site-doc`.
+fn build_rustdoc(root: &Path, harness: &Path, cargo: &OsStr, site: &Path) -> Result<(), String> {
     let target_dir = root.join("target").join("site-doc");
     let flags = encoded_rustdoc_flags(&root.join("guide").join("chrome").join("banner.html"));
     for (dir, krate, _) in RUSTDOC_SITES {
@@ -189,13 +229,13 @@ fn build_rustdoc(root: &Path, cargo: &OsStr, site: &Path) -> Result<(), String> 
         // search index, so each crate starts from an empty folder.
         run_child(
             Command::new(cargo)
-                .current_dir(root)
+                .current_dir(harness)
                 .args(["clean", "--doc", "--target-dir"])
                 .arg(&target_dir),
         )?;
         run_child(
             Command::new(cargo)
-                .current_dir(root)
+                .current_dir(harness)
                 .args(["doc", "-p", krate, "--no-deps", "--target-dir"])
                 .arg(&target_dir)
                 .env("CARGO_ENCODED_RUSTDOCFLAGS", &flags),
