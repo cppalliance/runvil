@@ -1,5 +1,6 @@
 //! Tidy-style architecture checks for the workshop server decomposition,
-//! the product boundary (run from `product`), the doctest ban over
+//! the product boundary (run from `product`), the pin on the crates that
+//! come from runvil-harness (run from `harness_pin`), the doctest ban over
 //! every workspace crate (run from `no_doctests`), the `Debug` trait's one
 //! spelling over every workspace crate (run from `debug_spelling`), the
 //! unsafe allowlist (run from `unsafe_allowlist`), and the type-size
@@ -63,6 +64,7 @@ pub(crate) fn all_violations(root: &Path) -> Vec<String> {
     violations.extend(lint_inheritance_violations(root));
     violations.extend(crate::unsafe_allowlist::unsafe_allowlist_violations(root));
     violations.extend(crate::product::product_boundary_violations(root));
+    violations.extend(crate::harness_pin::harness_pin_violations(root));
     violations.extend(crate::no_doctests::no_doctests_violations(root));
     violations.extend(crate::debug_spelling::debug_spelling_violations(root));
     violations.extend(crate::type_size::type_size_violations(root));

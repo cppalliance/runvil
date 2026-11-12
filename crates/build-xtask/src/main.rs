@@ -7,6 +7,7 @@
 //!   `cargo xtask tidy` prints the same report on demand.
 
 mod debug_spelling;
+mod harness_pin;
 mod manifest;
 mod new_crate;
 mod no_doctests;

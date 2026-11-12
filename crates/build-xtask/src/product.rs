@@ -17,13 +17,14 @@
 //!   may depend on the crates it holds. Containers may nest.
 //!
 //! Crates from other repositories are outside the matrix: it classifies
-//! and binds only workspace members.
+//! and binds only workspace members. The crates that come from
+//! runvil-harness are checked by `harness_pin` instead.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 /// The dependency tables cargo recognizes, directly and under `[target]`.
-const DEP_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
+pub(crate) const DEP_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
 
 /// The product family a package name belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,10 +47,12 @@ fn family(package: &str) -> Family {
 }
 
 /// A workspace crate: its package name, its manifest directory relative to
-/// the workspace root, and its dependency package names.
+/// the workspace root, its parsed manifest, and its dependency package
+/// names.
 pub(crate) struct CrateInfo {
     pub(crate) package: String,
     pub(crate) dir: PathBuf,
+    pub(crate) manifest: toml::Value,
     deps: Vec<String>,
 }
 
@@ -163,9 +166,9 @@ fn container_of(dir: &Path) -> Option<String> {
     }
 }
 
-/// Every workspace crate's package name, manifest directory, and dependency
-/// package names, plus the directories and violations for manifests that
-/// could not be read or parsed. A directory
+/// Every workspace crate's package name, manifest directory, parsed
+/// manifest, and dependency package names, plus the directories and
+/// violations for manifests that could not be read or parsed. A directory
 /// under `crates/` containing a `Cargo.toml` is a crate and is not
 /// descended into; any other directory is a container and the walk
 /// descends, so containers may nest.
@@ -255,10 +258,12 @@ fn read_crate(root: &Path, dir: &Path, walk: &mut CrateWalk) {
         ));
         return;
     };
+    let (package, deps) = (package.to_owned(), manifest_dependencies(&manifest));
     walk.crates.push(CrateInfo {
-        package: package.to_owned(),
+        package,
         dir: relative,
-        deps: manifest_dependencies(&manifest),
+        manifest,
+        deps,
     });
 }
 
