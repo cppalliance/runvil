@@ -8,8 +8,9 @@
 //! The server builds one [`Host`] at startup: its `Packs`, installed from
 //! the linked web and mcp Plugins, mcp over the servers of the configured
 //! `mcp.json`, the library Plugins in the configured Plugin directory,
-//! the std Plugin with the file-tool Pack among them, and the built-ins
-//! subagents and user; a finder that reads
+//! the std Plugin with the file-tool Pack and the bashkit Plugin with the
+//! shell Pack among them, and the built-ins subagents and user; a finder
+//! that reads
 //! each agent from the agents folder through `load_agent`; and the tokio
 //! timer. Each launch opens a conversation in `workshop-agents` and builds
 //! that conversation's one run its own [`RunSetup`]: the conversation's
@@ -153,13 +154,14 @@ fn read_mcp_servers(setting: Option<&Path>) -> Value {
 /// The linked Plugins, web and mcp, install first with the Host-wide
 /// `services`, mcp with the `servers` object as its configuration. Then
 /// every library Plugin in the directory `plugins` loads, when the server
-/// is given one. The std Plugin, whose Pack holds the file tools, is one
-/// of those libraries, so a Host whose Plugin directory lacks it has no
-/// `std` Pack and refuses a prompt that requires it. A `tracing` warning
-/// says so at startup. The registry also holds the built-ins `subagents`
-/// and `user`, and each run makes its own instances of the Packs it
-/// holds. The report lists each library Plugin that loaded and each
-/// failure.
+/// is given one. The std Plugin, whose Pack holds the file tools, and the
+/// bashkit Plugin, whose Pack holds the shell, are two of those
+/// libraries, so a Host whose Plugin directory lacks one has no `std` or
+/// no `bash` Pack and refuses a prompt that requires it. A `tracing`
+/// warning says so at startup. The registry also holds the built-ins
+/// `subagents` and `user`, and each run makes its own instances of the
+/// Packs it holds. The report lists each library Plugin that loaded and
+/// each failure.
 fn with_plugins(
     services: &HostServices,
     servers: Value,
@@ -174,19 +176,25 @@ fn with_plugins(
         tracing::warn!(%error, "the mcp Plugin inserted no Pack");
     }
     let report = plugins.and_then(|directory| load_plugin_dir(&mut packs, directory));
-    if !holds_std(&packs) {
-        tracing::warn!(
-            directory = ?plugins,
-            "no library Plugin inserted the Pack runvil/std; an agent that requires std is refused"
-        );
+    for pack in SHIPPED_PACKS {
+        if !holds(&packs, pack) {
+            tracing::warn!(
+                directory = ?plugins,
+                pack,
+                "no library Plugin inserted a Pack that Workshop ships; an agent that requires it is refused"
+            );
+        }
     }
     (Packs::new(packs), report)
 }
 
-/// Whether `packs` holds the Pack of the file tools, `runvil/std`, which
-/// only the std Plugin's library inserts.
-fn holds_std(packs: &PackRegistry) -> bool {
-    packs.list().any(|(info, _)| info.fqn == "runvil/std")
+/// The Packs that only a library Plugin Workshop ships inserts: the file
+/// tools, from the std Plugin, and the shell, from the bashkit Plugin.
+const SHIPPED_PACKS: [&str; 2] = ["runvil/std", "runvil/bash"];
+
+/// Whether `packs` holds the Pack named `pack`, a vendor and a Pack id.
+fn holds(packs: &PackRegistry, pack: &str) -> bool {
+    packs.list().any(|(info, _)| info.fqn == pack)
 }
 
 /// What the library Plugins in one directory do when they are loaded.

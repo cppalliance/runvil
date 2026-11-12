@@ -96,7 +96,7 @@ async fn spawn_compacting_server() -> GateServer {
     let config = Config {
         agents: AgentsConfig {
             path: dir.path().join("missing-agents"),
-            plugins: Some(std_plugin_dir()),
+            plugins: Some(plugin_dir()),
             ..AgentsConfig::default()
         },
         ..test_config(&gateway_url, dir.path())

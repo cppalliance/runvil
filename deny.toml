@@ -36,6 +36,10 @@ allow = [
     # no OS trust store, wasm32 only; a permissive data license. The
     # webpki-roots crate left the tree with reqwest 0.12.
     "CDLA-Permissive-2.0",
+    # The Rust port of libbzip2 (libbz2-rs-sys), which the `bzip2` crate
+    # builds on by default and bashkit, the shell of the bashkit Plugin,
+    # depends on for its `bzip2` command; a permissive BSD-style license.
+    "bzip2-1.0.6",
     "CC0-1.0",
     "Unlicense",
     "0BSD",
@@ -67,13 +71,14 @@ crate = "serde_json"
 deny = ["preserve_order"]
 
 [sources]
-# Only crates.io is an allowed registry. The two git sources are the C
-# Plugin contract's own repository and the std Plugin's, each of which
-# Cargo.toml pins by commit.
+# Only crates.io is an allowed registry. The three git sources are the C
+# Plugin contract's own repository, the std Plugin's, and the bashkit
+# Plugin's, each of which Cargo.toml pins by commit.
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
     "https://github.com/cppalliance/runvil-plugin-api",
     "https://github.com/cppalliance/runvil-plugin-std",
+    "https://github.com/cppalliance/runvil-plugin-bashkit",
 ]

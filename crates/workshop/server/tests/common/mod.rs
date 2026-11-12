@@ -35,33 +35,45 @@ use workshop_server::{
 /// for a slow CI runner, far below any test's own deadline.
 pub(crate) const RECV_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// A Plugin directory that holds the std Plugin's library and nothing
-/// else, for a server whose agents declare `std`, as the built-in chat
-/// agent does.
+/// The name of each library Plugin Workshop ships, as Cargo names its
+/// library: the std Plugin's and the bashkit Plugin's.
+const PLUGIN_LIBRARIES: [&str; 2] = ["plugin_std", "plugin_bashkit"];
+
+/// A Plugin directory that holds the library of each Plugin Workshop
+/// ships and nothing else, for a server whose agents declare `std` or
+/// `bash`, as the built-in chat agent does.
 ///
-/// Cargo builds the library beside this test executable, because the
-/// server depends on `workshop-plugin-std`. That directory holds other
-/// libraries too, so the Plugin directory is one beside it, with a hard
-/// link to the library. Every test of a build shares it: a server may
-/// keep the library loaded until its test's process exits, and Windows
-/// cannot remove a loaded library, so a copy for each test would be left
-/// behind in the temporary directory.
-pub(crate) fn std_plugin_dir() -> PathBuf {
+/// Cargo builds each library beside this test executable, because the
+/// server depends on `workshop-plugin-std` and `workshop-plugin-bashkit`.
+/// That directory holds other libraries too, so the Plugin directory is
+/// one beside it, with a hard link to each library. Every test of a build
+/// shares it: a server may keep a library loaded until its test's process
+/// exits, and Windows cannot remove a loaded library, so a copy for each
+/// test would be left behind in the temporary directory.
+pub(crate) fn plugin_dir() -> PathBuf {
     /// The directory, made once for each test process.
     static DIRECTORY: OnceLock<PathBuf> = OnceLock::new();
-    DIRECTORY.get_or_init(make_std_plugin_dir).clone()
+    DIRECTORY.get_or_init(make_plugin_dir).clone()
 }
 
-/// Makes the directory [`std_plugin_dir`] returns, with the link in it.
-fn make_std_plugin_dir() -> PathBuf {
-    let file = format!("{DLL_PREFIX}plugin_std{DLL_SUFFIX}");
+/// Makes the directory [`plugin_dir`] returns, with the links in it.
+fn make_plugin_dir() -> PathBuf {
     let exe = std::env::current_exe().expect("the test executable has a path");
     let beside = exe.parent().expect("the test executable has a directory");
-    let built = beside.join(&file);
     let directory = beside.join("workshop-server-plugins");
     std::fs::create_dir_all(&directory).expect("the Plugin directory is made");
-    let link = directory.join(&file);
-    if !is_link_to(&link, &built) {
+    for library in PLUGIN_LIBRARIES {
+        let file = format!("{DLL_PREFIX}{library}{DLL_SUFFIX}");
+        link_into(&directory, &beside.join(&file), &file);
+    }
+    directory
+}
+
+/// Links the library `built` into `directory` under the name `file`,
+/// unless a link to it is there already.
+fn link_into(directory: &Path, built: &Path, file: &str) {
+    let link = directory.join(file);
+    if !is_link_to(&link, built) {
         // A link an earlier build left names that build's library. Each
         // test is its own process, and another may read the directory at
         // any moment. So the new link is made under a name of this
@@ -70,20 +82,19 @@ fn make_std_plugin_dir() -> PathBuf {
         let staged = directory.join(format!("{file}.{}.tmp", std::process::id()));
         let _ = std::fs::remove_file(&staged);
         let placed =
-            std::fs::hard_link(&built, &staged).and_then(|()| std::fs::rename(&staged, &link));
+            std::fs::hard_link(built, &staged).and_then(|()| std::fs::rename(&staged, &link));
         if let Err(error) = placed {
             let _ = std::fs::remove_file(&staged);
             // Another process may have placed the link first, and Windows
             // does not replace a library that a process has loaded.
             assert!(
-                is_link_to(&link, &built),
+                is_link_to(&link, built),
                 "cannot link {} to {}: {error}",
                 link.display(),
                 built.display()
             );
         }
     }
-    directory
 }
 
 /// Whether `link` and `built` have one length and one modification time,

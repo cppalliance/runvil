@@ -24,7 +24,7 @@ use workshop_server::fixtures::{gateway_updater, replace_gateway as replace_fixt
 use workshop_server::{AgentsConfig, AppState, Config};
 
 use crate::common::{
-    JsonSocket, connect_agents, echo_stream, launch, spawn_gateway, spawn_router, std_plugin_dir,
+    JsonSocket, connect_agents, echo_stream, launch, plugin_dir, spawn_gateway, spawn_router,
     test_config, typed_catalog,
 };
 
@@ -106,7 +106,7 @@ async fn spawn_agent_server_for_gateway(base_url: String) -> (String, tempfile::
     let config = Config {
         agents: AgentsConfig {
             path: agents_dir,
-            plugins: Some(std_plugin_dir()),
+            plugins: Some(plugin_dir()),
             ..AgentsConfig::default()
         },
         ..test_config(&base_url, dir.path())

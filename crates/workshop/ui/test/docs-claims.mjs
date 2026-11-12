@@ -163,6 +163,7 @@ const PLUGIN_DOC_DIRS = [
   "crates/plugin-web",
   "crates/plugin-mcp",
   "crates/workshop/plugin-std",
+  "crates/workshop/plugin-bashkit",
 ];
 
 test("the root AGENTS.md and the Pack-facing crates' comments never describe Pack activation", async () => {

@@ -33,7 +33,10 @@ const VOCABULARY: &[Tiered] = &[
 /// Tier 0: library Plugins, each the dynamic library of a Plugin whose
 /// code lives in another repository. No internal `workshop-*`
 /// dependencies, and only the server may name one.
-const PLUGINS: &[Tiered] = &[("workshop-plugin-std", "plugin-std")];
+const PLUGINS: &[Tiered] = &[
+    ("workshop-plugin-std", "plugin-std"),
+    ("workshop-plugin-bashkit", "plugin-bashkit"),
+];
 /// Tier 1: domain services. Depend on vocabulary crates only.
 const SERVICES: &[Tiered] = &[
     ("workshop-gateway", "gateway"),

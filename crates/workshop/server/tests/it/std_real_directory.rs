@@ -21,7 +21,7 @@ use runvil::vfs::{Access, Origin, RealBackend, VfsRef};
 use runvil::{OutputTrust, ToolId, ToolOutput};
 use serde_json::{Value, json};
 
-use crate::common::std_plugin_dir;
+use crate::common::plugin_dir;
 
 /// The file the flow runs over.
 const FILE: &str = "big.txt";
@@ -85,7 +85,7 @@ fn seeded_directory() -> tempfile::TempDir {
 )]
 fn std_pack() -> (Arc<dyn Pack>, PluginReport) {
     let mut packs = PackRegistry::new();
-    let report = insert_plugin_dir(&mut packs, &std_plugin_dir()).expect("the directory is read");
+    let report = insert_plugin_dir(&mut packs, &plugin_dir()).expect("the directory is read");
     assert!(report.failures().is_empty(), "{:?}", report.failures());
     let (_info, id, factory) = packs
         .into_entries()

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "crates/runvil-internal/types", "crates/runvil-internal/runtime", "crates/runvil-internal/lua", "crates/runvil-internal/markdown", "crates/runvil-internal/prompt", "crates/runvil-internal/vfs", "crates/runvil-internal/model-client", "crates/workshop/desktop", "crates/workshop/server", "crates/workshop/server-api", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/workshop/plugin-std", "crates/harness-internal/runner", "crates/harness-internal/plugin-loader", "crates/harness-internal/test-plugin"]
+members = ["crates/*", "crates/runvil-internal/types", "crates/runvil-internal/runtime", "crates/runvil-internal/lua", "crates/runvil-internal/markdown", "crates/runvil-internal/prompt", "crates/runvil-internal/vfs", "crates/runvil-internal/model-client", "crates/workshop/desktop", "crates/workshop/server", "crates/workshop/server-api", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/workshop/plugin-std", "crates/workshop/plugin-bashkit", "crates/harness-internal/runner", "crates/harness-internal/plugin-loader", "crates/harness-internal/test-plugin"]
 # crates/runvil-internal, crates/workshop, and crates/harness-internal
 # are manifestless containers holding their families' private crates.
 # Cargo prunes excluded subtrees from member globs, so a "crates/workshop/*"
@@ -32,7 +32,7 @@ runvil-plugin = { path = "crates/runvil-plugin" }
 # commit. `version` beside `git` keeps cargo-deny's wildcard check quiet.
 runvil-plugin-sys = { version = "0.4.0", git = "https://github.com/cppalliance/runvil-plugin-api", rev = "03a9fa37d2fe690d42ee0aa5c7a8289173e8e0f2" }
 # The safe layer over that contract, at the same commit. Only the library
-# Plugin crate under `crates/workshop/` names it, for `export_plugin!`.
+# Plugin crates under `crates/workshop/` name it, for `export_plugin!`.
 runvil-plugin-sdk = { version = "0.4.0", git = "https://github.com/cppalliance/runvil-plugin-api", rev = "03a9fa37d2fe690d42ee0aa5c7a8289173e8e0f2" }
 # The std Plugin, from its own repository, pinned by commit, which must be
 # built against the contract commit above. default-features off drops its
@@ -40,6 +40,13 @@ runvil-plugin-sdk = { version = "0.4.0", git = "https://github.com/cppalliance/r
 # The key is `std-plugin` because that crate's own library is named
 # `plugin_std`, the name of the file Workshop ships.
 std-plugin = { package = "plugin-std", version = "0.1.0", git = "https://github.com/cppalliance/runvil-plugin-std", rev = "782ad23e5dfbe6fbfa5be7145fa73a9ca60ce8a8", default-features = false }
+# The bashkit Plugin, from its own repository, pinned by commit and built
+# against the same contract commit. default-features off drops its own
+# export of `runvil_plugin`, which `workshop-plugin-bashkit` makes
+# instead. The key is `bashkit-plugin` for the reason std's is
+# `std-plugin`: the crate's own library has the name of the file Workshop
+# ships, `plugin_bashkit`.
+bashkit-plugin = { package = "plugin-bashkit", version = "0.1.0", git = "https://github.com/cppalliance/runvil-plugin-bashkit", rev = "0864f1ff9cc1f4fad6c96f1e9f6d8a3ab85e9580", default-features = false }
 runvil-types = { path = "crates/runvil-internal/types" }
 workshop-gateway-discovery = { path = "crates/workshop/gateway-discovery" }
 runvil = { path = "crates/runvil" }
@@ -66,6 +73,7 @@ workshop-run-log = { path = "crates/workshop/run-log" }
 workshop-agents = { path = "crates/workshop/agents" }
 workshop-user-state = { path = "crates/workshop/user-state" }
 workshop-plugin-std = { path = "crates/workshop/plugin-std" }
+workshop-plugin-bashkit = { path = "crates/workshop/plugin-bashkit" }
 # default-features off: both users (the parser and build-xtask's doctest
 # scan) read only the core event stream, never the `html` renderer or the
 # `getopts` binary.

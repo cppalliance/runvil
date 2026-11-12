@@ -276,10 +276,12 @@ fn tier_table_grants_each_tier_only_lower_tiers() {
         allowed_dependencies("workshop-server"),
         Some(packages(&[VOCABULARY, SERVICES, FEATURES, PLUGINS]))
     );
-    assert_eq!(
-        allowed_dependencies("workshop-plugin-std"),
-        Some(Vec::new()),
-        "a library Plugin names no workshop crate"
-    );
+    for plugin in ["workshop-plugin-std", "workshop-plugin-bashkit"] {
+        assert_eq!(
+            allowed_dependencies(plugin),
+            Some(Vec::new()),
+            "a library Plugin names no workshop crate"
+        );
+    }
     assert_eq!(allowed_dependencies("gateway"), None);
 }

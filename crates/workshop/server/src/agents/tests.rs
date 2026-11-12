@@ -15,8 +15,9 @@
 //! each with the launch refusal's own text. A configured Plugin directory
 //! loads each library Plugin in it and reports each file that is none,
 //! and a directory that does not exist loads nothing. A prompt reads a
-//! file of its run through the std library's `Read` tool, and a Host with
-//! no Plugin directory refuses a prompt that requires `std`.
+//! file of its run through the std library's `Read` tool and through the
+//! bashkit library's `Shell` tool, and a Host with no Plugin directory
+//! refuses a prompt that requires `std` or `bash`.
 
 use std::env::consts::{DLL_EXTENSION, DLL_PREFIX, DLL_SUFFIX};
 use std::path::PathBuf;
@@ -39,8 +40,8 @@ use workshop_agents::{Conversations, SessionState, TokioTimer, load_agent};
 use workshop_registry::Registry;
 
 use super::{
-    PluginListing, agent_finder, holds_std, host_packs, list_plugin_dir, load_plugin_dir,
-    read_mcp_servers, services, with_plugins,
+    PluginListing, SHIPPED_PACKS, agent_finder, holds, host_packs, list_plugin_dir,
+    load_plugin_dir, read_mcp_servers, services, with_plugins,
 };
 
 /// The runtime's key, built from the Plugin contract's name as any Host
@@ -257,23 +258,23 @@ async fn the_servers_value_is_the_mcp_packs_configuration() {
 /// never share one.
 static PLUGIN_DIRS: AtomicUsize = AtomicUsize::new(0);
 
-/// The file name of the std Plugin's dynamic library.
-fn std_plugin_file() -> String {
-    format!("{DLL_PREFIX}plugin_std{DLL_SUFFIX}")
-}
+/// The std Plugin's library, as Cargo names it.
+const STD_LIBRARY: &str = "plugin_std";
 
-/// The std Plugin's dynamic library. Cargo builds it beside this test
-/// executable, because the crate depends on `workshop-plugin-std`.
-fn std_plugin_library() -> PathBuf {
-    let exe = std::env::current_exe().expect("the test executable has a path");
-    let dir = exe.parent().expect("the test executable has a directory");
-    dir.join(std_plugin_file())
+/// The bashkit Plugin's library, as Cargo names it.
+const BASHKIT_LIBRARY: &str = "plugin_bashkit";
+
+/// The file name of the dynamic library `library`.
+fn library_file(library: &str) -> String {
+    format!("{DLL_PREFIX}{library}{DLL_SUFFIX}")
 }
 
 /// A Plugin directory for the test named `test`, holding a copy of the
-/// std Plugin's library, and that copy's path. The directory's name comes
+/// dynamic library `library`, and that copy's path. Cargo builds the
+/// library beside this test executable, because the crate depends on the
+/// `workshop-plugin-*` crate that exports it. The directory's name comes
 /// from the test, the process id, and a counter.
-pub(super) fn plugin_dir(test: &str) -> (tempfile::TempDir, PathBuf) {
+fn plugin_dir_of(test: &str, library: &str) -> (tempfile::TempDir, PathBuf) {
     let prefix = format!(
         "{test}-{}-{}-",
         std::process::id(),
@@ -283,9 +284,20 @@ pub(super) fn plugin_dir(test: &str) -> (tempfile::TempDir, PathBuf) {
         .prefix(&prefix)
         .tempdir()
         .expect("a temporary directory is made");
-    let library = dir.path().join(std_plugin_file());
-    std::fs::copy(std_plugin_library(), &library).expect("the std Plugin's library is copied");
-    (dir, library)
+    let exe = std::env::current_exe().expect("the test executable has a path");
+    let built = exe
+        .parent()
+        .expect("the test executable has a directory")
+        .join(library_file(library));
+    let copy = dir.path().join(library_file(library));
+    std::fs::copy(built, &copy).expect("the Plugin's library is copied");
+    (dir, copy)
+}
+
+/// A Plugin directory for the test named `test`, holding a copy of the
+/// std Plugin's library, and that copy's path.
+pub(super) fn plugin_dir(test: &str) -> (tempfile::TempDir, PathBuf) {
+    plugin_dir_of(test, STD_LIBRARY)
 }
 
 #[test]
@@ -385,15 +397,21 @@ async fn the_servers_host_loads_its_plugin_directory_beside_the_linked_plugins()
 }
 
 #[test]
-fn only_a_plugin_directory_with_the_std_library_gives_the_host_the_std_pack() {
-    let (dir, _library) = plugin_dir("holds-std");
-    let mut packs = PackRegistry::new();
-    load_plugin_dir(&mut packs, dir.path()).expect("the directory is read");
-    assert!(holds_std(&packs));
-    assert!(
-        !holds_std(&PackRegistry::new()),
-        "std is not among the built-ins"
-    );
+fn only_a_plugin_directory_with_a_shipped_library_gives_the_host_its_pack() {
+    for (library, pack) in [
+        (STD_LIBRARY, "runvil/std"),
+        (BASHKIT_LIBRARY, "runvil/bash"),
+    ] {
+        assert!(SHIPPED_PACKS.contains(&pack), "{pack}");
+        let (dir, _library) = plugin_dir_of("holds-a-shipped-pack", library);
+        let mut packs = PackRegistry::new();
+        load_plugin_dir(&mut packs, dir.path()).expect("the directory is read");
+        assert!(holds(&packs, pack), "{library} inserts {pack}");
+        assert!(
+            !holds(&PackRegistry::new(), pack),
+            "{pack} is not among the built-ins"
+        );
+    }
 }
 
 /// A prompt that declares `std` and returns what `std/read` answers for
@@ -441,18 +459,72 @@ async fn a_prompt_reads_a_file_of_its_run_through_the_std_library_plugin() {
 }
 
 #[tokio::test]
-async fn without_a_plugin_directory_a_prompt_requiring_std_is_refused() {
-    let (host, report) = host_packs(&Registry::new(), None, None);
-    assert!(report.is_none(), "no directory is read");
+async fn without_a_plugin_directory_a_prompt_requiring_a_shipped_pack_is_refused() {
+    for pack in ["std", "bash"] {
+        let (host, report) = host_packs(&Registry::new(), None, None);
+        assert!(report.is_none(), "no directory is read");
 
-    let result = run_prompt(host, requiring("std")).await;
-    let Err(message) = result else {
-        panic!("the Host refuses the prompt as it parses: {result:?}");
+        let result = run_prompt(host, requiring(pack)).await;
+        let Err(message) = result else {
+            panic!("the Host refuses the prompt as it parses: {result:?}");
+        };
+        assert!(
+            message.contains(&format!(
+                "- {pack} is unavailable: runvil/{pack} is not installed"
+            )),
+            "the refusal names the Pack no Plugin inserted: {message}"
+        );
+    }
+}
+
+/// A prompt that declares `bash` and returns what `bash/shell` answers
+/// for a command that reads `/notes.md` and then writes a file.
+const RUNS_A_COMMAND: &str = "---\nname: shells\ndescription: runs a command\nrunvil: 0\n\
+    uses:\n  - bash\n---\n\n# Shells\n\n## Only\n\n```lua\n\
+    return tools.call('bash/shell', { command = 'cat /notes.md; echo x > /out.md' })\n```\n";
+
+#[tokio::test]
+async fn a_prompt_runs_a_command_over_its_runs_files_through_the_bashkit_library_plugin() {
+    let (dir, _library) = plugin_dir_of("runs-a-command", BASHKIT_LIBRARY);
+    let (host, report) = host_packs(&Registry::new(), None, Some(dir.path()));
+    let report = report.expect("the configured directory is read");
+    assert!(report.failures().is_empty(), "{:?}", report.failures());
+    let names: Vec<&str> = report
+        .plugins()
+        .iter()
+        .map(|plugin| plugin.name())
+        .collect();
+    assert_eq!(names, ["bashkit"]);
+
+    let vfs = VfsRef::default();
+    vfs.acquire(Origin::new("seed"))
+        .expect("a fresh memory filesystem acquires")
+        .write("/notes.md", b"hello\nworld\n")
+        .expect("the file is seeded");
+
+    let result = run_prompt_over(host, RUNS_A_COMMAND.to_owned(), vfs.clone()).await;
+    let Ok(Ok(text)) = result else {
+        panic!("the run ends with its text: {result:?}");
     };
     assert!(
-        message.contains("- std is unavailable: runvil/std is not installed"),
-        "the refusal names the Pack no Plugin inserted: {message}"
+        text.contains("<untrusted_input_"),
+        "a command's output reaches the script marked as untrusted: {text}"
     );
+    assert!(
+        text.contains("Exit code: 1\n") && text.contains("```\nhello\nworld\n"),
+        "the shell reads the file through the run's filesystem, and the write fails the \
+         command: {text}"
+    );
+    assert!(
+        text.contains("/out.md: the shell cannot change files in this build"),
+        "the shell says why the write failed: {text}"
+    );
+    let written = vfs
+        .acquire(Origin::new("check"))
+        .expect("the filesystem acquires")
+        .exists("/out.md")
+        .expect("the filesystem answers");
+    assert!(!written, "the shell changes no file of the run");
 }
 
 #[test]

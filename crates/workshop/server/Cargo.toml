@@ -34,6 +34,9 @@ plugin-mcp.workspace = true
 # beside the test executables, and the server loads it from its Plugin
 # directory like any other library Plugin.
 workshop-plugin-std.workspace = true
+# The bashkit Plugin's dynamic library, which holds the shell Pack
+# `runvil/bash`. Like std's, it is here only so that Cargo builds it.
+workshop-plugin-bashkit.workspace = true
 reqwest.workspace = true
 rust-embed.workspace = true
 serde.workspace = true
