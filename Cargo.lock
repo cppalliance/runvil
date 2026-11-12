@@ -4805,6 +4805,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "runvil-markdown"
+version = "0.3.0"
+dependencies = [
+ "pulldown-cmark",
+ "serde_json",
+ "serde_yaml_ng",
+]
+
+[[package]]
 name = "runvil-model-client"
 version = "0.3.0"
 dependencies = [

@@ -4,7 +4,7 @@
 //!
 //! Clippy reads the nearest `.clippy.toml` or `clippy.toml` walking up from
 //! a crate's manifest directory and never merges it with the root file. So
-//! `crates/runvil-internal/clippy.toml` binds the six internal crates,
+//! `crates/runvil-internal/clippy.toml` binds the seven internal crates,
 //! `crates/runvil-engine/clippy.toml` and
 //! `crates/runvil-plugin/clippy.toml` bind the two root crates, and each
 //! repeats the root file's settings and
