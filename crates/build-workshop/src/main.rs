@@ -128,19 +128,36 @@ struct BuildEnvironment {
     release_date: String,
 }
 
+/// The environment variable naming the workspace root in place of the
+/// checkout this crate was compiled in. `tests/cancellation.rs` sets it so
+/// the subprocess stages its Gateway in a temporary tree: a test that
+/// staged in the checkout's sidecar slot and was killed left its fake
+/// Gateway there, and every later build shipped it.
+const WORKSPACE_ROOT_VARIABLE: &str = "BUILD_WORKSHOP_ROOT";
+
 impl BuildEnvironment {
     fn discover() -> Result<Self, anyhow::Error> {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let workspace_root = manifest_dir
-            .parent()
-            .and_then(|crates| crates.parent())
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "cannot derive the workspace root from {}",
-                    manifest_dir.display()
-                )
-            })?
-            .to_path_buf();
+        let workspace_root = match std::env::var_os(WORKSPACE_ROOT_VARIABLE) {
+            Some(value) if value.is_empty() => {
+                return Err(anyhow::anyhow!(
+                    "{WORKSPACE_ROOT_VARIABLE} must not be empty"
+                ));
+            }
+            Some(value) => PathBuf::from(value),
+            None => {
+                let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+                manifest_dir
+                    .parent()
+                    .and_then(|crates| crates.parent())
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "cannot derive the workspace root from {}",
+                            manifest_dir.display()
+                        )
+                    })?
+                    .to_path_buf()
+            }
+        };
         let configured_target = std::env::var_os("CARGO_TARGET_DIR");
         let target_root_from_env = configured_target.is_some();
         let target_root = match configured_target {

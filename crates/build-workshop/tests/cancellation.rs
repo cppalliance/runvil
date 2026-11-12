@@ -16,48 +16,20 @@ const TARGET: &str = "x86_64-pc-windows-msvc";
 const GATEWAY_NAME: &str = "runvil-gateway.exe";
 const SIDECAR_NAME: &str = "runvil-gateway-x86_64-pc-windows-msvc.exe";
 
-struct StagingGuard {
-    path: PathBuf,
-    preserved: Option<PathBuf>,
-}
-
-impl Drop for StagingGuard {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-        if let Some(preserved) = &self.preserved {
-            let _ = fs::rename(preserved, &self.path);
-        }
-    }
-}
-
 #[test]
 fn cancel_signal_after_staging_kills_child_cleans_and_fails() {
-    let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(Path::parent)
-        .expect("repository root")
-        .to_path_buf();
-    let staged = repository
+    let temp = tempfile::tempdir().expect("temporary test root");
+    // The orchestrator stages in the workspace root it is given, never in
+    // the checkout: a killed run of this test must not leave its fake
+    // Gateway in the slot every real build ships from.
+    let workspace_root = temp.path().join("workspace");
+    fs::create_dir(&workspace_root).expect("temporary workspace root");
+    let staged = workspace_root
         .join("crates")
         .join("workshop")
         .join("desktop")
         .join("binaries")
         .join(SIDECAR_NAME);
-    let temp = tempfile::tempdir().expect("temporary test root");
-    // A Gateway `tools/fetch-gateway-sidecar.mjs` staged must not
-    // fail this test: move it aside so the orchestrator's staging and
-    // cleanup are still exercised, and let the guard restore it after.
-    let preserved = if staged.exists() {
-        let backup = temp.path().join("preexisting-sidecar");
-        fs::rename(&staged, &backup).expect("move the pre-staged sidecar aside");
-        Some(backup)
-    } else {
-        None
-    };
-    let _staging_guard = StagingGuard {
-        path: staged.clone(),
-        preserved,
-    };
     let fake_cargo = write_fake_cargo(&temp);
     let gateway = temp.path().join(GATEWAY_NAME);
     fs::write(&gateway, "gateway").expect("given Gateway");
@@ -74,6 +46,7 @@ fn cancel_signal_after_staging_kills_child_cleans_and_fails() {
         .arg("--gateway-binary")
         .arg(&gateway)
         .env("CARGO", fake_cargo)
+        .env("BUILD_WORKSHOP_ROOT", &workspace_root)
         .current_dir(temp.path())
         .env("BUILD_WORKSHOP_BLOCKED_MARKER", &blocked_marker)
         .stdout(Stdio::from(stdout))
