@@ -137,16 +137,24 @@ local function infer(...)
   return run_infer(nil, (...))
 end
 
-local function call_section(target, input)
-  local ok, result = yield({
-    op = "call",
-    target = target,
-    input = input,
-    var = var_snapshot(),
-  })
-  if not ok then fail(result) end
-  return result
+-- `call` for the code it is installed for. `from` is nil for a section's
+-- own code and a library's identity for that library's code; the request
+-- carries it, and the driver resolves the target's path from there.
+local function call_from(from)
+  return function(target, input)
+    local ok, result = yield({
+      op = "call",
+      target = target,
+      input = input,
+      var = var_snapshot(),
+      from = from,
+    })
+    if not ok then fail(result) end
+    return result
+  end
 end
+
+local call_section = call_from(nil)
 
 -- Runs an adhoc tool's handler inside this block coroutine, so every
 -- suspending call the handler makes is an ordinary yield of the chain.
@@ -335,6 +343,8 @@ tools.call = tools_call
 
 return {
   call = call_section,
+  -- The factory `require` makes a library's own `call` with.
+  call_from = call_from,
   -- The failure helpers, handed to the `tasks` and `fanout` chunks
   -- (`__impl_tasks.lua`, `__impl_fanout.lua`) so their shims raise the one
   -- error shape this chunk defines.

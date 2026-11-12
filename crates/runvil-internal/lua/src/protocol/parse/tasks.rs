@@ -15,7 +15,9 @@ use runvil_types::ids::TaskId;
 use crate::protocol::{NonEmpty, Request};
 use crate::section::scalar_return;
 
-use super::{FieldFailure, call_error, call_optional_string, call_string, call_target, shim_var};
+use super::{
+    FieldFailure, call_error, call_optional_string, call_string, call_target, shim_from, shim_var,
+};
 
 /// Parses one task id string; a malformed path is the call's error naming
 /// why the parse refused it.
@@ -79,12 +81,14 @@ pub(super) fn parse_spawn(
         Err(_) => return Err(FieldFailure::Malformed),
     };
     let var = shim_var(lua, table)?;
+    let from = shim_from(table)?;
     Ok(Request::Spawn {
         target,
         input,
         item,
         index,
         var,
+        from,
     })
 }
 

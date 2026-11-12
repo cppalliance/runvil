@@ -15,7 +15,7 @@ const REFUSED: &str = "section path \"bad/\" has an empty step";
 /// and finds no section for any other path.
 fn reading_vm() -> BuiltVm {
     let vm = TestVm::new().build();
-    vm.install_control_globals(|path: String| match path.as_str() {
+    vm.install_control_globals(|path: String, _| match path.as_str() {
         "Rules" => Ok(SectionRead::Found(SectionText {
             markdown: "Be brief.".to_owned(),
             items: Vec::new(),

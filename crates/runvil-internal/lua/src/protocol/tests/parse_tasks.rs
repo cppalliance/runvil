@@ -23,14 +23,36 @@ fn spawn_parses_target_seeds_and_var() {
             item,
             index,
             var,
+            from,
         } => {
             assert_eq!(target, "../Child");
             assert_eq!(input.as_deref(), Some("override"));
             assert_eq!(item, Some(json!({ "name": "alpha" })));
             assert_eq!(index, Some(3));
             assert_eq!(var, json!({ "k": 1 }));
+            assert_eq!(from, None, "a request with no `from` names no library");
         }
         other => panic!("expected a spawn request, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_call_and_a_spawn_carry_the_library_whose_code_made_them() {
+    let lua = Lua::new();
+    for op in ["call", "spawn"] {
+        let table = lua_table(
+            &lua,
+            &format!("{{ op = '{op}', target = 'Worker', var = {{}}, from = '2.0' }}"),
+        );
+        let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
+        let (Request::Call { from, .. } | Request::Spawn { from, .. }) = request else {
+            panic!("expected a {op} request, got {request:?}");
+        };
+        assert_eq!(
+            from.as_ref().map(crate::LibraryKey::identity),
+            Some("2.0"),
+            "{op}"
+        );
     }
 }
 

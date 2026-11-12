@@ -181,6 +181,20 @@ impl LuaProgram {
             .map_err(error::make_lua_error)
     }
 
+    /// Loads the compiled function into `lua` with `env` as its
+    /// environment: the table every global the chunk names is read from
+    /// and written to, in the chunk and in every function it defines.
+    ///
+    /// # Errors
+    /// Returns a `LuaRuntime` failure if the VM rejects the internally
+    /// compiled bytecode.
+    pub(crate) fn load_in(&self, lua: &Lua, env: mlua::Table) -> Result<Function> {
+        lua.load(self.bytecode.as_slice())
+            .set_environment(env)
+            .into_function()
+            .map_err(error::make_lua_error)
+    }
+
     /// Maps a Lua runtime failure to its ordered core outcome, for a chunk
     /// that ran beside `loaded`, the programs of the libraries loaded into
     /// its VM, from the prompt file `file`.

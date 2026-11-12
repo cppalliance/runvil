@@ -3,7 +3,8 @@
 -- send, the reply, cancel, and the admission limit.
 --
 -- The Engine installs this after the coroutine prelude (`__impl_coro.lua`)
--- and installs the returned table as the `tasks` global. The chunk
+-- and installs the returned table as the `tasks` global. The chunk also
+-- returns `spawn_from`, which makes the `tasks.spawn` of a library. The chunk
 -- arguments are privileged captures, never globals: `yield` wraps
 -- coroutine.yield, `var_snapshot` is the Engine helper returning the hidden
 -- `var` data table as a plain deep copy, and `helpers` is the prelude's
@@ -25,23 +26,32 @@ local raise, fail, engine_type = helpers.raise, helpers.fail, helpers.engine_typ
 -- once with a Task handle. `opts.input` overrides the chain's args,
 -- `opts.item` becomes its `item` global, `opts.index` its `sys.index`; the
 -- caller's `var` seeds the chain.
-local function tasks_spawn(target, opts)
-  if opts == nil then
-    opts = {}
-  elseif type(opts) ~= "table" then
-    raise("lua", { message = "tasks.spawn opts must be a table, got " .. engine_type(opts) })
+--
+-- `spawn_from(from)` makes the function for the code it is installed for:
+-- `from` is nil for a section's own code and a library's identity for that
+-- library's code, and the driver resolves the target's path from there.
+local function spawn_from(from)
+  return function(target, opts)
+    if opts == nil then
+      opts = {}
+    elseif type(opts) ~= "table" then
+      raise("lua", { message = "tasks.spawn opts must be a table, got " .. engine_type(opts) })
+    end
+    local ok, result = yield({
+      op = "spawn",
+      target = target,
+      input = opts.input,
+      item = opts.item,
+      index = opts.index,
+      var = var_snapshot(),
+      from = from,
+    })
+    if not ok then fail(result) end
+    return { task = result }
   end
-  local ok, result = yield({
-    op = "spawn",
-    target = target,
-    input = opts.input,
-    item = opts.item,
-    index = opts.index,
-    var = var_snapshot(),
-  })
-  if not ok then fail(result) end
-  return { task = result }
 end
+
+local tasks_spawn = spawn_from(nil)
 
 -- Resolves a tasks.* argument to its bare id: a Task handle (any table
 -- with a string `task` field) or the id string itself. Anything else is
@@ -315,4 +325,4 @@ return {
   reply = tasks_reply,
   cancel = tasks_cancel,
   concurrency = tasks_concurrency,
-}
+}, spawn_from

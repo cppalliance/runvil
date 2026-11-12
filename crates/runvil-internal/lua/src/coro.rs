@@ -287,14 +287,14 @@ pub(crate) fn install_shims(
     let call: Function = shims.raw_get("call").map_err(map_lua)?;
     globals.raw_set("call", call).map_err(map_lua)?;
     let helpers: Table = shims.raw_get("helpers").map_err(map_lua)?;
-    let tasks: Table = TASKS_PROGRAM
+    let (tasks, spawn_from): (Table, Function) = TASKS_PROGRAM
         .as_ref()
         .map_err(Clone::clone)?
         .load(lua)?
         .call((yield_fn.clone(), var_snapshot.clone(), helpers.clone()))
         .map_err(map_lua)?;
     globals.raw_set("tasks", &tasks).map_err(map_lua)?;
-    let fanout = fanout_shim(
+    let (fanout, fanout_from) = fanout_shim(
         lua,
         yield_fn,
         var_snapshot,
@@ -303,6 +303,10 @@ pub(crate) fn install_shims(
         is_model_handle,
     )?;
     tasks.raw_set("fanout", fanout).map_err(map_lua)?;
+    // What `require` makes a library's own `call` and `tasks` with.
+    let call_from: Function = shims.raw_get("call_from").map_err(map_lua)?;
+    crate::library_env::register_shims(lua, call_from, spawn_from, fanout_from, &tasks)
+        .map_err(map_lua)?;
     stash_shims(lua, &shims)?;
     for name in ["loop", "compact"] {
         let entry: Function = shims.raw_get(name).map_err(map_lua)?;
@@ -333,7 +337,7 @@ fn recording_yield(lua: &Lua, raw_yield: Function) -> Result<Function> {
 /// captures and failure `helpers`, plus the collection enumerator, the item
 /// renderer, the two captures over the chain's current model `selection`,
 /// and the shim chunk's `is_model_handle`, and returns the shim installed as
-/// `tasks.fanout`.
+/// `tasks.fanout` and the function that makes a library's.
 fn fanout_shim(
     lua: &Lua,
     yield_fn: Function,
@@ -341,7 +345,7 @@ fn fanout_shim(
     helpers: Table,
     selection: &Arc<Mutex<Option<ModelBinding>>>,
     is_model_handle: Function,
-) -> Result<Function> {
+) -> Result<(Function, Function)> {
     // The enumerator answers `(members)` or `(nil, message)` so the shim
     // raises the message as its own call error, exactly as the other
     // author-argument failures surface at the call site.

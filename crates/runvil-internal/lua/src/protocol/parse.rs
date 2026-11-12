@@ -25,7 +25,7 @@ use tools::{parse_adhoc_tool_done, parse_tool_call, parse_tool_calls};
 
 use crate::error::{self, Error, make_lua_runtime_error};
 use crate::models::LuaModelHandle;
-use crate::section::resolve_section_target;
+use crate::section::{LibraryKey, resolve_section_target};
 
 use super::request::Request;
 
@@ -268,5 +268,17 @@ fn parse_call(lua: &Lua, table: &mlua::Table) -> std::result::Result<Request, Fi
     let target = call_target(table)?;
     let input = call_optional_string(table, "input")?;
     let var = shim_var(lua, table)?;
-    Ok(Request::Call { target, input, var })
+    let from = shim_from(table)?;
+    Ok(Request::Call {
+        target,
+        input,
+        var,
+        from,
+    })
+}
+
+/// Reads the shim-produced `from` of a `call` or `spawn`: the identity of
+/// the library whose code made the call, absent for a section's own code.
+fn shim_from(table: &mlua::Table) -> std::result::Result<Option<LibraryKey>, FieldFailure> {
+    Ok(shim_optional_string(table, "from")?.map(LibraryKey::new))
 }

@@ -162,7 +162,7 @@ impl Scheduler {
     ) -> Result<ChainStep> {
         let prompt = self.prompt();
         let target = self
-            .with_chain(id, |ops| ops.resolve_chain_target(path))
+            .with_chain(id, |ops| ops.resolve_chain_target(path, None))
             .map_err(|error| place(error, prompt.file(), line))?;
         self.end_h1(id, target.pos)
     }

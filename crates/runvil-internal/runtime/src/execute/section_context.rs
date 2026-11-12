@@ -24,7 +24,9 @@ use runvil_types::ids::TaskId;
 use runvil_types::tools::ToolId;
 use runvil_vfs::{Access, ScopeHandle};
 
-use crate::lua::{Library, ProseState, ScriptReport, SectionVm, ToolCallCounts, Uninjected};
+use crate::lua::{
+    Library, LibraryKey, ProseState, ScriptReport, SectionVm, ToolCallCounts, Uninjected,
+};
 use crate::model::ModelBinding;
 use crate::prompt::Prompt;
 use crate::section_path::Origin;
@@ -152,8 +154,8 @@ impl SectionContext {
     /// Constructs the frame for one walked section and runs its setup
     /// preamble: the section's `sys`, the section-started observation, VM
     /// construction and limits, and the shared setup half
-    /// ([`section_vm::setup_section_vm`]), with the `prompt` reads resolved
-    /// from the section.
+    /// ([`section_vm::setup_section_vm`]), with the `prompt` reads of the
+    /// section's own code resolved from the section.
     ///
     /// `pos` is the section's place in the caller's walk. Each `prompt`
     /// read resolves its path against the shared prompt: a relative path
@@ -200,13 +202,15 @@ impl SectionContext {
         let vm = limited_vm(ctx, section.name())?;
         let resolve = library_resolver(Arc::clone(ctx.prompt()));
         let render = prose_renderer(ctx, seed.item.clone());
-        // The `prompt` reads resolve from the section; the suspending
-        // calls (`call`, `tasks.fanout`, `models.infer`) are the yield
-        // shims the setup half installs.
+        // The `prompt` reads resolve from the section, or from the library
+        // whose code makes the read; the suspending calls (`call`,
+        // `tasks.fanout`, `models.infer`) are the yield shims the setup
+        // half installs.
         let prompt = Arc::clone(ctx.prompt());
         let pos = pos.clone();
-        let read =
-            move |path: String| walk_target::read_section(&path, &prompt, Origin::Section(&pos));
+        let read = move |path: String, from: Option<LibraryKey>| {
+            walk_target::read_section(&path, &prompt, Origin::Section(&pos), from.as_ref())
+        };
         // The shared setup half ([`section_vm::setup_section_vm`]) follows;
         // only the seed, the `sys` extras, and the callbacks' position are
         // the walk's own.
@@ -262,7 +266,9 @@ impl SectionContext {
         let resolve = library_resolver(Arc::clone(ctx.prompt()));
         let render = prose_renderer(ctx, None);
         let prompt = Arc::clone(ctx.prompt());
-        let read = move |path: String| walk_target::read_section(&path, &prompt, Origin::H1);
+        let read = move |path: String, from: Option<LibraryKey>| {
+            walk_target::read_section(&path, &prompt, Origin::H1, from.as_ref())
+        };
         // `argv` installs writable, the H1 delta `SectionVmSetup::argv`
         // describes; the executor reads the value back at the freeze (see
         // the scheduler's H1-to-walk handoff).

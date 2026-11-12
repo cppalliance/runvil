@@ -1,11 +1,12 @@
-//! Runvil's `require`: library blocks run in the caller's environment
-//! and coroutine, return values, caching by library identity, cycles,
+//! Runvil's `require`: library blocks run over the caller's globals and
+//! in its coroutine, return values, caching by library identity, cycles,
 //! retries after a failed load, the path passed to the resolver, the
 //! `jump` refusal during a load, library prose, library errors, and the
 //! library-load reports.
 
 use super::*;
 
+mod environment;
 mod errors;
 mod jump;
 mod prose;

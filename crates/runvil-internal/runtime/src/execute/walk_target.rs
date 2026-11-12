@@ -9,24 +9,36 @@
 //! jumps and `call` and `tasks.spawn` targets, fanout workers included,
 //! through [`resolve_jump_target`]. The `prompt` reads take a path from
 //! the top as well, which names any section, and [`read_section`]
-//! resolves them. `require` takes only a path from the
+//! resolves them. A relative path in a library's code starts at the
+//! library, whose position [`library_position`] reads back from its key.
+//! `require` takes only a path from the
 //! top, and [`resolve_library`] turns the section it names into a
 //! [`Library`] keyed by the section's position.
 
 use crate::lua::{Library, LibraryBlock, LibraryKey, SectionRead, SectionText};
 use crate::prompt::{Block, Prompt, Section};
 use crate::section_path::{self, Lookup, Origin};
-use crate::section_pos::SectionPos;
+use crate::section_pos::{SectionIndex, SectionPos, SlicePath};
 use crate::{Result, error};
 
-/// What a prompt read sees of the section `path` names from `origin`: its
-/// own raw Markdown and its pre-parsed list items, or the not-found error
-/// when the path names no section.
+/// What a prompt read sees of the section `path` names: its own raw
+/// Markdown and its pre-parsed list items, or the not-found error when the
+/// path names no section. A relative path starts at the library `from`
+/// names, when a library's code made the read, and otherwise at `origin`,
+/// the section that is running.
 ///
 /// # Errors
 /// Returns a `LuaRuntime` failure when the path is malformed (see
-/// [`section_path::find`]).
-pub(super) fn read_section(path: &str, prompt: &Prompt, origin: Origin<'_>) -> Result<SectionRead> {
+/// [`section_path::find`]), and an `Internal` failure for a key that names
+/// no section position.
+pub(super) fn read_section(
+    path: &str,
+    prompt: &Prompt,
+    origin: Origin<'_>,
+    from: Option<&LibraryKey>,
+) -> Result<SectionRead> {
+    let library = from.map(library_position).transpose()?;
+    let origin = library.as_ref().map_or(origin, Origin::Section);
     let pos = match section_path::find(path, prompt, origin)? {
         Lookup::Found(pos) => pos,
         Lookup::Missing(error) => return Ok(SectionRead::Missing(error)),
@@ -64,21 +76,28 @@ pub(super) struct JumpTarget {
     pub(super) descends: bool,
 }
 
-/// Resolves the relative `path` from `origin` and classifies the target:
-/// a direct child of a walked section starts a child-level walk, and
-/// anything else is a section of the caller's own slice. The H1's
-/// children are the top-level sections, where the walk already runs, so
-/// its targets never descend.
+/// Resolves the relative `path` and classifies the target: a direct child
+/// of a walked section starts a child-level walk, and anything else is a
+/// section of the caller's own slice. The H1's children are the top-level
+/// sections, where the walk already runs, so its targets never descend.
+///
+/// The path starts at the library `from` names, when a library's code
+/// made the request, and otherwise at `origin`, the section that is
+/// running.
 ///
 /// # Errors
 /// Returns a `LuaRuntime` failure when the path is malformed, is not one
 /// of the two relative forms, or names no section (see
-/// [`section_path::resolve_neighbor`]).
+/// [`section_path::resolve_neighbor`]), and an `Internal` failure for a
+/// key that names no section position.
 pub(super) fn resolve_jump_target(
     path: &str,
     prompt: &Prompt,
     origin: Origin<'_>,
+    from: Option<&LibraryKey>,
 ) -> Result<JumpTarget> {
+    let library = from.map(library_position).transpose()?;
+    let origin = library.as_ref().map_or(origin, Origin::Section);
     let pos = section_path::resolve_neighbor(path, prompt, origin)?;
     let descends = matches!(origin, Origin::Section(caller) if caller.slice != pos.slice);
     Ok(JumpTarget { pos, descends })
@@ -96,6 +115,35 @@ fn library_key(pos: &SectionPos) -> LibraryKey {
         .map(|index| index.to_string())
         .collect();
     LibraryKey::new(indices.join("."))
+}
+
+/// The position of the library section `key` names: where a relative path
+/// in that library's code starts.
+///
+/// # Errors
+/// Returns an `Internal` failure when `key` is not one [`library_key`]
+/// built.
+pub(super) fn library_position(key: &LibraryKey) -> Result<SectionPos> {
+    let mut indices = key
+        .identity()
+        .split('.')
+        .map(str::parse)
+        .collect::<std::result::Result<Vec<usize>, _>>()
+        .map_err(|cause| {
+            error::make_internal_with_cause_error("a library key names no section position", &cause)
+        })?;
+    let index = indices.pop().ok_or(error::make_internal_error(
+        "a library key names no section position",
+    ))?;
+    let slice = indices
+        .into_iter()
+        .fold(SlicePath::root(), |path, ancestor| {
+            path.child(SectionIndex::new(ancestor))
+        });
+    Ok(SectionPos {
+        slice,
+        index: SectionIndex::new(index),
+    })
 }
 
 /// Resolves `path` for a `require` and builds the library it names. The

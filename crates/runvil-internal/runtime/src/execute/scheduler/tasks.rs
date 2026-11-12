@@ -38,7 +38,7 @@ use runvil_vfs::ExecId;
 
 use crate::execute::run::EffectId;
 use crate::execute::section_context::TaskSeed;
-use crate::lua::Answer;
+use crate::lua::{Answer, LibraryKey};
 use crate::{Result, error};
 
 use super::admission::SpawnRecord;
@@ -558,8 +558,9 @@ impl Scheduler {
         input: Option<&str>,
         seed: TaskSeed,
         var: serde_json::Value,
+        from: Option<&LibraryKey>,
     ) -> Result<()> {
-        match self.prepare_spawn(id, target, input, seed, var) {
+        match self.prepare_spawn(id, target, input, seed, var, from) {
             Ok((task, child, record)) => {
                 // The child waits for admission, queued behind the
                 // spawner; the drain admits it when a slot frees up at
@@ -591,6 +592,7 @@ impl Scheduler {
         input: Option<&str>,
         seed: TaskSeed,
         var: serde_json::Value,
+        from: Option<&LibraryKey>,
     ) -> Result<(TaskId, ChainIndex, SpawnRecord)> {
         let chain = &self.chains[id];
         let depth = chain.call_depth.deeper()?;
@@ -618,7 +620,7 @@ impl Scheduler {
         // `chain`'s arena borrow ends here; the resolution names the
         // target's slice by path, resolved against the shared tree.
         let prompt = self.prompt();
-        let resolved = self.with_chain(id, |ops| ops.resolve_chain_target(target))?;
+        let resolved = self.with_chain(id, |ops| ops.resolve_chain_target(target, from))?;
         let worker = resolved
             .pos
             .section(&prompt)

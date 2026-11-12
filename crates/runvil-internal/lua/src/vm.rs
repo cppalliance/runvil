@@ -57,15 +57,6 @@ type Jump = (String, Option<NonZeroU32>);
 /// The failure of a poisoned jump slot.
 const JUMP_SLOT_POISONED: &str = "jump slot poisoned";
 
-/// Collects owned values into a 1-based Lua sequence table.
-fn pack_sequence<T: mlua::IntoLua>(lua: &Lua, values: Vec<T>) -> mlua::Result<mlua::Table> {
-    let table = lua.create_table_with_capacity(values.len(), 0)?;
-    for (index, value) in values.into_iter().enumerate() {
-        table.raw_set(index + 1, value)?;
-    }
-    Ok(table)
-}
-
 /// A section VM's stage before Engine injection: construction, the run's
 /// limits, and the raw-model-id opt-in.
 #[derive(Debug)]

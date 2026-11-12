@@ -35,10 +35,16 @@ fn call_yields_target_input_and_the_var_snapshot() {
     let var = json!({ "k": 1 });
     let vm = scheduler_vm(&ModelSet::default(), Some(&var));
     match yielded_request(&vm, r#"return call("../Child", "override")"#) {
-        Request::Call { target, input, var } => {
+        Request::Call {
+            target,
+            input,
+            var,
+            from,
+        } => {
             assert_eq!(target, "../Child");
             assert_eq!(input.as_deref(), Some("override"));
             assert_eq!(var, json!({ "k": 1 }));
+            assert_eq!(from, None, "a section's own call names no library");
         }
         other => panic!("expected a call request, got {other:?}"),
     }
@@ -58,12 +64,14 @@ fn fanout_yields_a_spawn_per_member_starting_with_the_first() {
             item,
             index,
             var,
+            from,
         } => {
             assert_eq!(target, "Worker");
             assert_eq!(input, None);
             assert_eq!(item, Some(json!("a")));
             assert_eq!(index, Some(1));
             assert_eq!(var, json!({}));
+            assert_eq!(from, None, "a section's own fanout names no library");
         }
         other => panic!("expected a spawn request, got {other:?}"),
     }
@@ -104,12 +112,14 @@ fn tasks_spawn_yields_the_target_seeds_and_var() {
             item,
             index,
             var,
+            from,
         } => {
             assert_eq!(target, "../Child");
             assert_eq!(input.as_deref(), Some("in"));
             assert_eq!(item, Some(json!({ "name": "a" })));
             assert_eq!(index, Some(2));
             assert_eq!(var, json!({ "k": 1 }));
+            assert_eq!(from, None, "a section's own spawn names no library");
         }
         other => panic!("expected a spawn request, got {other:?}"),
     }

@@ -142,7 +142,7 @@ fn set_up_vm(binds: &VmBinds<'_>) -> SectionVm {
         preludes: &[],
         raw_shims: false,
     };
-    let read = |path: String| -> std::result::Result<SectionRead, crate::Error> {
+    let read = |path: String, _| -> std::result::Result<SectionRead, crate::Error> {
         Ok(SectionRead::Missing(crate::error::make_lua_runtime_error(
             format!("section `{path}` not found"),
         )))

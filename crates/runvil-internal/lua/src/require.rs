@@ -1,7 +1,8 @@
 //! Runvil's `require`: a section VM's loader for library sections.
 //!
 //! `require '/path'` asks the caller's resolver for a [`Library`],
-//! loads its compiled blocks into the VM's one environment, and runs them
+//! loads its compiled blocks with the library's environment
+//! ([`library_env`](crate::library_env)), and runs them
 //! in order inside the calling block's coroutine, so a library block's
 //! suspending calls are ordinary yields of that block. The loader is Lua
 //! (`__impl_require.lua`), because a Rust function cannot call one that
@@ -144,11 +145,18 @@ fn begin_load_capture(
     lua.create_function(move |lua, library: AnyUserData| {
         let library = library.take::<Library>()?;
         emitter.library_load(&section, &library.path, LibraryLoad::Started);
-        let blocks = library
-            .blocks
-            .iter()
-            .map(|block| block.program.load(lua))
-            .collect::<Result<Vec<Function>>>();
+        // Every block loads with the library's environment, so the block
+        // and each function it defines resolve a relative section path
+        // from the library's own section.
+        let blocks = crate::library_env::build(lua, &library.key)
+            .map_err(error::make_lua_error)
+            .and_then(|env| {
+                library
+                    .blocks
+                    .iter()
+                    .map(|block| block.program.load_in(lua, env.clone()))
+                    .collect::<Result<Vec<Function>>>()
+            });
         let blocks = match blocks {
             Ok(blocks) => blocks,
             Err(error) => {

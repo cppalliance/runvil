@@ -182,10 +182,10 @@ fn every_read_raises_for_a_mistake_and_only_section_raises_for_a_miss() {
 }
 
 /// Both reads work in H1, whose children are the top-level sections and
-/// which has no siblings, and in a library, which reads from the calling
-/// section: at load time, where each requiring section's load resolves
-/// from that section, and from a library function, which resolves from
-/// whichever section calls it.
+/// which has no siblings, and in a library. A library's own `prompt`
+/// reads from the library, and `_G.prompt` in its code reads from the
+/// section that is using it: at load time, where each requiring section
+/// loads the library for itself, and from a library function.
 #[test]
 fn prompt_reads_work_in_h1_and_a_library() {
     let head = PromptSource::new()
@@ -195,29 +195,36 @@ fn prompt_reads_work_in_h1_and_a_library() {
             assert(prompt.section('Main') ~= nil, 'a top-level section is a child of the H1')
             assert(prompt.section_or('Kid') == nil, 'a nested section is no child of the H1')
             assert(prompt.section_or('../Main') == nil, 'the H1 has no siblings')
-            assert(kids_at_load == nil, 'the load-time read in the H1 resolves from the H1')
-            assert(kid_items() == nil, 'a library function reads from the H1')
+            assert(kids_at_load == nil, 'the load-time read through _G in the H1 resolves from the H1')
+            assert(kid_items() == nil, 'a library function reads through _G from the H1')
+            assert(own_kid() == 'own kid', 'a library reads its own child from the H1')
             var.nums = table.concat(prompt.list('Nums'), ',')",
         )
         .section(
             "Main",
             "
             require '/kid_reader'
-            assert(kids_at_load ~= nil, 'the load-time read in Main resolves from Main')
-            return var.nums .. '|' .. table.concat(kids_at_load, ',') .. '|' .. table.concat(kid_items(), ',')",
+            assert(kids_at_load ~= nil, 'the load-time read through _G in Main resolves from Main')
+            return table.concat({ var.nums, table.concat(kids_at_load, ','),
+              table.concat(kid_items(), ','), own_kid() }, '|')",
         );
     let library = "\n## kid_reader\n\n\
 ```lua\n\
-kids_at_load = prompt.list('Kid')\n\
+kids_at_load = _G.prompt.list('Kid')\n\
 function kid_items()\n\
-  return prompt.list('Kid')\n\
+  return _G.prompt.list('Kid')\n\
 end\n\
-```\n";
+function own_kid()\n\
+  return prompt.section('Kid')\n\
+end\n\
+```\n\n\
+### Kid\n\n\
+own kid\n";
     let source = [head.build().as_str(), &DOCUMENT.concat(), library].concat();
     let trace = Scenario::new(source).run();
     let out = trace.text();
     assert_eq!(
-        out, "one,two,three|kid-one,kid-two|kid-one,kid-two",
-        "H1 reads the top-level list, and both the load-time read and the library function read the caller's child"
+        out, "one,two,three|kid-one,kid-two|kid-one,kid-two|own kid",
+        "H1 reads the top-level list, the library reads its user's child through _G, and its own child by a plain name"
     );
 }

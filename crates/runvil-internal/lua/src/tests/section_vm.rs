@@ -356,7 +356,7 @@ fn call_with_a_non_string_target_errors() {
     let vm = TestVm::new().build();
     vm.install_test_control_globals(
         |target, _, _| resolve_section_target(target).map_err(crate::error::make_lua_error),
-        |_| {
+        |_, _| {
             Err(crate::make_lua_runtime_error(
                 "prompt reads are not needed here",
             ))

@@ -11,7 +11,7 @@ use runvil_types::emitter::Emitter;
 use runvil_vfs::ScopeHandle;
 use serde_json::Value as Json;
 
-use super::{JUMP_SLOT_POISONED, SectionVm, pack_sequence};
+use super::{JUMP_SLOT_POISONED, SectionVm};
 use crate::coro::install_shims;
 use crate::engine_globals::install_log;
 use crate::engine_globals_store::install_store_table;
@@ -19,7 +19,7 @@ use crate::engine_globals_store::install_store_table;
 use crate::error::Error;
 use crate::error::{self, Result};
 use crate::prose::ProseState;
-use crate::section::{Library, SectionRead, resolve_section_target};
+use crate::section::{Library, LibraryKey, SectionRead, resolve_section_target};
 use crate::sys::{SYS_LIVE_POISONED, seal_sys};
 #[cfg(test)]
 use crate::var::var_to_json;
@@ -112,7 +112,10 @@ impl SectionVm {
     pub(crate) fn install_test_control_globals<E, R>(&self, call_callback: E, read: R) -> Result<()>
     where
         E: Fn(Value, Option<String>, Json) -> std::result::Result<String, Error> + Send + 'static,
-        R: Fn(String) -> std::result::Result<SectionRead, Error> + Send + Sync + 'static,
+        R: Fn(String, Option<LibraryKey>) -> std::result::Result<SectionRead, Error>
+            + Send
+            + Sync
+            + 'static,
     {
         let globals = self.lua.globals();
         let call_fn = self
@@ -131,7 +134,9 @@ impl SectionVm {
 
     /// Installs the control surface: `jump` and the `prompt` reads as Rust
     /// callbacks (none suspends). `read` looks up the section a path
-    /// names; a path it refuses is its error, raised at the call.
+    /// names, starting from the library whose code made the read or, when
+    /// a section's own code did, from that section. A path it refuses is
+    /// its error, raised at the call.
     ///
     /// The suspending calls are the yield shims
     /// [`install_coro_shims`](Self::install_coro_shims) installs, and the
@@ -143,7 +148,10 @@ impl SectionVm {
     /// Returns a `LuaRuntime` failure if any global cannot be installed.
     pub fn install_control_globals<R, E>(&self, read: R) -> Result<()>
     where
-        R: Fn(String) -> std::result::Result<SectionRead, E> + Send + Sync + 'static,
+        R: Fn(String, Option<LibraryKey>) -> std::result::Result<SectionRead, E>
+            + Send
+            + Sync
+            + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
         let globals = self.lua.globals();
@@ -255,69 +263,18 @@ impl SectionVm {
             .map_err(error::make_lua_error)
     }
 
-    /// Installs the `prompt` table over `read`. `prompt.section` returns
-    /// a section's own raw Markdown and raises when the path names no
-    /// section; `prompt.section_or` returns nil for that miss, and raises
-    /// everything else `prompt.section` raises.
+    /// Installs the `prompt` table over `read` (see
+    /// [`prompt_reads`](crate::prompt_reads)).
     fn install_prompt_table<R, E>(&self, globals: &mlua::Table, read: R) -> Result<()>
     where
-        R: Fn(String) -> std::result::Result<SectionRead, E> + Send + Sync + 'static,
+        R: Fn(String, Option<LibraryKey>) -> std::result::Result<SectionRead, E>
+            + Send
+            + Sync
+            + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
-        let read = Arc::new(read);
-        let read_strict = Arc::clone(&read);
-        let section = self
-            .lua
-            .create_function(move |_, target: Value| {
-                let path = resolve_section_target(target)?;
-                match read_strict(path).map_err(mlua::Error::external)? {
-                    SectionRead::Found(text) => Ok(text.markdown),
-                    SectionRead::Missing(error) => Err(mlua::Error::external(error)),
-                }
-            })
-            .map_err(error::make_lua_error)?;
-        let read_lenient = Arc::clone(&read);
-        let section_or = self
-            .lua
-            .create_function(move |_, target: Value| {
-                let path = resolve_section_target(target)?;
-                match read_lenient(path).map_err(mlua::Error::external)? {
-                    SectionRead::Found(text) => Ok(Some(text.markdown)),
-                    SectionRead::Missing(_) => Ok(None),
-                }
-            })
-            .map_err(error::make_lua_error)?;
-        let list = self
-            .lua
-            .create_function(move |lua, target: Value| {
-                let path = resolve_section_target(target)?;
-                match read(path.clone()).map_err(mlua::Error::external)? {
-                    SectionRead::Missing(_) => Ok(Value::Nil),
-                    SectionRead::Found(text) if text.items.is_empty() => {
-                        Err(mlua::Error::external(format!(
-                            "section `{}` has no pre-parsed items",
-                            path.trim()
-                        )))
-                    }
-                    SectionRead::Found(text) => pack_sequence(lua, text.items).map(Value::Table),
-                }
-            })
-            .map_err(error::make_lua_error)?;
-        let prompt = self.lua.create_table().map_err(error::make_lua_error)?;
-        prompt
-            .raw_set("section", section)
-            .map_err(error::make_lua_error)?;
-        prompt
-            .raw_set("section_or", section_or)
-            .map_err(error::make_lua_error)?;
-        prompt
-            .raw_set("list", list)
-            .map_err(error::make_lua_error)?;
-        globals
-            .raw_set("prompt", prompt)
-            .map_err(error::make_lua_error)
+        crate::prompt_reads::install(&self.lua, globals, read)
     }
-
     /// Replaces the sealed Lua `sys` global at the section entry's first
     /// tool call, to expose `sys.model` once the section's current model is
     /// fixed.

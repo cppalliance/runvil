@@ -3,7 +3,8 @@
 -- is an ordinary yield and the scheduler keeps no fanout state of its own.
 --
 -- The Engine installs this after the coroutine prelude (`__impl_coro.lua`)
--- and installs the returned function as `tasks.fanout`. The chunk
+-- and installs the first returned function as `tasks.fanout`. The second
+-- makes the `tasks.fanout` of a library. The chunk
 -- arguments are privileged captures, never globals: `yield` wraps
 -- coroutine.yield, `var_snapshot` is the Engine helper returning the hidden
 -- `var` data table as a plain deep copy, `helpers` is the prelude's shared
@@ -83,7 +84,10 @@ end
 -- an arm delivered with a result is canceled right after the `join_any`
 -- that delivers it, a failed arm has ended, and a failure cancels the live
 -- arms before the function raises.
-local function fanout(...)
+-- `from` is nil for a section's own code and a library's identity for that
+-- library's code; every arm's `spawn` request carries it, so the worker's
+-- path resolves from the place the fanout was written in.
+local function fanout_impl(from, ...)
   local argc = select("#", ...)
   local model, worker, collection
   if argc == 2 then
@@ -154,6 +158,7 @@ local function fanout(...)
       item = members[index],
       index = index,
       var = var,
+      from = from,
     })
     if not ok then
       restore()
@@ -200,4 +205,11 @@ local function fanout(...)
   return results
 end
 
-return fanout
+-- `tasks.fanout` for the code it is installed for.
+local function fanout_from(from)
+  return function(...)
+    return fanout_impl(from, ...)
+  end
+end
+
+return fanout_from(nil), fanout_from

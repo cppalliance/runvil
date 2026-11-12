@@ -17,6 +17,7 @@ use runvil_types::error::place;
 
 use crate::execute::section_context::SectionContext;
 use crate::execute::walk_target::{JumpTarget, resolve_jump_target};
+use crate::lua::LibraryKey;
 use crate::prompt::Block;
 use crate::section_path::Origin;
 use crate::section_pos::{SectionIndex, SectionPos};
@@ -223,24 +224,33 @@ impl ChainOps<'_> {
             frame.mark_completed();
             drop(frame);
         }
+        // A jump moves the running walk, so its path starts at the running
+        // section, in a library's code too.
         let target = self
-            .resolve_chain_target(path)
+            .resolve_chain_target(path, None)
             .map_err(|error| place(error, prompt.file(), line))?;
         self.chain.walk.jump(target);
         Ok(())
     }
 
-    /// Resolves the relative `path` from the chain's current section into
-    /// the position the walk or a contained chain continues from: a
-    /// direct child's place in the section's child slice, or a sibling's
-    /// in the section's own. The H1 pass's children are the top-level
-    /// sections, so its targets never descend.
+    /// Resolves the relative `path` into the position the walk or a
+    /// contained chain continues from: a direct child's place in the
+    /// starting section's child slice, or a sibling's in its own. The
+    /// path starts at the library `from` names, when a library's code
+    /// made the request, and otherwise at the chain's current section.
+    /// The H1 pass's children are the top-level sections, so its targets
+    /// never descend.
     ///
     /// # Errors
     /// Returns a `LuaRuntime` failure when the path is malformed, is not
-    /// one of the two relative forms, or names no section (see
+    /// one of the two relative forms, or names no section, and an
+    /// `Internal` failure for a key that names no section position (see
     /// [`resolve_jump_target`]).
-    pub(super) fn resolve_chain_target(&self, path: &str) -> Result<JumpTarget> {
+    pub(super) fn resolve_chain_target(
+        &self,
+        path: &str,
+        from: Option<&LibraryKey>,
+    ) -> Result<JumpTarget> {
         let prompt = self.prompt();
         let chain = &*self.chain;
         let origin = if chain.kind.is_h1() {
@@ -248,6 +258,6 @@ impl ChainOps<'_> {
         } else {
             Origin::Section(chain.walk.current())
         };
-        resolve_jump_target(path, &prompt, origin)
+        resolve_jump_target(path, &prompt, origin, from)
     }
 }

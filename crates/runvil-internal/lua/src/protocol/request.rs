@@ -19,6 +19,7 @@ use super::non_empty::NonEmpty;
 use super::record::ToolCallRecord;
 use crate::error::Error;
 use crate::messages::MessageList;
+use crate::section::LibraryKey;
 
 /// A validated suspending Engine call, parsed from the yielded table.
 ///
@@ -48,6 +49,10 @@ pub enum Request {
         /// The caller's `var` snapshot, seeded into the chain and discarded
         /// when it ends.
         var: serde_json::Value,
+        /// The library whose code made the call, when a library's did.
+        /// The target's path then starts at that library's section, and
+        /// otherwise at the section that is running.
+        from: Option<LibraryKey>,
     },
     /// `tasks.spawn(target, opts?)`, and each arm of the `fanout` shim:
     /// start a task chain over the target's slice and return at once. The
@@ -68,6 +73,10 @@ pub enum Request {
         /// The caller's `var` snapshot, seeded into the chain and discarded
         /// when it ends.
         var: serde_json::Value,
+        /// The library whose code spawned, when a library's did. The
+        /// target's path then starts at that library's section, and
+        /// otherwise at the section that is running.
+        from: Option<LibraryKey>,
     },
     /// The wait shims' internal timeout timer: a leaf request whose work
     /// is one sleep, registered as an effect-backed task slot the caller

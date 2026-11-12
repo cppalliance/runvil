@@ -69,11 +69,11 @@ fn template_lines(library: &Library) -> Vec<Option<u32>> {
 fn a_jump_to_a_child_descends_and_a_jump_to_a_sibling_does_not() {
     let prompt = library_tree();
     let parent = at(&prompt, "/Grand/Parent");
-    let child =
-        resolve_jump_target("Self", &prompt, Origin::Section(&parent)).expect("a child resolves");
+    let child = resolve_jump_target("Self", &prompt, Origin::Section(&parent), None)
+        .expect("a child resolves");
     assert_eq!(child.pos, at(&prompt, "/Grand/Parent/Self"));
     assert!(child.descends, "a child target starts a child-level walk");
-    let sibling = resolve_jump_target("../Helpers", &prompt, Origin::Section(&parent))
+    let sibling = resolve_jump_target("../Helpers", &prompt, Origin::Section(&parent), None)
         .expect("a sibling resolves");
     assert_eq!(sibling.pos, at(&prompt, "/Grand/Helpers"));
     assert!(!sibling.descends, "a sibling stays in the caller's slice");
@@ -82,7 +82,8 @@ fn a_jump_to_a_child_descends_and_a_jump_to_a_sibling_does_not() {
 #[test]
 fn a_jump_from_the_h1_lands_on_a_top_level_section_and_never_descends() {
     let prompt = library_tree();
-    let target = resolve_jump_target("Grand", &prompt, Origin::H1).expect("a section resolves");
+    let target =
+        resolve_jump_target("Grand", &prompt, Origin::H1, None).expect("a section resolves");
     assert_eq!(target.pos, at(&prompt, "/Grand"));
     assert!(!target.descends, "the walk already runs at the top level");
 }
@@ -90,7 +91,7 @@ fn a_jump_from_the_h1_lands_on_a_top_level_section_and_never_descends() {
 /// The Markdown a read of `path` from `origin` finds, or the message of
 /// its not-found error.
 fn read(prompt: &Prompt, origin: Origin<'_>, path: &str) -> std::result::Result<String, String> {
-    match read_section(path, prompt, origin).expect("the path is well-formed") {
+    match read_section(path, prompt, origin, None).expect("the path is well-formed") {
         SectionRead::Found(text) => Ok(text.markdown),
         SectionRead::Missing(error) => Err(error.to_string()),
     }
@@ -124,6 +125,58 @@ fn a_read_finds_the_named_sections_own_markdown_or_the_not_found_error() {
             read(&prompt, origin, path),
             Err(message.to_owned()),
             "{path}"
+        );
+    }
+}
+
+#[test]
+fn a_path_in_a_librarys_code_starts_at_the_library_whatever_section_is_running() {
+    let prompt = library_tree();
+    let library = resolve_library(&prompt, "/Grand").expect("the library resolves");
+    let from = Some(&library.key);
+    for origin in [Origin::H1, Origin::Section(&at(&prompt, "/Top"))] {
+        let child = resolve_jump_target("Parent", &prompt, origin, from).expect("a child");
+        assert_eq!(child.pos, at(&prompt, "/Grand/Parent"));
+        let sibling = resolve_jump_target("../Lib", &prompt, origin, from).expect("a sibling");
+        assert_eq!(sibling.pos, at(&prompt, "/Lib"));
+        let text = read_section("Helpers", &prompt, origin, from).expect("a well-formed path");
+        assert!(matches!(text, SectionRead::Found(text) if text.markdown == "x"));
+        let miss = read_section("Niece", &prompt, origin, from).expect("a well-formed path");
+        let SectionRead::Missing(error) = miss else {
+            panic!("the library has no such child");
+        };
+        assert_eq!(
+            error.to_string(),
+            "section `Niece` not found: `/Grand` has no child `Niece`",
+            "the miss names the library"
+        );
+    }
+}
+
+#[test]
+fn a_key_names_its_sections_position_and_a_foreign_key_is_an_internal_error() {
+    let prompt = library_tree();
+    for path in ["/Top", "/Grand/Parent/Self", "/Grand/Parent/Sibling/Niece"] {
+        let library = resolve_library(&prompt, path).expect("the library resolves");
+        assert_eq!(
+            library_position(&library.key).expect("the key parses"),
+            at(&prompt, path),
+            "{path}"
+        );
+    }
+    let invariant = "internal invariant violated: a library key names no section position: ";
+    for identity in ["", "x", "1.", "1..2"] {
+        let error = library_position(&LibraryKey::new(identity.to_owned()))
+            .expect_err("a foreign key must not parse");
+        assert_eq!(
+            error.code,
+            runvil_types::error::ErrorCode::Internal,
+            "{identity:?} gave {error}"
+        );
+        assert!(
+            error.message.len() > invariant.len() && error.message.starts_with(invariant),
+            "required the index parse failure after the invariant, actual {:?} for {identity:?}",
+            error.message
         );
     }
 }

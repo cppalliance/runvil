@@ -31,6 +31,7 @@ fn load(section: &str, detail: &str) -> (String, String) {
 }
 
 mod effects;
+mod environment;
 mod failures;
 mod loading;
 mod prose;

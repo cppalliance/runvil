@@ -279,8 +279,14 @@ pub(crate) struct TestVm<'a> {
     var: Option<&'a Json>,
     limits: Option<(usize, u32)>,
     raw_model_ids: bool,
-    shims: bool,
+    /// The reader behind the `prompt` reads, set when the VM takes the
+    /// control globals and the coroutine shims.
+    shims: Option<TestRead>,
 }
+
+/// The reader behind a test VM's `prompt` reads: the path as written, and
+/// the library whose code made the read, if any.
+type TestRead = Box<dyn Fn(String, Option<crate::LibraryKey>) -> SectionRead + Send + Sync>;
 
 impl<'a> TestVm<'a> {
     #[track_caller]
@@ -297,7 +303,7 @@ impl<'a> TestVm<'a> {
             var: None,
             limits: None,
             raw_model_ids: false,
-            shims: false,
+            shims: None,
         }
     }
 
@@ -383,8 +389,21 @@ impl<'a> TestVm<'a> {
     /// The control globals, whose prompt reads find no section, and every
     /// coroutine yield shim.
     #[track_caller]
-    pub(crate) fn shims(mut self) -> Self {
-        self.shims = true;
+    pub(crate) fn shims(self) -> Self {
+        self.reading(|path, _| {
+            SectionRead::Missing(crate::make_lua_runtime_error(format!(
+                "section `{path}` not found"
+            )))
+        })
+    }
+
+    /// [`shims`](Self::shims), with the `prompt` reads answered by `read`.
+    #[track_caller]
+    pub(crate) fn reading(
+        mut self,
+        read: impl Fn(String, Option<crate::LibraryKey>) -> SectionRead + Send + Sync + 'static,
+    ) -> Self {
+        self.shims = Some(Box::new(read));
         self
     }
 
@@ -395,7 +414,7 @@ impl<'a> TestVm<'a> {
     #[track_caller]
     pub(crate) fn inject(mut self) -> SectionVm {
         assert!(
-            !self.shims,
+            self.shims.is_none(),
             "shims() needs the Engine globals, which inject() stops before"
         );
         self.run_injection().0
@@ -407,11 +426,9 @@ impl<'a> TestVm<'a> {
         let (mut vm, selection, access) = self.run_injection();
         vm.install_engine_globals(&self.emitter, self.section, &access.scope)
             .expect("the Engine globals install");
-        if self.shims {
-            vm.install_control_globals(|path| {
-                Ok::<SectionRead, std::convert::Infallible>(SectionRead::Missing(
-                    crate::make_lua_runtime_error(format!("section `{path}` not found")),
-                ))
+        if let Some(read) = self.shims.take() {
+            vm.install_control_globals(move |path, from| {
+                Ok::<SectionRead, std::convert::Infallible>(read(path, from))
             })
             .expect("the control globals install");
             vm.install_coro_shims(1)

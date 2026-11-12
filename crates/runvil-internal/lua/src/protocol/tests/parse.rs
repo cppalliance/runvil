@@ -50,10 +50,16 @@ fn call_parses_target_input_and_var_snapshot() {
     );
     let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
     match request {
-        Request::Call { target, input, var } => {
+        Request::Call {
+            target,
+            input,
+            var,
+            from,
+        } => {
             assert_eq!(target, "../Child");
             assert_eq!(input.as_deref(), Some("override"));
             assert_eq!(var, json!({ "k": 1 }));
+            assert_eq!(from, None, "a request with no `from` names no library");
         }
         other => panic!("expected a call request, got {other:?}"),
     }

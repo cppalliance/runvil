@@ -23,7 +23,7 @@ use runvil_types::event::ReplyOrigin;
 
 use crate::execute::run::Effect;
 use crate::execute::section_context::TaskSeed;
-use crate::lua::{Answer, Request, VfsOp};
+use crate::lua::{Answer, LibraryKey, Request, VfsOp};
 use crate::model::{Message, ModelBinding};
 use crate::{Result, error};
 
@@ -82,16 +82,27 @@ impl Scheduler {
             Request::Infer { prompt, binding } => {
                 self.with_chain(id, |ops| ops.dispatch_infer(&prompt, binding))
             }
-            Request::Call { target, input, var } => {
-                self.dispatch_call(id, &target, input.as_deref(), &var)
-            }
+            Request::Call {
+                target,
+                input,
+                var,
+                from,
+            } => self.dispatch_call(id, &target, input.as_deref(), &var, from.as_ref()),
             Request::Spawn {
                 target,
                 input,
                 item,
                 index,
                 var,
-            } => self.dispatch_spawn(id, &target, input.as_deref(), TaskSeed { item, index }, var),
+                from,
+            } => self.dispatch_spawn(
+                id,
+                &target,
+                input.as_deref(),
+                TaskSeed { item, index },
+                var,
+                from.as_ref(),
+            ),
             Request::Timer { duration } => self.dispatch_timer(id, duration),
             Request::JoinAny { tasks } => self.dispatch_join_any(id, tasks),
             Request::Ready { task } => self.dispatch_ready(id, &task),
@@ -128,8 +139,9 @@ impl Scheduler {
         target: &str,
         input: Option<&str>,
         var: &serde_json::Value,
+        from: Option<&LibraryKey>,
     ) -> Result<()> {
-        match self.prepare_call(id, target, input, var) {
+        match self.prepare_call(id, target, input, var, from) {
             Ok(child) => {
                 self.ready.push_back(child);
                 Ok(())
@@ -148,6 +160,7 @@ impl Scheduler {
         target: &str,
         input: Option<&str>,
         var: &serde_json::Value,
+        from: Option<&LibraryKey>,
     ) -> Result<ChainIndex> {
         let chain = &self.chains[id];
         let depth = chain.call_depth.deeper()?;
@@ -171,7 +184,7 @@ impl Scheduler {
         let model = chain.current_model()?;
         // `chain`'s arena borrow ends here; the resolution names the
         // target's slice by path, so nothing borrows the arena across it.
-        let resolved = self.with_chain(id, |ops| ops.resolve_chain_target(target))?;
+        let resolved = self.with_chain(id, |ops| ops.resolve_chain_target(target, from))?;
         // The child's id is the caller's next child id.
         let lineage = self.chains[id].next_child_id()?;
         self.start_chain(ChainStart {
