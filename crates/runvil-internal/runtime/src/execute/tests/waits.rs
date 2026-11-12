@@ -97,7 +97,9 @@ fn join_fills_every_position_of_a_member_named_twice() {
 fn join_any_returns_the_first_finished_member_and_the_rest_keep_running() {
     // Alpha finishes at once; Beta parks on a store write. `join_any` over
     // both delivers Alpha and leaves Beta live, so the caller must still
-    // wait on Beta before it ends - which it does.
+    // wait on Beta before it ends - which it does. Two more Alphas then
+    // both finish while the caller is parked on a store read, and the
+    // wait over them delivers the first in set order.
     let md = tasks_prompt(
         "local a = tasks.spawn('../Alpha')\n\
          local b = tasks.spawn('../Beta')\n\
@@ -107,6 +109,12 @@ fn join_any_returns_the_first_finished_member_and_the_rest_keep_running() {
          assert(tasks.ready(a), 'alpha is ready')\n\
          local second, ok2, result2 = tasks.join_any({ b })\n\
          assert(second.task == b.task and ok2 and result2 == 'beta', tostring(result2))\n\
+         local c = tasks.spawn('../Alpha')\n\
+         local d = tasks.spawn('../Alpha')\n\
+         store.exists('park')\n\
+         assert(tasks.ready(c) and tasks.ready(d), 'both have finished')\n\
+         local third = tasks.join_any({ d, c })\n\
+         assert(third.task == d.task, 'the first in set order, got ' .. third.task)\n\
          return 'done'",
         &[
             ("Alpha", "return 'alpha'"),
@@ -126,7 +134,9 @@ fn status_reports_a_parked_task_and_then_a_finished_one() {
     // blocked on `chat`, inside its section, with its note), and waits on
     // it; the round is released, and the spawner reads the terminal
     // status (done, ok). The key lists pin the table's shape: every key
-    // across the two reads, and no `origin`.
+    // across the two reads, and no `origin`. The child reads depth 1; a
+    // task spawned from a `call` child of the spawner runs one level
+    // deeper and reads depth 2.
     let gateway = ScriptedChat::new(vec![text("slow answer")]);
     let md = tasks_prompt(
         "local function keys(t)\n\
@@ -152,11 +162,21 @@ fn status_reports_a_parked_task_and_then_a_finished_one() {
          log('done state=' .. d.state .. ' ok=' .. tostring(d.ok) .. ' section=' .. tostring(d.section)\n\
            .. ' blocked=' .. tostring(d.blocked) .. ' turns=' .. d.turns .. ' note=' .. tostring(d.note))\n\
          log('done keys=' .. keys(d))\n\
+         log('nested depth=' .. call('../Caller'))\n\
          return 'done'",
-        &[(
-            "Child",
-            "tasks.note('working')\nreturn models.infer('slow please')",
-        )],
+        &[
+            (
+                "Child",
+                "tasks.note('working')\nreturn models.infer('slow please')",
+            ),
+            (
+                "Caller",
+                "local t = tasks.spawn('../Leaf')\n\
+                 tasks.join({ t })\n\
+                 return tasks.status(t).depth",
+            ),
+            ("Leaf", "return 'leaf'"),
+        ],
     );
     let mut rig = Rig::start(
         scheduler_scenario(md)
@@ -179,6 +199,7 @@ fn status_reports_a_parked_task_and_then_a_finished_one() {
             "parked keys=blocked,depth,note,section,state,target,tasks,turns".to_owned(),
             "done state=done ok=true section=nil blocked=nil turns=1 note=working".to_owned(),
             "done keys=depth,note,ok,state,target,tasks,turns".to_owned(),
+            "nested depth=2".to_owned(),
         ],
         "status fields before the child runs, while it is parked, and after it finished"
     );

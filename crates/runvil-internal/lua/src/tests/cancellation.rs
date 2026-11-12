@@ -85,6 +85,28 @@ fn a_canceled_run_unwinds_through_an_author_pcall_loop() {
         outcome.as_ref().err() == Some(&Error::canceled()),
         "an author pcall must not swallow cancellation, got {outcome:?}"
     );
+
+    // A loop suspended inside its pcall when the run is canceled: the
+    // failed answer the pcall raises again is the answer's own error table,
+    // and the block still ends canceled.
+    let handle = runvil_types::cancel::CancelHandle::new();
+    let vm = TestVm::new().shims().build();
+    vm.set_cancel(handle.clone());
+    let waiting = program("while true do pcall(models.infer, 'hi') end");
+    let CoroStep::Yielded(thread, _) = vm
+        .start_block_coro(&waiting)
+        .expect("the block suspends on its infer")
+    else {
+        panic!("the infer shim must suspend the block");
+    };
+    handle.cancel();
+    let timeout =
+        runvil_types::error::make_failure_error(ErrorCode::Timeout, "the model timed out");
+    let outcome = vm.resume_block_coro_answer(&waiting, &thread, Err(timeout));
+    assert!(
+        outcome.as_ref().err() == Some(&Error::canceled()),
+        "a failed answer must not replace cancellation, got {outcome:?}"
+    );
 }
 
 #[test]

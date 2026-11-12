@@ -128,6 +128,7 @@ fn an_arg_default_must_match_the_declared_type() {
         ("boolean", "'true'", "string"),
         ("integer", "1.5", "number"),
         ("string", "42", "integer"),
+        ("string", "-3", "integer"),
         ("number", "[1]", "sequence"),
     ] {
         let front = format!("args: {{ flag: {{ type: {kind}, default: {default} }} }}");
@@ -139,19 +140,19 @@ fn an_arg_default_must_match_the_declared_type() {
             ),
         );
     }
-    // A matching default passes.
-    let prompt = parse_ok(&prompt(
-        "args: { limit: { type: integer, default: 3 } }",
-        &[],
-    ));
-    assert_eq!(
-        prompt
-            .frontmatter()
-            .args()
-            .get("limit")
-            .and_then(|a| a.default().cloned()),
-        Some(serde_yaml_ng::Value::Number(3.into()))
-    );
+    // A matching default passes, a negative integer included.
+    for default in [3_i64, -3] {
+        let front = format!("args: {{ limit: {{ type: integer, default: {default} }} }}");
+        let prompt = parse_ok(&prompt(&front, &[]));
+        assert_eq!(
+            prompt
+                .frontmatter()
+                .args()
+                .get("limit")
+                .and_then(|a| a.default().cloned()),
+            Some(serde_yaml_ng::Value::Number(default.into()))
+        );
+    }
 }
 
 #[test]
@@ -275,6 +276,10 @@ fn a_duplicate_role_key_is_rejected() {
         &[],
     ));
     assert_eq!(error.code, ErrorCode::FrontmatterInvalid, "{error}");
+    assert!(
+        error.message.contains("duplicate model role `strong`"),
+        "the refusal names the role: {error:?}"
+    );
 }
 
 #[test]

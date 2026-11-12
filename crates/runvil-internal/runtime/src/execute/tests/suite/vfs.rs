@@ -7,7 +7,7 @@
 //! ends its scope however long the caller holds the store views it was
 //! handed.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::Error;
 use crate::execute::run::{Effect, IssuedEffect, Run, Step};
@@ -17,7 +17,7 @@ use crate::test_support::perform_locally;
 use crate::test_support::scenario::Scenario;
 use crate::test_support::temp_root::TempRoot;
 use runvil_prompt::test_support::{parse_ok, prompt};
-use runvil_vfs::{Access, Origin, RealBackend, VfsError, VfsRef};
+use runvil_vfs::{Access, MemoryBackend, OpEvent, Origin, RealBackend, VfsError, VfsRef};
 
 const ROUND_TRIP_PROMPT: &str = concat!(
     "---\n",
@@ -125,8 +125,30 @@ fn an_end_to_end_run_threads_one_vfs_ref_through_every_section() {
             ("Second", "return store.read('handoff.txt')"),
         ],
     );
-    let trace = Scenario::new(source).run();
+    // The handle's watcher keeps the origin of each operation on the
+    // handoff file.
+    let origins = Arc::new(Mutex::new(Vec::new()));
+    let watched = Arc::clone(&origins);
+    let vfs = VfsRef::builder()
+        .store("/", MemoryBackend::new())
+        .on_op(move |event: OpEvent<'_>| {
+            if event.path().to_string() == "/handoff.txt"
+                && let Ok(mut origins) = watched.lock()
+            {
+                origins.push(event.origin().clone());
+            }
+        })
+        .build();
+    let trace = Scenario::new(source).vfs(vfs).run();
     assert_eq!(trace.text(), "across the reset");
+    // Both sections worked through the walk's one capability: the write
+    // and the read report one origin, the prompt's title at the line the
+    // walk's first chunk starts on.
+    let walk = Origin::at("Test prompt", "Test prompt", 12);
+    assert_eq!(
+        *origins.lock().expect("the watcher did not panic"),
+        [walk.clone(), walk]
+    );
     // Extraction after the run takes a fresh access: the run's identities
     // dropped with it, so nothing the run touched can conflict here.
     assert_eq!(

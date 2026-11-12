@@ -182,27 +182,34 @@ fn a_library_a_fanout_arm_and_a_spawned_task_all_see_a_prelude_global() {
 
 #[test]
 fn a_prelude_write_across_two_arms_ends_the_run_with_determinism_caught_or_not() {
-    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
-        # Preludes\n\n\
-        ## Parent\n\n\
-        ```lua\n\
-        local r = tasks.fanout('Worker', { 'alpha', 'beta' })\n\
-        return r[1].text\n\
-        ```\n\n\
-        ### Worker\n\n\
-        ```lua\nreturn item\n```\n";
-    for source in [
-        "store.write('seeded.txt', 'seed')",
-        "pcall(function() store.write('seeded.txt', 'seed') end)",
+    for parent in [
+        "local r = tasks.fanout('Worker', { 'alpha', 'beta' })\nreturn r[1].text",
+        // The parent catching its fanout's failure changes nothing either:
+        // the violation ends the run where the second arm meets it, and
+        // never reaches the parent as that arm's failure.
+        "local ok = pcall(tasks.fanout, 'Worker', { 'alpha', 'beta' })\nreturn tostring(ok)",
     ] {
-        let trace = prelude_run(md, vec![prelude("seeder", source)]);
-        let error = trace.error();
-        let message = error.located_message();
-        assert_eq!(error.code, ErrorCode::Determinism, "`{source}`: {message}");
-        assert!(
-            message.starts_with("store determinism violation: "),
-            "the conflict wins over the prelude's own result: `{source}`: {message}"
+        let md = format!(
+            "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+             # Preludes\n\n\
+             ## Parent\n\n\
+             ```lua\n{parent}\n```\n\n\
+             ### Worker\n\n\
+             ```lua\nreturn item\n```\n"
         );
+        for source in [
+            "store.write('seeded.txt', 'seed')",
+            "pcall(function() store.write('seeded.txt', 'seed') end)",
+        ] {
+            let trace = prelude_run(&md, vec![prelude("seeder", source)]);
+            let error = trace.error();
+            let message = error.located_message();
+            assert_eq!(error.code, ErrorCode::Determinism, "`{source}`: {message}");
+            assert!(
+                message.starts_with("store determinism violation: "),
+                "the conflict wins over the prelude's own result: `{source}`: {message}"
+            );
+        }
     }
 }
 

@@ -218,6 +218,12 @@ fn an_array_is_read_through_its_metamethods() {
          }))",
     );
     assert_eq!(offers(&vm), ["static:gh", "static:web/fetch"]);
+    vm.exec("tools.offer(setmetatable({}, { __len = function() return -1 end }))");
+    assert_eq!(
+        offers(&vm),
+        ["static:gh", "static:web/fetch"],
+        "a negative length reads as no entries"
+    );
 }
 
 #[test]

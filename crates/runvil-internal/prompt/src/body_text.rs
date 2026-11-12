@@ -145,6 +145,9 @@ mod tests {
         assert_ne!(first, third);
         assert_eq!(first, BodyText::from_owned("alpha".to_owned()));
         assert_eq!(first, "alpha");
+        assert_ne!(first, "beta");
+        assert_eq!(&first, "alpha");
+        assert_ne!(&first, "beta");
         assert_eq!(
             format!("{second:?}"),
             format!("{:?}", "alpha"),

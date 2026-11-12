@@ -291,6 +291,25 @@ fn a_dropped_timer_raises_the_canceled_error_into_a_timed_waits_pcall_and_the_ru
             out, "false:canceled|child",
             "{wait}: the wait raised the canceled error and the child kept running"
         );
+
+        // The child's answer applied ahead of the drop, both before one
+        // step: the child ends before the main resumes, so its end finds
+        // the timed wait already over and its result waits for the untimed
+        // one.
+        let mut run = timed_run(&caught_wait(wait), &CancelHandle::new());
+        let (timer, chat) = parked_wait(&mut run);
+        run.resume(chat, chat_answer(&text("child")));
+        run.resume(timer, EffectAnswer::Dropped);
+        let Step::Done { result, .. } = run.step() else {
+            panic!("{wait}: the run ends in the step that applies both answers");
+        };
+        let out = result.unwrap_or_else(|error| {
+            panic!("{wait}: the drop ended the wait before the child did: {error:?}")
+        });
+        assert_eq!(
+            out, "false:canceled|child",
+            "{wait}: the wait raised the canceled error and the untimed wait took the child's result"
+        );
     }
 }
 

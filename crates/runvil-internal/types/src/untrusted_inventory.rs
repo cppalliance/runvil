@@ -608,6 +608,11 @@ mod tests {
             None,
             "fullwidth punctuation pairs stay as typed"
         );
+        assert_eq!(
+            delimiter_len("<\u{ff5c}a\u{4e2d}\u{6587}\u{ff5c}>", false),
+            None,
+            "a name with CJK content stays as typed"
+        );
     }
 
     #[test]

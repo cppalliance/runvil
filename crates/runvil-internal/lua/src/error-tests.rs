@@ -134,6 +134,11 @@ fn the_failure_text_drops_the_positions_in_front_and_the_traceback() {
         "[string \"line 3\"]: no line",
         "a marker with no line is no position"
     );
+    assert_eq!(
+        failure_text("[string \"line 3\"]:: empty line"),
+        "[string \"line 3\"]:: empty line",
+        "nor is a marker whose line has no digits"
+    );
     assert_eq!(failure_text("a refusal\n"), "a refusal");
 }
 

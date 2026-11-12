@@ -76,6 +76,18 @@ fn substitution_diagnostics_escape_and_bound_the_placeholder() {
         "control characters must be escaped, got: {with_controls}"
     );
     assert!(with_controls.contains("\\n") && with_controls.contains("\\t"));
+    assert_eq!(
+        path_preview("var.a\u{1b}b"),
+        "var.a\\u{001b}b",
+        "a control character with no short escape is written as its code point"
+    );
+
+    let at_the_bound = "x".repeat(80);
+    assert_eq!(
+        path_preview(&at_the_bound),
+        at_the_bound,
+        "a path of exactly the bound is whole, with no ellipsis"
+    );
 }
 
 #[test]
@@ -184,6 +196,8 @@ fn missing_key_is_error() {
 #[test]
 fn no_placeholders_passthrough() {
     assert_eq!(run("plain text").unwrap(), "plain text");
+    // One brace opens no placeholder, the prose's last character included.
+    assert_eq!(run("a { b } c {").unwrap(), "a { b } c {");
 }
 
 #[test]

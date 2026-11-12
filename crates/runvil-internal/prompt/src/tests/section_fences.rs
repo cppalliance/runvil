@@ -85,12 +85,17 @@ fn one_exact_fence_is_the_prologue_and_two_can_surround_empty_prose() {
     assert!(entry.prologue().is_some());
     assert!(entry.epilog().is_none());
 
-    let two = "```lua\nvar.x = 1\n```\n\n```lua\nreturn reply\n```";
-    let prompt = parse_ok(&PromptSource::new().prose("S", two).build());
-    let entry = prompt.entry().expect("has sections");
-    assert_eq!(entry.prose(), "");
-    assert!(entry.prologue().is_some());
-    assert!(entry.epilog().is_some());
+    // With a blank line between the two fences, and with none.
+    for two in [
+        "```lua\nvar.x = 1\n```\n\n```lua\nreturn reply\n```",
+        "```lua\nvar.x = 1\n```\n```lua\nreturn reply\n```",
+    ] {
+        let prompt = parse_ok(&PromptSource::new().prose("S", two).build());
+        let entry = prompt.entry().expect("has sections");
+        assert_eq!(entry.prose(), "", "{two:?}");
+        assert!(entry.prologue().is_some(), "{two:?}");
+        assert!(entry.epilog().is_some(), "{two:?}");
+    }
 }
 
 #[test]
@@ -120,6 +125,19 @@ fn lua_fence_lookalikes_outside_every_fence_are_parse_errors() {
         let error = parse_err(&src);
         assert_eq!(error.code, ErrorCode::FenceInvalid, "{error}");
         assert_eq!(error.to_string(), OPENER_MESSAGE, "{src:?}");
+    }
+    // A Lookalike has three or more markers and then `lua`. Fewer markers
+    // before `lua`, or three markers before another label, is prose.
+    for content in [
+        "`lua` blocks run in order.",
+        "``lua`` is the only label.",
+        "~~lua",
+        "Intro.\n\n    ```python\n    print(1)\n    ```",
+    ] {
+        let src = format!("---\nname: x\ndescription: d\n---\n\n# T\n\n## S\n\n{content}\n");
+        let prompt = parse_ok(&src);
+        let entry = prompt.entry().expect("has sections");
+        assert_eq!(entry.prose(), content, "{src:?}");
     }
 }
 
@@ -271,6 +289,11 @@ fn malformed_section_phases_report_locations() {
             "Prose.\n\n```lua\nprivate_payload =\n```",
             "section `Private section` epilog",
         ),
+        (
+            "middle",
+            "```lua\nvar.a = 1\n```\n\nOne.\n\n```lua\nprivate_payload =\n```\n\nTwo.\n\n```lua\nreturn reply\n```",
+            "section `Private section` lua 2",
+        ),
     ] {
         let src = PromptSource::new()
             .prose("Private section", content)
@@ -296,11 +319,17 @@ fn unclosed_reserved_section_fences_are_location_errors() {
         assert!(error.to_string().contains(phase));
         assert!(error.to_string().contains("not closed"));
     }
+    // A file that ends on the opening line, with no newline after it.
+    let error = parse_err("---\nname: x\ndescription: d\n---\n\n# T\n\n## S\n\n```lua");
+    assert_eq!(
+        error.to_string(),
+        "section `S` prologue `lua` fence is not closed"
+    );
 }
 
 #[test]
 fn backtick_lines_that_cannot_close_a_lua_fence_leave_it_unclosed() {
-    for last_line in ["    ```", "``` x"] {
+    for last_line in ["    ```", "``` x", "`` ", "\t\t"] {
         let src = format!(
             "---\nname: x\ndescription: d\n---\n\n# T\n\n## S\n\n```lua\nreturn 1\n{last_line}\n"
         );

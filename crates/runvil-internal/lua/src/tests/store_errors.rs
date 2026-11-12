@@ -275,6 +275,15 @@ fn store_error_values_carry_reason_fields_and_message_for_each_reason() {
             message: "unsupported store operation on d: no rename",
         },
         Case {
+            error: VfsError::Conflict {
+                path: "d".to_owned(),
+                detail: "two unordered tasks wrote it".to_owned(),
+            },
+            reason: "conflict",
+            fields: path_field("d"),
+            message: "store conflict on d: two unordered tasks wrote it",
+        },
+        Case {
             error: VfsError::Backend {
                 message: "disk gone".to_owned(),
             },

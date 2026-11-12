@@ -158,6 +158,8 @@ fn models_use_options_reach_the_returned_handle() {
     assert!((temperature - 0.3).abs() < f64::EPSILON);
     assert_eq!(max_tokens, 256);
     assert_eq!(current_label(&vm).as_deref(), Some("default"));
+    let whole: u32 = vm.eval("return models.use('default', { max_tokens = 512.0 }).max_tokens");
+    assert_eq!(whole, 512, "a whole-number float counts as its integer");
 }
 
 #[test]
@@ -422,6 +424,13 @@ fn models_use_rejects_an_argument_that_is_neither_a_role_nor_a_handle() {
             .to_string()
             .contains("models.use takes a model role name or a model handle, got number"),
         "the rejection names the argument's Lua type: {error}"
+    );
+    let error = vm.eval_err("models.use(messages)");
+    assert!(
+        error
+            .to_string()
+            .contains("models.use takes a model role name or a model handle, got userdata"),
+        "a userdata that is no handle is rejected the same way: {error}"
     );
     assert_eq!(
         current_label(&vm).as_deref(),

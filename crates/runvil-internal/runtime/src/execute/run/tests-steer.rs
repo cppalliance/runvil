@@ -599,6 +599,9 @@ fn a_message_to_one_task_does_not_withdraw_another_chains_request() {
         .iter()
         .find(|(_, effect)| matches!(effect, Effect::Vfs { .. }))
         .expect("Main waits on its store call");
+    // The main chain has no request out, so a message for it withdraws
+    // neither task's request and waits in its inbox.
+    let _ = run.deliver("for main".to_owned());
     run.resume(*store, EffectAnswer::Vfs(Ok(VfsOutcome::Bool(false))));
     let second = step(&mut run);
     assert_eq!(second.withdrawn, [a], "only A's request is withdrawn");
@@ -606,11 +609,16 @@ fn a_message_to_one_task_does_not_withdraw_another_chains_request() {
     run.resume(a, EffectAnswer::Dropped);
     run.resume(again, chat_answer(&text("a done")));
     run.resume(b, chat_answer(&text("b done")));
-    let (result, _) = finish(&mut run);
+    let (result, unread) = done(&mut run);
     assert_eq!(
         result.expect("both tasks return"),
         "3|2",
         "A appended the message, and B's request ran untouched"
+    );
+    assert_eq!(
+        unread,
+        ["for main"],
+        "the main chain's message stays unread"
     );
 }
 

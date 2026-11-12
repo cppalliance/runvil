@@ -456,10 +456,41 @@ fn a_timed_join_joins_the_members_it_delivers_and_a_later_join_the_rest() {
 
 #[test]
 fn a_canceled_tasks_partial_write_is_readable_after_the_join() {
+    /// Trace 11 one level down: an arm cancels its task and returns
+    /// without waiting on it. The arm's end joins every task it owns,
+    /// delivered or not, so the caller's join of the arm makes the
+    /// task's completed write readable.
+    const TRACE_11_NESTED: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # Cancel\n\n\
+        ## Main\n\n\
+        ```lua\n\
+        local arm = tasks.spawn('../Arm')\n\
+        local _, ok, result = tasks.join_any({ arm })\n\
+        assert(ok and result == 'arm done', tostring(result))\n\
+        return store.read('partial.txt')\n\
+        ```\n\n\
+        ## Arm\n\n\
+        ```lua\n\
+        local a = tasks.spawn('../Task')\n\
+        store.exists('p1')\n\
+        store.exists('p2')\n\
+        tasks.cancel(a)\n\
+        return 'arm done'\n\
+        ```\n\n\
+        ## Task\n\n\
+        ```lua\n\
+        store.write('partial.txt', 'partial')\n\
+        return models.infer('slow')\n\
+        ```\n";
+
     // The shuffled rig holds the task's model round, so the cancel lands
     // while the round is out.
     assert_every_interleaving_reads(
         |store| trace_scenario(TRACE_11, store).hold(asks("slow")),
+        "partial",
+    );
+    assert_every_interleaving_reads(
+        |store| trace_scenario(TRACE_11_NESTED, store).hold(asks("slow")),
         "partial",
     );
 }

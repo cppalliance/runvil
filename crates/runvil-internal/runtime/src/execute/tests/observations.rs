@@ -297,6 +297,13 @@ fn the_records_span_the_complete_runtime_lifecycle() {
          local text = models.infer(prose)\n\
          local _ = tools.call('tools/echo', { value = 'hi' })\n\
          store.append('state.txt', '\\nafter')\n\
+         store.read('state.txt')\n\
+         store.read_numbered('state.txt')\n\
+         store.exists('state.txt')\n\
+         store.glob('*.txt')\n\
+         store.write('scratch.txt', 'draft')\n\
+         store.str_replace('scratch.txt', 'draft', 'final')\n\
+         store.delete('scratch.txt')\n\
          return text\n\
          ```\n";
     let trace = Scenario::new(source)
@@ -323,6 +330,12 @@ fn the_records_span_the_complete_runtime_lifecycle() {
         detail::TOOL_CALL_SUCCEEDED,
         detail::LUA_CHUNK_STARTED,
         detail::VFS_APPEND_SUCCEEDED,
+        detail::VFS_READ_SUCCEEDED,
+        detail::VFS_READ_NUMBERED_SUCCEEDED,
+        detail::VFS_EXISTS_SUCCEEDED,
+        detail::VFS_GLOB_SUCCEEDED,
+        detail::VFS_REPLACE_SUCCEEDED,
+        detail::VFS_DELETE_SUCCEEDED,
         detail::RUN_SUCCEEDED,
     ] {
         assert!(

@@ -677,6 +677,18 @@ mod tests {
                 .contains("set_selection takes a model handle or nil, got number"),
             "the refusal names the Lua type: {error}"
         );
+        let stranger = lua
+            .create_any_userdata(())
+            .expect("a userdata that is no handle builds");
+        let error = set
+            .call::<()>(stranger)
+            .expect_err("a userdata that is no handle is refused too");
+        assert!(
+            error
+                .to_string()
+                .contains("set_selection takes a model handle or nil, got userdata"),
+            "the refusal names the Lua type: {error}"
+        );
         assert_eq!(label(), None, "a refused write leaves the selection alone");
     }
 }

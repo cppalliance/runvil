@@ -382,12 +382,14 @@ fn concurrency_converts_a_whole_number_float_and_refuses_an_out_of_range_one() {
     // it. A whole-number float past `u64` (an author's `1e20`) is the
     // call's error, raised at the call site like the shim's own refusal.
     let lua = Lua::new();
-    let table = lua_table(&lua, "{ op = 'concurrency', limit = 8.0 }");
-    match expect_request(Request::from_yield(&lua, &Value::Table(table))) {
-        Request::Concurrency { limit } => {
-            assert_eq!(limit.map(std::num::NonZeroU64::get), Some(8));
+    for (limit, expected) in [("8.0", 8), ("1.0", 1)] {
+        let table = lua_table(&lua, &format!("{{ op = 'concurrency', limit = {limit} }}"));
+        match expect_request(Request::from_yield(&lua, &Value::Table(table))) {
+            Request::Concurrency { limit } => {
+                assert_eq!(limit.map(std::num::NonZeroU64::get), Some(expected));
+            }
+            other => panic!("expected a concurrency request, got {other:?}"),
         }
-        other => panic!("expected a concurrency request, got {other:?}"),
     }
     let table = lua_table(&lua, "{ op = 'concurrency', limit = 1e20 }");
     match Request::from_yield(&lua, &Value::Table(table)) {

@@ -53,6 +53,16 @@ fn cycles_and_tables_past_the_depth_limit_become_placeholders() {
         debug_text(&vm, "deep"),
         format!("{}\"[too deep]\"{}", "[".repeat(127), "]".repeat(127))
     );
+    vm.exec("broken = 1\nfor _ = 1, 128 do broken = { [true] = broken } end");
+    assert_eq!(
+        debug_text(&vm, "broken"),
+        format!(
+            "{}\"[too deep]\"{}",
+            "{\"true\":".repeat(127),
+            "}".repeat(127)
+        ),
+        "a table that breaks the key rules counts toward the depth too"
+    );
 }
 
 #[test]

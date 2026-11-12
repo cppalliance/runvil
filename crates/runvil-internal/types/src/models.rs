@@ -370,6 +370,7 @@ mod tests {
         )])
         .expect("a catalog with one model info builds");
         assert!(catalog.contains(&id));
+        assert!(!catalog.contains(&ModelId::gateway("large").expect("test model alias is valid")));
         assert_eq!(catalog.models().len(), 1);
     }
 

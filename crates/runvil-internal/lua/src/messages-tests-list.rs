@@ -204,6 +204,8 @@ fn replace_out_of_bounds_is_refused_naming_the_bounds() {
         ("messages:replace(2, 5)", "replace(2, 5)"),
         ("messages:replace(6, 5)", "replace(6, 5)"),
         ("messages:replace(-1, 2)", "replace(-1, 2)"),
+        // The bounds are checked before any record is read.
+        ("messages:replace(2, 5, 'not a record')", "replace(2, 5)"),
     ] {
         assert_eq!(
             refusal(&vm, call),

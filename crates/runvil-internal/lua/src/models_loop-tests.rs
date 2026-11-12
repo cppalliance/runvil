@@ -334,6 +334,13 @@ fn an_arrivals_answer_reads_as_its_messages_in_a_round_and_in_the_final_check() 
         };
         assert_eq!(read, texts);
     }
+    let (failed, _) = answer_envelope(&lua, Err(Error::canceled())).unwrap();
+    let refusal = read_input(&lua, &Phase::Checking, failed, &hook)
+        .expect_err("a failed answer to the final check holds no messages");
+    assert!(
+        refusal.to_string().contains("the loop's inbox read failed"),
+        "the final check takes only its messages: {refusal}"
+    );
 }
 
 /// `act`'s tag and values for `then`.

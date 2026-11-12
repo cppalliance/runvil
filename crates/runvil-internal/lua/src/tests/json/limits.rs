@@ -117,15 +117,21 @@ fn sibling_objects_each_under_the_held_key_limit_encode_whole() {
 #[test]
 fn keys_held_by_tables_on_one_path_add_up_to_the_limit() {
     // A parent with 60,001 keys over a child with 60,000 holds 120,001
-    // keys on the path to the child's values.
+    // keys on the path to the child's values. A parent with 40,000 holds
+    // 100,000 there, which is the limit itself.
     let vm = json_vm();
     vm.exec(
         "local function keyed(n) local o = {} for i = 1, n do o['k' .. i] = true end return o end\n\
-         t = keyed(60000) t.child = keyed(60000)",
+         t = keyed(60000) t.child = keyed(60000)\n\
+         full = keyed(39999) full.child = keyed(60000)",
     );
     assert_eq!(
         caught(&vm, "json.encode(t)"),
         lua_error("json.encode: value is too large to encode")
+    );
+    assert!(
+        encoded(&vm, "json.encode(full)").starts_with("{\"child\":{\"k1\":true,"),
+        "a path that holds exactly the limit encodes whole"
     );
 }
 

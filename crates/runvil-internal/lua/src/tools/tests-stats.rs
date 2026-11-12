@@ -180,7 +180,8 @@ fn an_unknown_key_raises_naming_it_and_the_keys_held_never_a_discovery_or_model_
 #[test]
 fn tool_call_counts_seed_by_id_and_explain_an_unseeded_key() {
     let vm = lua_over(catalog_set([echo_tool(), tool_at("tools/other")]));
-    vm.install_tool_call_counts(&[echo_tool().id])
+    let counts = vm
+        .install_tool_call_counts(&[echo_tool().id])
         .expect("the counts install");
     vm.exec("tools.adhoc({ name = 'grab', description = 'Grab a value' }, function() end)");
     let seeded: i64 = vm.eval("return tools.stats.tools['tools/echo']");
@@ -212,6 +213,11 @@ fn tool_call_counts_seed_by_id_and_explain_an_unseeded_key() {
             "an unknown key, a wire name included, names itself and the remedy: {error}"
         );
     }
+    counts
+        .ensure("tools/other")
+        .expect("an id seeds after the install");
+    let ensured: i64 = vm.eval("return tools.stats.tools['tools/other']");
+    assert_eq!(ensured, 0, "an id seeded later reads zero before any call");
 }
 
 #[test]

@@ -225,7 +225,12 @@ fn waiting_for_input_is_true_exactly_while_the_main_chain_waits_on_its_inbox() {
         effects.is_empty() && waiting,
         "a step with no message leaves the main chain waiting, and is no stall"
     );
-    let _ = run.deliver("later".to_owned());
+    let delivered = run.deliver("later".to_owned());
+    assert_eq!(
+        only_event(&delivered).section(),
+        "Main",
+        "the message is reported where the main chain waits, not where the worker does"
+    );
     let (effects, _, waiting) = pending(&mut run);
     assert!(
         !waiting,

@@ -121,4 +121,13 @@ fn tables_127_deep_encode_and_128_deep_raise_the_depth_message() {
             nested_path(127)
         ))
     );
+    vm.exec("keyed = 1\nfor _ = 1, 128 do keyed = { k = keyed } end");
+    assert_eq!(
+        caught(&vm, "json.encode(keyed)"),
+        lua_error(&format!(
+            "json.encode: value{} is nested more than 127 levels deep",
+            ".k".repeat(127)
+        )),
+        "an object counts toward the depth as a list does"
+    );
 }

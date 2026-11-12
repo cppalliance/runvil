@@ -58,6 +58,12 @@ fn with_cause_adds_only_what_follows_text_the_message_ends_with() {
     let unrelated = Error::new(ErrorCode::Io, "read failed", "Try again.")
         .with_cause(&Layer("disk gone: sector 9", None));
     assert_eq!(unrelated.message, "read failed: disk gone: sector 9");
+
+    // A cause that starts with the separator has no text before it for the
+    // message to end with, so it is appended whole.
+    let leading = Error::new(ErrorCode::Io, "read failed", "Try again.")
+        .with_cause(&Layer(": sector 9", None));
+    assert_eq!(leading.message, "read failed: : sector 9");
 }
 
 #[test]

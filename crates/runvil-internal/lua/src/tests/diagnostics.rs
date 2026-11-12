@@ -198,6 +198,21 @@ fn map_chunk_line_to_absolute_no_match_passthrough() {
         )],
     );
     assert_eq!(result, (msg.to_owned(), None));
+    // An owner that lacks a chunk name or a location owns no marker.
+    let ten = NonZeroU32::new(10).expect("10 is non-zero");
+    for (msg, owner) in [
+        (
+            r#"[string ""]:2: boom"#,
+            ("", "section `Main` prologue", ten),
+        ),
+        (r#"[string "line 10"]:2: boom"#, ("line 10", "", ten)),
+    ] {
+        assert_eq!(
+            map_chunk_line_to_absolute(msg, &[owner]),
+            (msg.to_owned(), None),
+            "{owner:?}"
+        );
+    }
 }
 
 #[test]

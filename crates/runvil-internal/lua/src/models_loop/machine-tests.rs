@@ -438,6 +438,15 @@ fn an_input_its_phase_does_not_await_raises_internal() {
         "a batch answer holds no more texts than the calls it was sent"
     );
     let mut machine = chatting(2, &MessageList::default());
+    machine.step(batch(&["c1", "c2", "c3"]));
+    machine.step(batched(&["one"]));
+    assert_eq!(show(&machine.step(dispatched("two"))), "tool_calls c3@7");
+    assert_eq!(
+        show(&machine.step(batched(&["three", "four"]))),
+        unexpected,
+        "nor more than the calls still unanswered once some have their results"
+    );
+    let mut machine = chatting(2, &MessageList::default());
     assert_eq!(show(&machine.step(reply("done"))), "arrivals");
     assert_eq!(
         show(&machine.step(reply("again"))),

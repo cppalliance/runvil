@@ -181,6 +181,8 @@ fn an_at_sign_is_rejected_as_a_charset_error_because_v1_is_unversioned() {
 fn a_control_character_is_rejected_as_a_control_error() {
     assert_eq!(message_of("we\tb"), CONTROL);
     assert_eq!(message_of("web\u{7f}"), CONTROL);
+    // A space is the first byte past the control range.
+    assert_eq!(message_of("we b"), CHARSET);
 }
 
 #[test]

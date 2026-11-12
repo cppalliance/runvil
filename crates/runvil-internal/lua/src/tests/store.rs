@@ -205,6 +205,12 @@ fn store_read_numbered_pads_across_the_hundred_boundary() {
         .expect("the memory store can seed a file");
     let out = run_with("return store.read_numbered('a.txt', 99, 100)", &access).unwrap();
     assert_eq!(out.returned.as_deref(), Some(" 99| line99\n100| line100"));
+    let out = run_with("return store.read_numbered('a.txt', 98, 99)", &access).unwrap();
+    assert_eq!(
+        out.returned.as_deref(),
+        Some("98| line98\n99| line99"),
+        "a slice that ends below the boundary is not padded"
+    );
 }
 
 #[test]

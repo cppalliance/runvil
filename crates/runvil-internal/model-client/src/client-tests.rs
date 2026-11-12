@@ -100,6 +100,11 @@ fn tool_arguments_view_exposes_no_raw_value() {
     let mut names: Vec<_> = iter.collect();
     names.sort_unstable();
     assert_eq!(names, ["limit", "query"]);
+    assert_eq!(
+        args.names().size_hint(),
+        (2, Some(2)),
+        "the key iterator's hint matches the map it reads"
+    );
     let json = args.to_json_string();
     assert!(json.contains("\"query\":\"rust\""), "got {json}");
 }

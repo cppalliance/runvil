@@ -133,6 +133,10 @@ fn a_run_params_debug_shows_no_seed() {
     let ctx = RunParams::new(seed, STARTED_AT);
     let debug = format!("{ctx:?}");
     rng.check(
+        debug.starts_with("RunParams { started_at: ") && debug.ends_with(", .. }"),
+        format_args!("the Debug shows the other fields and marks that it leaves one out: {debug}"),
+    );
+    rng.check(
         !debug.contains(&seed.to_string()) && !debug.to_lowercase().contains("seed"),
         format_args!("the Debug shows no seed: {debug}"),
     );

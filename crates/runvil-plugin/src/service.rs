@@ -244,6 +244,7 @@ mod tests {
     //! and the map's provide, get, and provides rules.
 
     use std::collections::HashSet;
+    use std::hash::{DefaultHasher, Hash, Hasher};
     use std::sync::Arc;
 
     use runvil_types::error::{Error, ErrorCode, ErrorFact};
@@ -417,6 +418,17 @@ mod tests {
         assert_ne!(GREETING.id(), ServiceKey::<str>::new("acme/farewell").id());
         let ids: HashSet<ServiceId> = [GREETING.id(), GREETING_AS_NUMBER.id()].into();
         assert_eq!(ids.len(), 1, "one literal hashes once");
+        let hash_of = |id: ServiceId| {
+            let mut hasher = DefaultHasher::new();
+            id.hash(&mut hasher);
+            hasher.finish()
+        };
+        assert_eq!(hash_of(GREETING.id()), hash_of(GREETING_AS_NUMBER.id()));
+        assert_ne!(
+            hash_of(GREETING.id()),
+            hash_of(ServiceKey::<str>::new("acme/farewell").id()),
+            "another literal hashes apart"
+        );
         assert_eq!(GREETING.id().to_string(), "acme/greeting");
         assert_eq!(
             format!("{:?}", GREETING.id()),

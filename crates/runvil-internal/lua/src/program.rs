@@ -408,6 +408,15 @@ mod tests {
             mapped, fault,
             "it is not recoded at the line that raised it"
         );
+        let mut unlocated = fault;
+        unlocated.at = None;
+        let mapped =
+            program.map_runtime_error_among(&raised_through(&program, &unlocated), &[], FILE);
+        assert_eq!(
+            (mapped.code, mapped.at),
+            (ErrorCode::LuaRuntime, Some(SourceLoc::line(FILE, line(6)))),
+            "one with no location has none to keep, so it maps as any other failure does"
+        );
     }
 
     #[test]
