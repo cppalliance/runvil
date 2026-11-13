@@ -1,4 +1,3 @@
-/.model-cache/
 /target
 /vibe-review.md
 /conformance-audit.md
@@ -7,22 +6,6 @@
 *.env
 # Standing guard: the operator's real secrets file must never be tracked.
 /secrets.env
-# Voice test fixtures, downloaded out of band (see design/design-runvil-workshop.md).
-/crates/gateway/stt/backend-whisper/tests/fixtures/
-# UI build pipeline: npm install target and the esbuild output. The build
-# scripts write the bundle to OUT_DIR; `npm run build`/`--watch` still write
-# dist/ in place for the jsdom tests, and none of it is tracked.
-/crates/workshop/**/node_modules/
-/crates/gateway/config-ui/ui/node_modules/
-/crates/workshop/ui/dist/
-/crates/gateway/config-ui/ui/dist/
-# tauri-build's generated ACL schemas, regenerated on every workshop build.
-/crates/workshop/desktop/gen/
-# The Windows gateway sidecar staged for bundle.externalBin before
-# `tauri build` (crates/workshop/desktop/tauri.windows.conf.json); a build
-# artifact.
-/crates/workshop/desktop/binaries/
-/plan-dist-manifest.json
 # The runvil-workshop checkout CI places inside this one
 # (.github/actions/workshop-checkout); a local checkout sits beside it.
 /runvil-workshop/

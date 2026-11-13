@@ -13,7 +13,7 @@ pub(crate) fn workspace_root() -> PathBuf {
 
 /// Writes a minimal crate manifest into a fake workspace; `dir_name` may
 /// contain a slash to nest the crate under a container
-/// (`workshop/protocol`).
+/// (`suite/protocol`).
 pub(crate) fn write_crate(root: &Path, dir_name: &str, package: &str, deps: &str) {
     let dir = root.join("crates").join(dir_name);
     std::fs::create_dir_all(&dir).expect("the crate directory creates");

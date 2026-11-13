@@ -18,10 +18,7 @@ use syn::{Meta, Token};
 
 /// The crate directories, relative to the workspace root, that own an
 /// unsafe boundary and may relax `unsafe_code` in the module that holds it.
-const OWNED: [&str; 2] = [
-    "crates/workshop/desktop",
-    "crates/workshop/gateway-discovery",
-];
+const OWNED: &[&str] = &[];
 
 /// Runs the allowlist over every `.rs` file in every workspace crate
 /// outside [`OWNED`], the crates whose manifest the shared walk could not
@@ -30,13 +27,19 @@ const OWNED: [&str; 2] = [
 /// never scanned cannot be shown clean.
 #[must_use]
 pub(crate) fn unsafe_allowlist_violations(root: &Path) -> Vec<String> {
+    violations_against(root, OWNED)
+}
+
+/// [`unsafe_allowlist_violations`] against any list of owned crates, so a
+/// fixture can pass its own.
+fn violations_against(root: &Path, owned: &[&str]) -> Vec<String> {
     let walk = crate::product::workspace_crates(root);
     let mut files: Vec<PathBuf> = walk
         .crates
         .iter()
         .map(|krate| &krate.dir)
         .chain(&walk.unread)
-        .filter(|dir| !is_owned(dir))
+        .filter(|dir| !is_owned(dir, owned))
         .flat_map(|dir| crate::tidy::rust_files(&root.join(dir)))
         .collect();
     if files.is_empty() {
@@ -50,7 +53,7 @@ pub(crate) fn unsafe_allowlist_violations(root: &Path) -> Vec<String> {
     let mut violations = Vec::new();
     for file in &files {
         match fs::read_to_string(file) {
-            Ok(text) => violations.extend(source_violations(file, &text)),
+            Ok(text) => violations.extend(source_violations(file, &text, owned)),
             Err(error) => {
                 violations.push(format!("{}: unreadable source: {error}", file.display()));
             }
@@ -59,22 +62,24 @@ pub(crate) fn unsafe_allowlist_violations(root: &Path) -> Vec<String> {
     violations
 }
 
-/// Whether `dir`, relative to the workspace root, is one of [`OWNED`].
-fn is_owned(dir: &Path) -> bool {
+/// Whether `dir`, relative to the workspace root, is one of `owned`.
+fn is_owned(dir: &Path, owned: &[&str]) -> bool {
     let parts: Vec<_> = dir
         .components()
         .map(std::path::Component::as_os_str)
         .collect();
-    OWNED.iter().any(|owned| {
-        owned
+    owned.iter().any(|entry| {
+        entry
             .split('/')
             .map(std::ffi::OsStr::new)
             .eq(parts.iter().copied())
     })
 }
 
-/// The relaxations of `unsafe_code` in one source file, labeled with `file`.
-fn source_violations(file: &Path, text: &str) -> Vec<String> {
+/// The relaxations of `unsafe_code` in one source file, labeled with
+/// `file`. Each names where a relaxation is refused: outside `owned`, or
+/// in every crate when `owned` is empty.
+fn source_violations(file: &Path, text: &str, owned: &[&str]) -> Vec<String> {
     let tokens: TokenStream = match text.parse() {
         Ok(tokens) => tokens,
         Err(error) => {
@@ -87,14 +92,18 @@ fn source_violations(file: &Path, text: &str) -> Vec<String> {
     };
     let mut lines = Vec::new();
     collect_relaxations(tokens, &|lint| lint.is_ident("unsafe_code"), &mut lines);
+    let refused = if owned.is_empty() {
+        "in any crate, because none owns an unsafe boundary".to_owned()
+    } else {
+        format!("outside {}", owned.join(", "))
+    };
     lines
         .into_iter()
         .map(|line| {
             format!(
                 "{}:{line}: relaxes `unsafe_code` outside the owned unsafe boundaries: required \
-                 no `expect` or `allow` of `unsafe_code` outside {}, found one",
-                file.display(),
-                OWNED.join(", ")
+                 no `expect` or `allow` of `unsafe_code` {refused}, found one",
+                file.display()
             )
         })
         .collect()

@@ -2,44 +2,39 @@
 //! workspace holds.
 //!
 //! Every workspace crate is classified by package name into a family:
-//! Workshop crates (`workshop` and `workshop-*`), build crates
-//! (`build-*`), and unaffiliated crates, which are all the rest. Its
-//! dependencies of every kind (normal, dev, build, and target-specific)
-//! are checked against the matrix:
+//! build crates (`build-*`) and unaffiliated crates, which are all the
+//! rest. Its dependencies of every kind (normal, dev, build, and
+//! target-specific) are checked against the matrix, which holds one rule:
 //!
-//! - Desktop-app boundary: the `workshop` desktop app may depend on no
-//!   workshop crate except `workshop-server-api`, and `workshop-server-api`
-//!   on none except `workshop-server`. A crate's dependency on itself is
-//!   not an edge.
-//! - Container privacy: a manifestless directory under `crates/`, as
-//!   `crates/workshop/` is, is private to its family; only the crates
-//!   inside a container and the `build-*` crates, which are meta tooling,
-//!   may depend on the crates it holds. Containers may nest.
+//! - Container privacy: a manifestless directory under `crates/` is a
+//!   container, private to the crates inside it; only they and the
+//!   `build-*` crates, which are meta tooling, may depend on the crates it
+//!   holds. Containers may nest. The workspace holds no container today,
+//!   so the rule binds the first one added.
 //!
 //! Crates from other repositories are outside the matrix: it classifies
-//! and binds only workspace members. The crates that come from
-//! runvil-harness are checked by `harness_pin` instead.
+//! and binds only workspace members.
+//!
+//! The crate walk, `workspace_crates`, is here too: the one enumeration of
+//! the workspace's crates that every structural check shares.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 /// The dependency tables cargo recognizes, directly and under `[target]`.
-pub(crate) const DEP_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
+const DEP_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
 
-/// The product family a package name belongs to.
+/// The family a package name belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Family {
-    Workshop,
     Build,
-    /// Named after no product family; has no matrix rules of its own.
+    /// Named after no family; has no matrix rules of its own.
     Unaffiliated,
 }
 
-/// Classifies a package name into its product family.
+/// Classifies a package name into its family.
 fn family(package: &str) -> Family {
-    if package == "workshop" || package.starts_with("workshop-") {
-        Family::Workshop
-    } else if package.starts_with("build-") {
+    if package.starts_with("build-") {
         Family::Build
     } else {
         Family::Unaffiliated
@@ -47,24 +42,22 @@ fn family(package: &str) -> Family {
 }
 
 /// A workspace crate: its package name, its manifest directory relative to
-/// the workspace root, its parsed manifest, and its dependency package
-/// names.
+/// the workspace root, and its dependency package names.
 pub(crate) struct CrateInfo {
-    pub(crate) package: String,
+    package: String,
     pub(crate) dir: PathBuf,
-    pub(crate) manifest: toml::Value,
     deps: Vec<String>,
 }
 
-/// Every crate under `crates/`, as the one enumeration the architecture
+/// Every crate under `crates/`, as the one enumeration the structural
 /// checks share.
 pub(crate) struct CrateWalk {
     /// The crates whose manifests named a package.
     pub(crate) crates: Vec<CrateInfo>,
     /// Crate directories, relative to the workspace root, whose manifest
     /// could not be read, parsed, or named. A crate that cannot be read
-    /// cannot be shown exempt, so the checks that bind by package name
-    /// bind these too.
+    /// cannot be shown to pass, so the checks that bind every crate bind
+    /// these too.
     pub(crate) unread: Vec<PathBuf>,
     /// Every read failure, in walk order.
     pub(crate) violations: Vec<String>,
@@ -72,8 +65,8 @@ pub(crate) struct CrateWalk {
 
 /// Checks every workspace manifest against the product-boundary matrix.
 ///
-/// The walk's read failures belong to `tidy::marker_violations`, the one
-/// owner: both checks share the walk, so reporting them here too would
+/// The walk's read failures belong to `tidy::crate_walk_violations`, the
+/// one owner: both checks share the walk, so reporting them here too would
 /// name every unreadable manifest twice in `tidy::all_violations`.
 #[must_use]
 pub(crate) fn product_boundary_violations(root: &Path) -> Vec<String> {
@@ -81,8 +74,8 @@ pub(crate) fn product_boundary_violations(root: &Path) -> Vec<String> {
     let mut violations = Vec::new();
     for package in &crates {
         for dep_name in &package.deps {
-            // Only workspace members are bound by the matrix; a crates.io
-            // package that happens to start with a product prefix is not.
+            // Only workspace members are bound by the matrix; a package
+            // from crates.io or another repository is outside it.
             let Some(dep) = crates.iter().find(|krate| &krate.package == dep_name) else {
                 continue;
             };
@@ -97,61 +90,35 @@ pub(crate) fn product_boundary_violations(root: &Path) -> Vec<String> {
     violations
 }
 
-/// The Tauri desktop app crate, bound by the desktop-app boundary rule.
-const DESKTOP: &str = "workshop";
-/// The server's re-export facade: the one workshop crate the desktop app
-/// may name.
-const SERVER_API: &str = "workshop-server-api";
-/// The server crate: the one workshop crate the facade may name.
-const SERVER: &str = "workshop-server";
-
 /// The reason a dependency from `package` to `dep` breaches the matrix,
 /// or `None` when the edge is legal.
 fn boundary_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<String> {
-    if let Some(face) = desktop_boundary_face(&package.package)
-        && family(&dep.package) == Family::Workshop
-        && dep.package != face
-        && dep.package != package.package
-    {
-        return Some(format!(
-            "on the desktop-app boundary, {} may depend on workshop crates only through {face}",
-            package.package
-        ));
-    }
     if let Some(container) = container_of(&dep.dir) {
         // Inside is physical containment: a crate anywhere under
-        // crates/<container>/ may name the container's crates, so nested
-        // subsystems see their parent family's crates while the family
-        // cannot name the subsystem's private crates back.
+        // crates/<container>/ may name the container's crates, so the
+        // crates of a nested container may name the crates of the
+        // container around it, while those may not name the nested
+        // container's crates back.
         let inside = package
             .dir
             .starts_with(Path::new("crates").join(&container));
-        // The build-* crates are meta tooling, not a product family: they
-        // may depend into any container.
+        // The build-* crates are meta tooling: they may depend into any
+        // container.
         let meta = family(&package.package) == Family::Build;
         if !inside && !meta {
             return Some(format!(
-                "crates/{container} is private to its family; no outside crate may depend into it"
+                "crates/{container} is private to the crates inside it; no outside crate may \
+                 depend into it"
             ));
         }
     }
     None
 }
 
-/// The one workshop crate a crate on the desktop-app boundary may name, or
-/// `None` for a crate the boundary does not bind.
-fn desktop_boundary_face(package: &str) -> Option<&'static str> {
-    match package {
-        DESKTOP => Some(SERVER_API),
-        SERVER_API => Some(SERVER),
-        _ => None,
-    }
-}
-
 /// The root-relative path of the deepest manifestless `crates/<container>/`
 /// directory holding the crate whose root-relative manifest directory is
-/// `dir` (`crates/workshop/server` is in `workshop`), or
-/// `None` for a crate directly under `crates/`.
+/// `dir` (`crates/suite/server` is in `suite`), or `None` for a crate
+/// directly under `crates/`.
 fn container_of(dir: &Path) -> Option<String> {
     let mut components = dir.components();
     if components.next()?.as_os_str() != "crates" {
@@ -166,12 +133,12 @@ fn container_of(dir: &Path) -> Option<String> {
     }
 }
 
-/// Every workspace crate's package name, manifest directory, parsed
-/// manifest, and dependency package names, plus the directories and
-/// violations for manifests that could not be read or parsed. A directory
-/// under `crates/` containing a `Cargo.toml` is a crate and is not
-/// descended into; any other directory is a container and the walk
-/// descends, so containers may nest.
+/// Every workspace crate's package name, manifest directory, and
+/// dependency package names, plus the directories and violations for
+/// manifests that could not be read or parsed. A directory under `crates/`
+/// containing a `Cargo.toml` is a crate and is not descended into; any
+/// other directory is a container and the walk descends, so containers
+/// may nest.
 pub(crate) fn workspace_crates(root: &Path) -> CrateWalk {
     let mut walk = CrateWalk {
         crates: Vec::new(),
@@ -258,12 +225,10 @@ fn read_crate(root: &Path, dir: &Path, walk: &mut CrateWalk) {
         ));
         return;
     };
-    let (package, deps) = (package.to_owned(), manifest_dependencies(&manifest));
     walk.crates.push(CrateInfo {
-        package,
+        package: package.to_owned(),
         dir: relative,
-        manifest,
-        deps,
+        deps: manifest_dependencies(&manifest),
     });
 }
 

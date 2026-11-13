@@ -32,25 +32,7 @@ const MAX_FIELDS: usize = 12;
 
 /// The types over a limit today. A new entry is a plan decision with a
 /// reason, never a way to make a change pass.
-const ALLOWED: &[Allowed] = &[
-    Allowed {
-        krate: "crates/workshop/gateway-discovery",
-        name: "ProcBsdInfo",
-        limit: Limit::Fields,
-        recorded: 22,
-        reason: "A `#[repr(C)]` mirror of the stable prefix of Darwin's `proc_bsdinfo`, \
-                 whose fields the OS fixes.",
-    },
-    Allowed {
-        krate: "crates/workshop/workspace",
-        name: "Workspace",
-        limit: Limit::Methods,
-        recorded: 39,
-        reason: "The workspace every route shares: the grant set and confinement plus the \
-                 backing file's open, save-as, duplicate, and persistence, on one cloneable \
-                 state so a new grant reaches every handler at once.",
-    },
-];
+const ALLOWED: &[Allowed] = &[];
 
 /// The limit an [`Allowed`] entry lifts.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

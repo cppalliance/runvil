@@ -1,9 +1,9 @@
 //! Shared walk over a parsed `Cargo.toml`: the dependency tables of the
 //! requested kinds, both at the top level and under `[target.<cfg>]`.
 //!
-//! Every structural check that reads declared dependencies (the product
-//! matrix, the workshop tiers, the runvil-harness pin) goes through this
-//! one walk and differs only in the kinds it asks for.
+//! Every structural check that reads declared dependencies goes through
+//! this one walk and names the kinds it asks for, as the product matrix
+//! does.
 
 /// Every dependency table of the given kinds, labeled the way its section
 /// header reads: the plain `<kind>` tables and their `[target.<cfg>.<kind>]`

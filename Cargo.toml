@@ -1,16 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "crates/workshop/desktop", "crates/workshop/server", "crates/workshop/server-api", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/workshop/plugin-std", "crates/workshop/plugin-bashkit"]
-# crates/workshop is a manifestless container holding Workshop's crates.
-# Cargo prunes excluded subtrees from member globs, so a "crates/workshop/*"
-# glob beside the exclude below would match nothing; the container crates
-# are enumerated explicitly instead.
-exclude = ["crates/workshop"]
-# Plain `cargo build`/`cargo test` build every crate but the desktop app,
-# the server it embeds, and the server's facade: the rest compile on a
-# fresh macOS or Linux clone with no Node install and no Tauri system
-# packages. The desktop app is an explicit choice: `cargo build -p workshop`.
-default-members = ["crates/build-ui", "crates/build-user-guide", "crates/build-installer", "crates/build-xtask", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/workshop/plugin-std", "crates/workshop/plugin-bashkit"]
+members = ["crates/*"]
 
 [workspace.package]
 version = "0.3.0"
@@ -19,143 +9,30 @@ license = "BSL-1.0"
 repository = "https://github.com/cppalliance/runvil"
 
 [workspace.dependencies]
-base64 = "0.22"
-# The Engine and the Harness, from their own repository, pinned by commit:
-# the `runvil` facade, which is the one crate a Host depends on, the
-# standard Gateway client, and the two Rust Plugins that Workshop links
-# in. All four name one commit, because two commits would be two copies
-# of every type the crates share. `version` beside `git` keeps cargo-deny's
-# wildcard check quiet.
-runvil = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "5bca6f9fd9b398d5f221a5893570b8085bc283da" }
-harness-gateway-client = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "5bca6f9fd9b398d5f221a5893570b8085bc283da" }
-plugin-web = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "5bca6f9fd9b398d5f221a5893570b8085bc283da" }
-plugin-mcp = { version = "0.3.0", git = "https://github.com/cppalliance/runvil-harness", rev = "5bca6f9fd9b398d5f221a5893570b8085bc283da" }
-# The safe layer over the C Plugin contract, version 0.4, from its own
-# repository, pinned by commit. Only the library Plugin crates under
-# `crates/workshop/` name it, for `export_plugin!`. The commit is the one
-# runvil-harness pins the contract's `runvil-plugin-sys` at: that crate
-# sets `links`, so Cargo refuses two commits of the contract in one build.
-runvil-plugin-sdk = { version = "0.4.0", git = "https://github.com/cppalliance/runvil-plugin-api", rev = "03a9fa37d2fe690d42ee0aa5c7a8289173e8e0f2" }
-# The std Plugin, from its own repository, pinned by commit, which must be
-# built against the contract commit above. default-features off drops its
-# own export of `runvil_plugin`, which `workshop-plugin-std` makes instead.
-# The key is `std-plugin` because that crate's own library is named
-# `plugin_std`, the name of the file Workshop ships.
-std-plugin = { package = "plugin-std", version = "0.1.0", git = "https://github.com/cppalliance/runvil-plugin-std", rev = "782ad23e5dfbe6fbfa5be7145fa73a9ca60ce8a8", default-features = false }
-# The bashkit Plugin, from its own repository, pinned by commit and built
-# against the same contract commit. default-features off drops its own
-# export of `runvil_plugin`, which `workshop-plugin-bashkit` makes
-# instead. The key is `bashkit-plugin` for the reason std's is
-# `std-plugin`: the crate's own library has the name of the file Workshop
-# ships, `plugin_bashkit`.
-bashkit-plugin = { package = "plugin-bashkit", version = "0.1.0", git = "https://github.com/cppalliance/runvil-plugin-bashkit", rev = "0864f1ff9cc1f4fad6c96f1e9f6d8a3ab85e9580", default-features = false }
-workshop-gateway-discovery = { path = "crates/workshop/gateway-discovery" }
-workshop-server = { path = "crates/workshop/server" }
-workshop-server-api = { path = "crates/workshop/server-api" }
-workshop-gateway = { path = "crates/workshop/gateway" }
-workshop-menu = { path = "crates/workshop/menu" }
-workshop-protocol = { path = "crates/workshop/protocol" }
-workshop-status = { path = "crates/workshop/status" }
-workshop-support = { path = "crates/workshop/support" }
-workshop-registry = { path = "crates/workshop/registry" }
-workshop-workspace = { path = "crates/workshop/workspace" }
-workshop-run-log = { path = "crates/workshop/run-log" }
-workshop-agents = { path = "crates/workshop/agents" }
-workshop-user-state = { path = "crates/workshop/user-state" }
-workshop-plugin-std = { path = "crates/workshop/plugin-std" }
-workshop-plugin-bashkit = { path = "crates/workshop/plugin-bashkit" }
-# default-features off: build-xtask's doctest scan reads only the core
-# event stream, never the `html` renderer or the `getopts` binary.
-pulldown-cmark = { version = "0.12", default-features = false }
-serde = { version = "1", features = ["derive"] }
-# `float_roundtrip` makes `from_str` reproduce the exact `f64` that
-# `to_string` printed, so a payload the run log stores reads back bit-for-bit.
-serde_json = { version = "1", features = ["float_roundtrip"] }
-# 0.13 rather than 0.12 so the tree links exactly one rustls crypto backend:
-# aws-lc-rs, the one Tauri already selects. 0.13 has no `ring`
-# option, so a bump cannot re-enable it; CI checks that `ring` stays out of
-# each Rust binary's normal closure. Root certificates come from the OS trust
-# store through the platform verifier (the `rustls` feature's default), not
-# from a bundled Mozilla list. `query` became opt-in in 0.13.
-# `system-proxy` makes reqwest honor Windows registry and macOS proxies.
-reqwest = { version = "0.13", default-features = false, features = ["json", "query", "rustls", "stream", "system-proxy"] }
-rand = "0.9"
-url = "2"
-# Percent-decoding for path parameters; already in the tree as url's own core.
-percent-encoding = "2"
-dunce = "1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time", "sync"] }
-thiserror = "2"
 anyhow = "1"
-axum = { version = "0.8", features = ["multipart", "ws"] }
-# 0.29 rather than the newer 0.30 so the resolver unifies with the copy axum's
-# `ws` feature already pulls in, instead of compiling two.
-tokio-tungstenite = "0.29"
-async-trait = "0.1"
-futures-util = "0.3"
-# 1.x rather than 0.8 so the resolver unifies with the copy tauri-utils
-# already pulls in, instead of compiling two toml lines (and the 0.8 line's
-# exclusive toml_edit 0.19 and winnow 0.5 tail).
-toml = "1"
-# Parses each crate's sources for build-xtask's structural checks; `full`
-# is the feature that parses items. 3 is the newest major the lockfile
-# already carries.
-syn = { version = "3", features = ["full"] }
-# `span-locations` makes a span parsed outside a proc macro report its line,
-# which the structural checks print with every violation.
-proc-macro2 = { version = "1", features = ["span-locations"] }
-tracing = "0.1"
-tower = { version = "0.5", features = ["util"] }
-arc-swap = "1"
-# Serves the UIs: reads $OUT_DIR/ui-dist from disk in debug builds, embeds it
-# into the binary in release builds. interpolate-folder-path resolves the
-# $OUT_DIR prefix in the `folder` attribute.
-rust-embed = { version = "8", features = ["interpolate-folder-path"] }
-humantime = "2"
-tempfile = "3"
-# Exact pin: turso is pre-1.0 and backs user-visible workspace files, so
-# upgrades are deliberate, reviewed changes rather than resolver drift.
-# default-features off: the `mimalloc` default installs a
-# `#[global_allocator]` from inside the library (process-global state and a
-# C build in a serve path), and `fts` is unused; the workspace schema is
-# three plain tables.
-turso = { version = "=0.7.2", default-features = false }
-sha2 = "0.11"
+base64 = "0.22"
+# Cross-platform Ctrl-C handling for the installer build.
+ctrlc = "3.5"
 # `cargo installer manifest` checks each updater signature as the Tauri
-# updater does; 0.2.5 is the copy tauri-plugin-updater already pulls in.
+# updater does: 0.2.5 is the release Workshop's `tauri-plugin-updater`
+# verifies with.
 minisign-verify = "0.2.5"
 # Signs the manifest tests' fixtures with a key generated per run. A
 # dev-dependency only: the release key never leaves CI.
 minisign = "0.9"
-socket2 = { version = "0.6", features = ["all"] }
-# Cross-platform Ctrl-C handling for the installer build.
-ctrlc = "3.5"
-# Thin process-image shims for the Workshop gateway discovery reader's stale
-# detection; both are already in the tree transitively.
-libc = "0.2"
-windows-sys = { version = "0.61", default-features = false }
-# Tauri v2 desktop framework for workshop. tauri is pinned to the
-# minor because `with_webview` exposes webview2-com/webkit2gtk types that may
-# shift in a Tauri minor release (the upstream guidance for `with_webview`).
-tauri = "~2.11"
-tauri-build = "2.6.3"
-tauri-plugin-dialog = "2.7.3"
-tauri-plugin-opener = "2.5.5"
-tauri-plugin-process = "2.3.1"
-# default-features off drops the Tauri plugin's `rustls-tls` default, which is
-# the one dependency in the tree that pins rustls to the `ring` backend (and
-# installs it as the process-global CryptoProvider). The plugin's `rustls-tls`
-# default would put `ring` into the Workshop binary. The plugin's reqwest
-# calls still get TLS: cargo unifies reqwest's features per binary and the
-# workspace pin above enables `rustls` (aws-lc-rs), so the Workshop links one
-# crypto backend. `system-proxy` is the plugin's other default, kept as it
-# was. The `zip` default stays off: it only unpacks the older v1Compatible
-# update bundles (the Windows `.zip` and the Linux `.AppImage.tar.gz`), and
-# the desktop app's `"createUpdaterArtifacts": true` ships the signed
-# installers themselves (the NSIS `-setup.exe` and the raw `.AppImage`). The
-# macOS `.app.tar.gz` path uses `tar` and `flate2` with no feature.
-tauri-plugin-updater = { version = "2.11.0", default-features = false, features = ["system-proxy"] }
-tauri-plugin-single-instance = "2.4.4"
+# `span-locations` makes a span parsed outside a proc macro report its line,
+# which the structural checks print with every violation.
+proc-macro2 = { version = "1", features = ["span-locations"] }
+# default-features off: build-xtask's doctest scan reads only the core
+# event stream, never the `html` renderer or the `getopts` binary.
+pulldown-cmark = { version = "0.12", default-features = false }
+serde_json = "1"
+sha2 = "0.11"
+# Parses each crate's sources for build-xtask's structural checks; `full`
+# is the feature that parses items.
+syn = { version = "3", features = ["full"] }
+tempfile = "3"
+toml = "1"
 
 # The dylint libraries `cargo dylint --all` runs. The lints live in their
 # own repository, shared across the runvil project, because they build on
@@ -211,8 +88,3 @@ doc_markdown = "allow"
 # `assert_eq!(x, [] as [T; 0])`, which has to spell out the element type and
 # needs `T: PartialEq + Debug`, so it cannot be applied to most call sites.
 assert_is_empty = "allow"
-
-# The profile that 'dist' will build with
-[profile.dist]
-inherits = "release"
-lto = "thin"

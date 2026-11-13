@@ -26,24 +26,21 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: crates/workshop/package-lock.json
-
-      - name: Install UI dependencies
-        run: npm ci --prefix crates/workshop
-
       - name: Clippy
         env:
           CARGO_BUILD_WARNINGS: deny
-        run: cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features
+        run: cargo clippy --workspace --all-targets --all-features
 
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # One test of build-installer reads the pinned Workshop: it compares
+      # the names the installers lay the payload out under with the names
+      # Workshop looks for.
+      - name: Check out Workshop
+        uses: ./.github/actions/workshop-checkout
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@4dc1969decfa71b34f25aa7f3dd4656654d9ad1e # nextest
@@ -51,25 +48,16 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: crates/workshop/package-lock.json
-
-      - name: Install UI dependencies
-        run: npm ci --prefix crates/workshop
-
       - name: Test (concurrent via nextest)
-        run: cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features
+        run: cargo nextest run --locked --workspace --all-features
 
-      # No build step may write into the repository (the UI bundles build
-      # into OUT_DIR now); catch a regression here rather than in a diff.
+      # No test may write into the repository; catch a regression here
+      # rather than in a diff.
       - name: Clean tree
         shell: bash
         run: |
           if [ -n "$(git status --porcelain)" ]; then
-            echo "the build dirtied the repository:"
+            echo "the tests dirtied the repository:"
             git status --porcelain
             exit 1
           fi
@@ -84,128 +72,12 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: crates/workshop/package-lock.json
-
-      - name: Install UI dependencies
-        run: npm ci --prefix crates/workshop
-
       - name: Docs
-        run: cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api
+        run: cargo doc --workspace --no-deps --all-features
 
-  check-workshop:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@4dc1969decfa71b34f25aa7f3dd4656654d9ad1e # nextest
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: crates/workshop/package-lock.json
-
-      - name: Install UI dependencies
-        run: npm ci --prefix crates/workshop
-
-      - name: Stage a stub Gateway sidecar
-        run: node tools/fetch-gateway-sidecar.mjs --stub --target x86_64-pc-windows-msvc
-
-      # workshop-server-api is the desktop app's re-export view of workshop-server,
-      # so it runs in this partition with the crates it fronts and stays
-      # out of the workspace-wide jobs like them.
-      - name: Clippy (workshop)
-        env:
-          CARGO_BUILD_WARNINGS: deny
-        run: cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets
-
-      # The Workshop crates' suites, including the workspace jail's Windows
-      # paths.
-      - name: Test (Windows)
-        shell: bash
-        run: >-
-          cargo nextest run --locked
-          -p workshop -p workshop-server -p workshop-server-api -p workshop-workspace
-          -E 'package(workshop) | package(workshop-server) | package(workshop-server-api)
-          | package(workshop-workspace)'
-
-      - name: Docs (workshop-server, private items)
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: cargo doc --locked --no-deps -p workshop-server --document-private-items
-
-      - name: Remove Gateway sidecar
-        if: always()
-        run: node tools/stage-gateway-sidecar.mjs remove --target x86_64-pc-windows-msvc
-
-      - name: Clean tree
-        shell: bash
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "the build dirtied the repository:"
-            git status --porcelain
-            exit 1
-          fi
-
-  # First Linux build of the desktop app: compile-only, against the Tauri
-  # system packages a Linux developer installs. Catches the
-  # missing-system-package class of failure the Windows-only job cannot see.
-  check-workshop-linux:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-
-      # A mirror that does not answer makes apt-get wait for a long time, so
-      # the step fails after 20 minutes. It normally takes under one.
-      - name: Install Tauri system packages
-        timeout-minutes: 20
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libssl-dev librsvg2-dev
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: crates/workshop/package-lock.json
-
-      - name: Install UI dependencies
-        run: npm ci --prefix crates/workshop
-
-      - name: Stage a stub Gateway sidecar
-        run: node tools/fetch-gateway-sidecar.mjs --stub --target x86_64-unknown-linux-gnu
-
-      - name: Build (workshop, Linux)
-        run: cargo build --locked -p workshop
-
-      - name: Remove Gateway sidecar
-        if: always()
-        run: node tools/stage-gateway-sidecar.mjs remove --target x86_64-unknown-linux-gnu
-
-      - name: Clean tree
-        shell: bash
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "the build dirtied the repository:"
-            git status --porcelain
-            exit 1
-          fi
-
-  # The UI build is its own job: typecheck, bundle, and test. The cargo
-  # jobs drive the same bundle through the crates' build scripts, hence
-  # their npm ci.
-  ui:
+  # The wording scan reads the rulebooks with Node's own modules, so it
+  # needs no install.
+  wording:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -213,24 +85,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: crates/workshop/package-lock.json
 
-      - name: Install UI dependencies
-        working-directory: crates/workshop
-        run: npm ci
-
-      - name: Typecheck
-        working-directory: crates/workshop
-        run: npm run typecheck --workspaces --if-present
-
-      - name: Build
-        working-directory: crates/workshop
-        run: npm run build --workspace ui
-
-      - name: Test
-        working-directory: crates/workshop
-        run: npm test --workspaces --if-present
+      - name: Wording
+        run: node --test tools/docs-claims.mjs
 
   supply-chain:
     runs-on: ubuntu-latest
@@ -247,35 +104,13 @@ jobs:
       - name: cargo audit
         run: cargo audit
 
-      # The Workshop binary links exactly one rustls crypto backend,
-      # aws-lc-rs. This fails when `ring` re-enters its normal-edge closure
-      # (through a reqwest bump or a Tauri plugin default) and when
-      # `cargo tree` itself cannot run; only a successful, ring-free result
-      # passes. The Gateway has its own repository and its own checks.
-      - name: One rustls crypto backend in the Workshop
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! out="$(cargo tree --locked -p workshop -e normal -i ring --depth 0 2>&1)"; then
-            echo "cargo tree failed:"
-            printf '%s\n' "$out"
-            exit 1
-          fi
-          if printf '%s\n' "$out" | grep -v '^warning: nothing to print' | grep -q '^ring v'; then
-            echo "ring is linked into the workshop; aws-lc-rs is the only permitted rustls backend"
-            printf '%s\n' "$out"
-            exit 1
-          fi
-
   # The custom lints, the dylint library in cppalliance/dylints at the
   # rev the root Cargo.toml's [workspace.metadata.dylint] pins. `cargo
   # dylint` fetches it and builds it on the nightly in its
   # rust-toolchain.toml, which rustup installs with that file's components;
-  # the date is never repeated here. Its UI tests run in its own CI.
-  # `cargo dylint` checks every crate, the desktop app included, so this
-  # job installs what check-workshop-linux does. It runs on 24.04, not
-  # check-workshop-linux's 22.04: the prebuilt cargo-dylint and
-  # dylint-link binaries need glibc 2.38 or later, and 22.04 ships 2.35.
+  # the date is never repeated here. Its UI tests run in its own CI. The
+  # job runs on 24.04: the prebuilt cargo-dylint and dylint-link binaries
+  # need glibc 2.38 or later.
   dylint:
     runs-on: ubuntu-24.04
     steps:
@@ -290,32 +125,8 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
-      # A mirror that does not answer makes apt-get wait for a long time, so
-      # the step fails after 20 minutes. It normally takes under one.
-      - name: Install Tauri system packages
-        timeout-minutes: 20
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libssl-dev librsvg2-dev
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: crates/workshop/package-lock.json
-
-      - name: Install UI dependencies
-        run: npm ci --prefix crates/workshop
-
-      - name: Stage a stub Gateway sidecar
-        run: node tools/fetch-gateway-sidecar.mjs --stub --target x86_64-unknown-linux-gnu
-
       - name: Dylint
         run: cargo dylint --all -- --locked --workspace --all-targets --all-features
-
-      - name: Remove Gateway sidecar
-        if: always()
-        run: node tools/stage-gateway-sidecar.mjs remove --target x86_64-unknown-linux-gnu
 
       - name: Clean tree
         shell: bash
@@ -332,7 +143,7 @@ jobs:
   # or that job bypasses this gate.
   ci-green:
     runs-on: ubuntu-latest
-    needs: [fmt, clippy, test, docs, check-workshop, check-workshop-linux, ui, supply-chain, dylint]
+    needs: [fmt, clippy, test, docs, wording, supply-chain, dylint]
     if: always()
     steps:
       - name: Verify every job succeeded

@@ -1,9 +1,0 @@
-{
-  "bundle": {
-    "targets": ["app"],
-    "macOS": {
-      "entitlements": "./Entitlements.plist",
-      "infoPlist": "./Info.plist"
-    }
-  }
-}

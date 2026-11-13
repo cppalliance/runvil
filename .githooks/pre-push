@@ -3,10 +3,10 @@
 set -e
 
 echo "==> Running docs-claims wording scan..."
-node --test crates/workshop/ui/test/docs-claims.mjs
+node --test tools/docs-claims.mjs
 
 echo "==> Running Clippy on workspace..."
-CARGO_BUILD_WARNINGS=deny cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features
+CARGO_BUILD_WARNINGS=deny cargo clippy --workspace --all-targets --all-features
 
 if command -v cargo-deny >/dev/null 2>&1; then
     echo "==> Running cargo deny check..."

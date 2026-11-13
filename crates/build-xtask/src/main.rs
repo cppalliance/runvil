@@ -1,15 +1,13 @@
-//! `build-xtask` - workspace automation for the Runvil repository.
+//! `build-xtask` - workspace automation for the Runvil repository: the
+//! structural checks and the documentation site.
 //!
 //! ## Invariants
 //!
-//! - Tier: tooling. The tidy-style
-//!   architecture checks run as tests (`cargo test -p build-xtask`);
+//! - The structural checks run as tests (`cargo test -p build-xtask`);
 //!   `cargo xtask tidy` prints the same report on demand.
 
 mod debug_spelling;
-mod harness_pin;
 mod manifest;
-mod new_crate;
 mod no_doctests;
 mod product;
 mod site;
@@ -27,19 +25,6 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
     match args.get(1).map(String::as_str) {
-        Some("new-crate") => match args.get(2) {
-            Some(name) => match new_crate::scaffold(root, name) {
-                Ok(dir) => {
-                    println!("scaffolded {}", dir.display());
-                    ExitCode::SUCCESS
-                }
-                Err(error) => {
-                    eprintln!("error: {error:#}");
-                    ExitCode::FAILURE
-                }
-            },
-            None => usage(),
-        },
         Some("site") => site::run(
             root,
             std::env::var_os(site::DOCS_VAR).as_deref(),
@@ -63,9 +48,6 @@ fn main() -> ExitCode {
 }
 
 fn usage() -> ExitCode {
-    eprintln!(
-        "usage: cargo xtask new-crate <workshop-name> | cargo xtask tidy | \
-         cargo xtask site [--books-only]"
-    );
+    eprintln!("usage: cargo xtask tidy | cargo xtask site [--books-only]");
     ExitCode::from(2)
 }
