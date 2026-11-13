@@ -46,8 +46,6 @@ description: Greet the named input using a Lua-computed value
 runvil: 0
 ---
 
-# Greet
-
 Computes a greeting from the input in Lua, substitutes it into the prose, and
 has the model echo it.
 
@@ -64,7 +62,7 @@ return models.infer(prose)
 ```
 ````
 
-The prompt declares no models, so `models.infer(prose)` runs on the Host's default model. Given the input `Ada`, the first block in `## Main` builds `Hello, Ada!`, the placeholder puts it into the prose, and `models.infer(prose)` sends that prose to the model. The model's reply is the run's result. A prompt can pick another of the five roles (`default`, `strong`, `small`, `fast`, `creative`) with `models.use(role)`, and the Host decides which model fills each role. The paragraph under the title never reaches the model, because no Lua reads it, so it works as a comment.
+The prompt declares no models, so `models.infer(prose)` runs on the Host's default model. Given the input `Ada`, the first block in `## Main` builds `Hello, Ada!`, the placeholder puts it into the prose, and `models.infer(prose)` sends that prose to the model. The model's reply is the run's result. A prompt can pick another of the five roles (`default`, `strong`, `small`, `fast`, `creative`) with `models.use(role)`, and the Host decides which model fills each role. The paragraph above `## Main` never reaches the model, because text before the first heading with no Lua block in it is a comment.
 
 ## How it fits together
 
