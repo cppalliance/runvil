@@ -1,0 +1,63 @@
+name: Check out Workshop
+description: >-
+  Checks out cppalliance/runvil-workshop into runvil-workshop/, at the commit
+  the root Cargo.toml pins or at the ref given, and sets RUNVIL_WORKSHOP to
+  the checkout. Run it after the checkout of this repository.
+
+inputs:
+  ref:
+    description: >-
+      The runvil-workshop commit, branch or tag to check out. Empty takes the
+      commit [workspace.metadata.workshop] pins in the root Cargo.toml.
+    required: false
+    default: ""
+
+outputs:
+  sha:
+    description: The runvil-workshop commit that was checked out.
+    value: ${{ steps.report.outputs.sha }}
+
+runs:
+  using: composite
+  steps:
+    # awk, not a TOML parser, because the action runs on every runner image
+    # and the Python that Ubuntu 22.04 ships has no tomllib. The value must
+    # then be a full commit id, so a pin the scan misread, a branch name or
+    # a short id stops the job here.
+    - name: Read the Workshop pin
+      id: pin
+      shell: bash
+      env:
+        REF: ${{ inputs.ref }}
+      run: |
+        set -euo pipefail
+        if [ -n "$REF" ]; then
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Workshop ref (given): $REF"
+          exit 0
+        fi
+        rev=$(awk '
+          /^\[workspace\.metadata\.workshop\]/ { table = 1; next }
+          /^\[/ { table = 0 }
+          table && /^rev[ \t]*=/ { gsub(/[ \t"\r]/, ""); sub(/^rev=/, ""); print }
+        ' Cargo.toml)
+        [[ "$rev" =~ ^[0-9a-f]{40}$ ]] ||
+          { echo "[workspace.metadata.workshop] in Cargo.toml must give rev as a 40-digit commit id, got '$rev'"; exit 1; }
+        echo "ref=$rev" >> "$GITHUB_OUTPUT"
+        echo "Workshop ref (pinned): $rev"
+
+    - uses: actions/checkout@v4
+      with:
+        repository: cppalliance/runvil-workshop
+        ref: ${{ steps.pin.outputs.ref }}
+        path: runvil-workshop
+
+    - name: Report the Workshop checkout
+      id: report
+      shell: bash
+      run: |
+        set -euo pipefail
+        sha=$(git -C runvil-workshop rev-parse HEAD)
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
+        echo "RUNVIL_WORKSHOP=$GITHUB_WORKSPACE/runvil-workshop" >> "$GITHUB_ENV"
+        echo "Workshop SHA: $sha"

@@ -5,7 +5,7 @@ follow = ["**"]
 exclude = [
     "crates/build-ui",  # build tooling
     "crates/build-user-guide",  # build tooling
-    "crates/build-workshop",  # run by the cargo alias `workshop`
+    "crates/build-installer",  # run by the cargo alias `installer`
     "crates/build-xtask",  # run by the cargo alias `xtask`
 ]
 out = ".vibelight"

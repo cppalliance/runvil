@@ -3,18 +3,20 @@
 # are present and that each present one runs, then runs the selection's
 # Windows-only check (update, relaunch, rerun, or rejections).
 #
-# Usage: cell.ps1 <setup> <selection> <version>
-#   <setup>      the NSIS -setup.exe
-#   <selection>  all, workshop, gateway, gateway-stt, or rejections
-#   <version>    the version Workshop must print; the Gateway must print the
-#                version gateway-pin/pin.json names
+# Usage: cell.ps1 <setup> <selection> <version> <gateway-version>
+#   <setup>            the NSIS -setup.exe
+#   <selection>        all, workshop, gateway, gateway-stt, or rejections
+#   <version>          the version Workshop must print
+#   <gateway-version>  the version the Gateway must print: the release the
+#                      Workshop checkout the setup was built from pins
 #
 # Environment:
 #   CELL_LOGS    write the logs here (default: a new temporary directory)
 param(
   [Parameter(Mandatory = $true, Position = 0)][string]$Setup,
   [Parameter(Mandatory = $true, Position = 1)][string]$Selection,
-  [Parameter(Mandatory = $true, Position = 2)][string]$Version
+  [Parameter(Mandatory = $true, Position = 2)][string]$Version,
+  [Parameter(Mandatory = $true, Position = 3)][string]$GatewayVersion
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -36,10 +38,6 @@ if (-not $selections.ContainsKey($Selection)) {
   Fail "selection must be all, workshop, gateway, gateway-stt, or rejections; got '$Selection'"
 }
 $want = $selections[$Selection]
-# The setup carries the Gateway release the repository pins.
-$pin = Join-Path $PSScriptRoot '..\..\gateway-pin\pin.json'
-$gatewayVersion = (Get-Content -LiteralPath $pin -Raw | ConvertFrom-Json).version
-if (-not $gatewayVersion) { Fail "$pin names no Gateway version" }
 
 $root = Join-Path $env:LOCALAPPDATA 'Runvil'
 $profileDir = Join-Path $env:USERPROFILE '.runvil'
@@ -278,7 +276,7 @@ function Test-Selection($Want) {
   # 3. Every present executable prints the version.
   foreach ($check in @(
       @{ Wanted = $Want.Workshop; Exe = $workshopExe; Expected = "runvil-workshop $Version" },
-      @{ Wanted = $Want.Gateway; Exe = $gatewayExe; Expected = "runvil-gateway $gatewayVersion" })) {
+      @{ Wanted = $Want.Gateway; Exe = $gatewayExe; Expected = "runvil-gateway $GatewayVersion" })) {
     if (-not $check.Wanted) { continue }
     $output = (& $check.Exe --version | Out-String).Trim()
     if ($output -ne $check.Expected) { Fail "$($check.Exe) --version printed '$output', required '$($check.Expected)'" }

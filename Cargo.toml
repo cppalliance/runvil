@@ -10,7 +10,7 @@ exclude = ["crates/workshop"]
 # the server it embeds, and the server's facade: the rest compile on a
 # fresh macOS or Linux clone with no Node install and no Tauri system
 # packages. The desktop app is an explicit choice: `cargo build -p workshop`.
-default-members = ["crates/build-ui", "crates/build-user-guide", "crates/build-workshop", "crates/build-xtask", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/workshop/plugin-std", "crates/workshop/plugin-bashkit"]
+default-members = ["crates/build-ui", "crates/build-user-guide", "crates/build-installer", "crates/build-xtask", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/workshop/plugin-std", "crates/workshop/plugin-bashkit"]
 
 [workspace.package]
 version = "0.3.0"
@@ -121,14 +121,14 @@ tempfile = "3"
 # three plain tables.
 turso = { version = "=0.7.2", default-features = false }
 sha2 = "0.11"
-# `cargo workshop manifest` checks each updater signature as the Tauri
+# `cargo installer manifest` checks each updater signature as the Tauri
 # updater does; 0.2.5 is the copy tauri-plugin-updater already pulls in.
 minisign-verify = "0.2.5"
 # Signs the manifest tests' fixtures with a key generated per run. A
 # dev-dependency only: the release key never leaves CI.
 minisign = "0.9"
 socket2 = { version = "0.6", features = ["all"] }
-# Cross-platform Ctrl-C handling for the Workshop build orchestrator.
+# Cross-platform Ctrl-C handling for the installer build.
 ctrlc = "3.5"
 # Thin process-image shims for the Workshop gateway discovery reader's stale
 # detection; both are already in the tree transitively.
@@ -163,6 +163,17 @@ tauri-plugin-single-instance = "2.4.4"
 # change of `rev`.
 [workspace.metadata.dylint]
 libraries = [{ git = "https://github.com/cppalliance/dylints", rev = "982b297ede90d37cdf8f3bf9995d1d706dcc51d4" }]
+
+# The Workshop commit the installers are built from. Workshop is its own
+# product in its own repository, and `cargo installer` builds the checkout
+# `RUNVIL_WORKSHOP` names, which `installers.yml` takes at this commit.
+# Moving to a newer Workshop is a change of `rev`, together with the
+# workspace version above and `rust-toolchain.toml` when Workshop changed
+# either: `cargo installer` refuses a checkout whose version or toolchain
+# differs from this workspace's.
+[workspace.metadata.workshop]
+git = "https://github.com/cppalliance/runvil-workshop"
+rev = "e32d4caaaa60ad03d47fb807daa5d0d4b2c80ec4"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

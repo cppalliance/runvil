@@ -1,0 +1,34 @@
+[package]
+name = "build-installer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "build-installer"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+# `base64`, `minisign-verify`, `serde_json`, and `sha2` serve the `manifest`
+# mode: the standard base64 around both minisign texts, the updater
+# signature check as the Tauri updater runs it, latest.json, and SHA256SUMS;
+# `serde_json` also reads the Gateway pin.
+base64.workspace = true
+ctrlc.workspace = true
+minisign-verify.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+# Reads the version and the toolchain channel the Workshop checkout check
+# compares.
+toml.workspace = true
+
+[dev-dependencies]
+# Signs the `manifest` mode's test fixtures with a key generated per run.
+minisign.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -6,13 +6,20 @@ run-name: Runvil installers (${{ github.event_name == 'push' && github.ref_name 
 # each kind, and assembles and verifies latest.json and SHA256SUMS. A
 # vX.Y.Z tag then publishes the release; any failed cell means no release.
 #
+# Workshop is its own product in cppalliance/runvil-workshop. Every job
+# that builds takes it at the commit the root Cargo.toml pins in
+# [workspace.metadata.workshop], and cargo installer builds its bundle
+# there with cargo workshop bundle. The Gateway is the release that
+# checkout pins.
+#
 # Modes, which prepare reads from the event:
 # - release: a pushed vX.Y.Z tag naming the workspace version. Signs with
-#   the release key and publishes.
+#   the release key and publishes. It always builds the pinned Workshop.
 # - full: a dispatched run on any ref. Every cell runs; the installers stay
-#   as workflow artifacts for 7 days and nothing is published.
-# - pull-request: a pull request touching the installer paths below. Two
-#   cells per platform.
+#   as workflow artifacts for 7 days and nothing is published. The
+#   workshop-ref input builds another Workshop commit than the pinned one.
+# - pull-request: a pull request touching the installer paths below, the
+#   Workshop pin among them. Two cells per platform.
 # Every mode builds with --sign. Outside release the key is a run key that
 # prepare generates and nothing trusts, so the manifest job checks the same
 # signatures a release has.
@@ -22,30 +29,22 @@ on:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
+    inputs:
+      workshop-ref:
+        description: A runvil-workshop commit, branch or tag to build in place of the pinned commit
+        required: false
+        default: ""
   pull_request:
     paths:
       - .github/workflows/installers.yml
       - .github/installers/**
+      - .github/actions/**
+      - .cargo/config.toml
       - Cargo.toml
       - Cargo.lock
       - LICENSE
-      - crates/build-workshop/**
-      - crates/workshop/desktop/installer.nsi
-      - crates/workshop/desktop/build.rs
-      - crates/workshop/desktop/src/gateway/**
-      - crates/workshop/desktop/*.plist
-      - crates/workshop/desktop/tauri*.conf.json
-      - crates/workshop/desktop/icons/**
-      - crates/workshop/plugin-std/**
-      - crates/workshop/plugin-bashkit/**
-      - crates/workshop/package.json
-      - crates/workshop/package-lock.json
-      - crates/workshop/gateway-discovery/src/**
-      - gateway-pin/**
-      - tools/fetch-gateway-sidecar.mjs
-      - tools/gateway-archive.mjs
-      - tools/gateway-pin.mjs
-      - tools/stage-gateway-sidecar.mjs
+      - rust-toolchain.toml
+      - crates/build-installer/**
 
 permissions:
   contents: read
@@ -62,6 +61,8 @@ jobs:
       version: ${{ steps.identity.outputs.version }}
       mode: ${{ steps.identity.outputs.mode }}
       cells: ${{ steps.cells.outputs.cells }}
+      workshop-sha: ${{ steps.workshop.outputs.sha }}
+      gateway-version: ${{ steps.gateway.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -147,12 +148,41 @@ jobs:
           echo "cells=$cells" >> "$GITHUB_OUTPUT"
           echo "Cells: $(jq '.include | length' <<< "$cells")" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Every later job checks out the commit this step resolves, so a
+      # branch given as workshop-ref cannot move between jobs. A tag builds
+      # the pinned commit whatever the input says.
+      - name: Check out Workshop
+        id: workshop
+        uses: ./.github/actions/workshop-checkout
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.workshop-ref || '' }}
+
+      # The installers hold the Gateway release the Workshop checkout pins,
+      # and the install cells require that version of an installed Gateway.
+      - name: Read the Gateway version
+        id: gateway
+        shell: bash
+        env:
+          WORKSHOP_SHA: ${{ steps.workshop.outputs.sha }}
+        run: |
+          set -euo pipefail
+          pin=runvil-workshop/gateway-pin/pin.json
+          version=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$pin") ||
+            { echo "cannot read the Gateway version from $pin"; exit 1; }
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] ||
+            { echo "$pin names the Gateway version '$version', which is not a version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          {
+            echo "Workshop SHA: $WORKSHOP_SHA"
+            echo "Gateway version: $version"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/setup-node@v4
         if: steps.identity.outputs.mode != 'release'
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: crates/workshop/package-lock.json
+          cache-dependency-path: runvil-workshop/crates/workshop/package-lock.json
 
       # Nothing trusts this key: released Workshops embed only the release
       # key, and tauri build only warns when the key does not match
@@ -164,9 +194,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm ci --prefix crates/workshop
+          npm ci --prefix runvil-workshop/crates/workshop
           mkdir -p "$RUNNER_TEMP/run-key"
-          node crates/workshop/node_modules/@tauri-apps/cli/tauri.js signer generate --ci -w "$RUNNER_TEMP/run-key/run.key"
+          node runvil-workshop/crates/workshop/node_modules/@tauri-apps/cli/tauri.js signer generate --ci -w "$RUNNER_TEMP/run-key/run.key"
           test -s "$RUNNER_TEMP/run-key/run.key"
           test -s "$RUNNER_TEMP/run-key/run.key.pub"
 
@@ -231,32 +261,45 @@ jobs:
           [ "$actual" = "$expected" ] || { echo "checkout $actual does not match execution SHA $expected"; exit 1; }
           echo "Execution SHA: $actual"
 
+      - name: Check out Workshop
+        uses: ./.github/actions/workshop-checkout
+        with:
+          ref: ${{ needs.prepare.outputs.workshop-sha }}
+
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
       - name: Add the Rust target
         run: rustup target add ${{ matrix.triple }}
 
+      # Workshop builds into its own target directory, which is by far the
+      # larger of the two.
       - name: Cache cargo
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: ${{ matrix.triple }}
+          workspaces: |
+            . -> target
+            runvil-workshop -> target
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: crates/workshop/package-lock.json
+          cache-dependency-path: runvil-workshop/crates/workshop/package-lock.json
 
-      # The workshop install brings the pinned Tauri CLI.
+      # Workshop's install brings the pinned Tauri CLI, which cargo workshop
+      # bundle runs.
       - name: Install UI dependencies
         shell: bash
-        run: npm ci --prefix crates/workshop
+        run: npm ci --prefix runvil-workshop/crates/workshop
 
-      # The Gateway is its own product: every installer carries the release
-      # gateway-pin/pin.json names, which the fetch verifies against the
-      # pin's sha256 and stages where cargo workshop installer reads it.
+      # The Gateway is its own product: every installer holds the release
+      # the Workshop checkout's gateway-pin/pin.json names, which its fetch
+      # script verifies against the pin's sha256 and stages where cargo
+      # workshop bundle and cargo installer read it.
       - name: Stage the pinned Gateway
         shell: bash
+        working-directory: runvil-workshop
         env:
           GH_TOKEN: ${{ github.token }}
         run: node tools/fetch-gateway-sidecar.mjs --target ${{ matrix.triple }}
@@ -315,8 +358,8 @@ jobs:
           [ "$count" = 1 ] || { echo "the Qt IFW archive must hold exactly one bin/binarycreator, found $count: $found"; exit 1; }
           echo "QTIFWDIR=$(dirname "$(dirname "$found")")" >> "$GITHUB_ENV"
 
-      # The Gateway version check inside cargo workshop installer runs the
-      # x86_64 Gateway.
+      # The Gateway version checks inside cargo workshop bundle and cargo
+      # installer run the x86_64 Gateway.
       - name: Install Rosetta
         if: matrix.platform == 'macos-intel'
         run: |
@@ -345,10 +388,11 @@ jobs:
             TAURI_SIGNING_PRIVATE_KEY_PASSWORD=
             export TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
           fi
-          cargo workshop installer --target ${{ matrix.triple }} --sign
+          cargo installer --target ${{ matrix.triple }} --sign
 
-      # The Gateway reaches the setup only through tauri.windows.conf.json's
-      # externalBin; 7-Zip lists an NSIS setup's files.
+      # The Gateway reaches the setup only through Workshop's
+      # tauri.windows.conf.json, as an externalBin; 7-Zip lists an NSIS
+      # setup's files.
       - name: The setup carries the Gateway
         if: matrix.platform == 'windows'
         shell: bash
@@ -357,14 +401,20 @@ jobs:
           listing=$(7z l "$setup")
           grep -F runvil-gateway.exe <<< "$listing" || { echo "$listing"; echo "runvil-gateway.exe is not in $setup"; exit 1; }
 
-      - name: Clean tree
+      # Neither build may write into its checkout. This repository ignores
+      # the Workshop checkout, so each tree is asked for itself.
+      - name: Clean trees
         shell: bash
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "the installer build dirtied the repository:"
-            git status --porcelain
-            exit 1
-          fi
+          status=0
+          for tree in . runvil-workshop; do
+            if [ -n "$(git -C "$tree" status --porcelain)" ]; then
+              echo "the installer build dirtied the checkout at $tree:"
+              git -C "$tree" status --porcelain
+              status=1
+            fi
+          done
+          exit $status
 
       - name: Upload the installer and updater files
         uses: actions/upload-artifact@v4
@@ -436,7 +486,7 @@ jobs:
           shopt -s nullglob
           installers=(dist/*-setup.dmg dist/*-setup.run)
           [ "${#installers[@]}" -eq 1 ] || { echo "the artifact must hold one installer, found ${#installers[@]}"; ls dist; exit 1; }
-          bash .github/installers/cell.sh "${installers[0]}" "${{ matrix.selection }}" "${{ needs.prepare.outputs.version }}"
+          bash .github/installers/cell.sh "${installers[0]}" "${{ matrix.selection }}" "${{ needs.prepare.outputs.version }}" "${{ needs.prepare.outputs.gateway-version }}"
 
       - name: Install and check (Windows)
         if: runner.os == 'Windows'
@@ -446,7 +496,7 @@ jobs:
         run: |
           $setups = @(Get-ChildItem dist | Where-Object { $_.Name -like '*-setup.exe' })
           if ($setups.Count -ne 1) { throw "the artifact must hold one setup, found $($setups.Count)" }
-          & .github/installers/cell.ps1 $setups[0].FullName '${{ matrix.selection }}' '${{ needs.prepare.outputs.version }}'
+          & .github/installers/cell.ps1 $setups[0].FullName '${{ matrix.selection }}' '${{ needs.prepare.outputs.version }}' '${{ needs.prepare.outputs.gateway-version }}'
 
       # cancelled() covers the job timeout, so a hung cell keeps its logs.
       - name: Upload the cell's logs
@@ -474,6 +524,13 @@ jobs:
           [ "$actual" = "$expected" ] || { echo "checkout $actual does not match execution SHA $expected"; exit 1; }
           echo "Execution SHA: $actual"
 
+      # A release verifies against the updater key in Workshop's
+      # tauri.conf.json.
+      - name: Check out Workshop
+        uses: ./.github/actions/workshop-checkout
+        with:
+          ref: ${{ needs.prepare.outputs.workshop-sha }}
+
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
       - name: Cache cargo
@@ -495,8 +552,9 @@ jobs:
           name: run-signing-key
           path: ${{ runner.temp }}/run-key
 
-      # A release verifies against plugins.updater.pubkey in tauri.conf.json,
-      # the key every installed copy trusts; other modes against the run key.
+      # A release verifies against plugins.updater.pubkey in Workshop's
+      # tauri.conf.json, the key every installed copy trusts; other modes
+      # against the run key.
       - name: Assemble and verify latest.json and SHA256SUMS
         shell: bash
         env:
@@ -508,7 +566,7 @@ jobs:
           if [ "$MODE" != release ]; then
             key=(--public-key "$RUNNER_TEMP/run-key/run.key.pub")
           fi
-          cargo workshop manifest --assets "$RUNNER_TEMP/release" \
+          cargo installer manifest --assets "$RUNNER_TEMP/release" \
             --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION" "${key[@]}"
           cat "$RUNNER_TEMP/release/latest.json" "$RUNNER_TEMP/release/SHA256SUMS"
 

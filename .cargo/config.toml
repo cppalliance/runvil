@@ -7,7 +7,7 @@ linker = "rust-lld"
 rustflags = ["-C", "target-feature=+crt-static"]
 
 [alias]
-workshop = "run -p build-workshop --"
+installer = "run -p build-installer --"
 xtask = "run -p build-xtask --"
 # Outlines the workspace with the vibelight checkout next to this repo. Cargo
 # builds it in release mode on first use and rebuilds it when its source
@@ -24,3 +24,8 @@ outline = "run --release --bin vibelight --manifest-path ../vibelight/Cargo.toml
 # identifies it.
 [env]
 CLIPPY_DISABLE_DOCS_LINKS = "1"
+# The runvil-workshop checkout `cargo installer` builds from and its tests
+# read: the one next to this repo, unless the variable is already set. The
+# path is relative to this file's parent's parent, and Cargo passes it on
+# as an absolute path.
+RUNVIL_WORKSHOP = { value = "../runvil-workshop", relative = true }

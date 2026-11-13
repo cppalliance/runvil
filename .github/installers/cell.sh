@@ -3,11 +3,12 @@
 # selection with the Qt IFW installer, then checks that exactly the selected
 # components are present and that each present one runs.
 #
-# Usage: cell.sh <installer> <selection> <version>
-#   <installer>  the .dmg on macOS, the .run on Linux
-#   <selection>  all, workshop, or gateway
-#   <version>    the version Workshop must print; the Gateway must print the
-#                version gateway-pin/pin.json names
+# Usage: cell.sh <installer> <selection> <version> <gateway-version>
+#   <installer>        the .dmg on macOS, the .run on Linux
+#   <selection>        all, workshop, or gateway
+#   <version>          the version Workshop must print
+#   <gateway-version>  the version the Gateway must print: the release the
+#                      Workshop checkout the installer was built from pins
 #
 # Environment:
 #   CELL_ROOT    install here (IFW --root) instead of the default location,
@@ -22,10 +23,12 @@ fail() {
   exit 1
 }
 
-[ "$#" -eq 3 ] || fail "usage: cell.sh <installer> <all|workshop|gateway> <version>; got $# arguments"
+[ "$#" -eq 4 ] || fail "usage: cell.sh <installer> <all|workshop|gateway> <version> <gateway-version>; got $# arguments"
 installer=$1
 selection=$2
 version=$3
+gateway_version=$4
+[ -n "$gateway_version" ] || fail "the Gateway version is empty"
 [ -f "$installer" ] || fail "installer $installer does not exist"
 case "$installer" in
   /*) ;;
@@ -43,10 +46,6 @@ esac
 ids=""
 [ "$want_workshop" = 0 ] || ids="$ids com.runvil.workshop"
 [ "$want_gateway" = 0 ] || ids="$ids com.runvil.gateway"
-# The installers carry the Gateway release the repository pins.
-pin="$(cd "$(dirname "$0")/../.." && pwd)/gateway-pin/pin.json"
-gateway_version=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$pin") ||
-  fail "cannot read the Gateway version from $pin"
 
 system=$(uname -s)
 profile="$HOME/.runvil"

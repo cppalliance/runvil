@@ -23,3 +23,6 @@
 # artifact.
 /crates/workshop/desktop/binaries/
 /plan-dist-manifest.json
+# The runvil-workshop checkout CI places inside this one
+# (.github/actions/workshop-checkout); a local checkout sits beside it.
+/runvil-workshop/
