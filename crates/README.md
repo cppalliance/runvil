@@ -1,3 +1,3 @@
 # Crates
 
-This directory holds the workspace's crates. The crates at this level are the build tooling. Workshop keeps its crates in a container directory of its own, `workshop/`, and only the build tooling may depend into it.
+This directory holds the workspace's crates, which are all build tooling. `build-installer` builds the installers from a Workshop checkout, `build-user-guide` stages the books of the documentation site, and `build-xtask` holds the structural checks and builds the site.

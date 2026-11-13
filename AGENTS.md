@@ -1,6 +1,6 @@
 # Runvil
 
-Multi-crate Rust workspace for Workshop, a Host, and the tooling that builds its installers. The Engine and the Harness are in their own repository, `cppalliance/runvil-harness`, which the root `Cargo.toml` pins by commit. The Gateway is a separate product in its own repository, `cppalliance/runvil-gateway`.
+Multi-crate Rust workspace for the tooling that builds the Runvil installers and the documentation site. Workshop, a Host, is in its own repository, `cppalliance/runvil-workshop`, which the root `Cargo.toml` pins by commit in `[workspace.metadata.workshop]`; the installers are built from that commit. The Engine and the Harness are in `cppalliance/runvil-harness`, and the Gateway is a separate product in `cppalliance/runvil-gateway`.
 
 ## Definitions
 
@@ -19,7 +19,7 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 - "Host", in any capitalization, means only the Host. Other senses use another word: "machine", "real files", "Engine globals", "Engine call", the part's own name ("the desktop app"), or a verb such as run, serve, embed, or hold.
 - "Engine", "Harness", and "Plugin" mean only the defined terms. Anything else gets a qualified lowercase name, such as the Gateway's speech engine or a Tauri plugin. This repository's own checks are "structural checks", "test support", or "fixtures".
 - Names defined elsewhere keep their own meaning (the HTTP `Host` header, Cargo's `harness = false`), crate names are written as they are, and quotations of people stay verbatim.
-- `crates/workshop/ui/test/docs-claims.mjs` enforces these rules in every `AGENTS.md`, every `## Invariants` crate doc, and every `.cursor/rules` file.
+- `tools/docs-claims.mjs` enforces these rules in every `AGENTS.md`, every `## Invariants` crate doc, and every `.cursor/rules` file.
 
 ## Principles
 
@@ -40,13 +40,13 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 
 ## Verification
 
-- Tests: `cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features`, and `cargo nextest run --locked -p workshop -p workshop-server -p workshop-server-api`.
-- Lint: `cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features`, and `cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets`, both with `CARGO_BUILD_WARNINGS=deny`. Clippy covers `cargo check`, so never run a standalone `cargo check --workspace`.
+- Tests: `cargo nextest run --locked --workspace --all-features`. One test of `build-installer` reads the Workshop checkout that `RUNVIL_WORKSHOP` names, which `.cargo/config.toml` sets to the checkout beside this repository unless the variable is already set.
+- Lint: `cargo clippy --workspace --all-targets --all-features`, with `CARGO_BUILD_WARNINGS=deny`. Clippy covers `cargo check`, so never run a standalone `cargo check --workspace`.
 - Format: `cargo fmt --all --check`.
-- Docs: `cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api`, with `RUSTDOCFLAGS="-D warnings"`. Clippy does not run rustdoc lints, so never skip this.
+- Docs: `cargo doc --workspace --no-deps --all-features`, with `RUSTDOCFLAGS="-D warnings"`. Clippy does not run rustdoc lints, so never skip this.
 - Custom lints: `cargo dylint --all -- --locked --workspace --all-targets --all-features`, with `cargo-dylint` and `dylint-link` installed. The lints and their UI tests live in `cppalliance/dylints`, at the `rev` the root `Cargo.toml`'s `[workspace.metadata.dylint]` pins; a new lint lands there first.
 - Structural checks: `cargo test -p build-xtask`.
-- Wording: `node --test crates/workshop/ui/test/docs-claims.mjs`, from any directory, no `npm ci` needed.
+- Wording: `node --test tools/docs-claims.mjs`, from any directory. It needs Node and no install.
 
 ## Structural Rules
 
@@ -56,8 +56,3 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 - Production code uses the standard module layout: `foo.rs`, with `foo/bar.rs` for its children. No `#[path]`, and no inline `mod` blocks. A module never has exactly one child file (tests aside): merge it, or make it a peer module `foo_bar.rs` declared beside `foo.rs`.
 - Test code goes at the bottom of the file under test in a `#[cfg(test)] mod tests { }` block when practical (if in doubt, beside), and otherwise in `foo-tests.rs` beside it, wired with `#[path = "foo-tests.rs"] mod tests;`. A big test file may split by topic into siblings named after it, `<stem>-<topic>.rs` (so `foo-tests-topic.rs`). These are the only files wired with `#[path]`, so a hyphen in a file name means test code. Top-level `tests/` and `benches/` trees follow Cargo's conventions.
 - The crates in this repository keep their older layout until their own pass.
-
-## SPA and CSS Rules
-
-- Workshop UI component CSS uses the custom properties in `@workshop/look` and `ui/src/tokens/component.css`, never raw color, size, or spacing values.
-- Every persisted value goes through the `ui-storage` adapter to the server. Account state (preferences and ephemera such as editor toggles, zoom, recent files, and command history) goes to `ui-state.json` in the state directory (`workshop-user-state`, `/user/state`). Workspace-scoped state, anything that should travel with the `.rvwork` document, goes to the workspace file (`/workspace/file/state`). A new persisted value is a new allow-listed key in one of those two buckets, added on the server first.
