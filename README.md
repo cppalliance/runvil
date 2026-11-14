@@ -42,17 +42,21 @@ This is [`prompts/greet.md`](https://github.com/cppalliance/runvil-harness/blob/
 ````markdown
 ---
 name: greet
-description: Greet the named input using a Lua-computed value
+description: Greet a name using a Lua-computed value
 runvil: 0
+args:
+  type: object
+  properties:
+    name: { type: string, description: The name to greet }
+  required: [name]
 ---
 
-Computes a greeting from the input in Lua, substitutes it into the prose, and
-has the model echo it.
+Computes a greeting for its `name` argument in Lua, substitutes it into the prose, and has the model echo it.
 
 ## Main
 
 ```lua
-var.greeting = "Hello, " .. args .. "!"
+var.greeting = "Hello, " .. args.name .. "!"
 ```
 
 Repeat exactly, with no extra words: {{ var.greeting }}
@@ -62,7 +66,7 @@ return models.infer(prose)
 ```
 ````
 
-The prompt declares no models, so `models.infer(prose)` runs on the Host's default model. Given the input `Ada`, the first block in `## Main` builds `Hello, Ada!`, the placeholder puts it into the prose, and `models.infer(prose)` sends that prose to the model. The model's reply is the run's result. A prompt can pick another of the five roles (`default`, `strong`, `small`, `fast`, `creative`) with `models.use(role)`, and the Host decides which model fills each role. The paragraph above `## Main` never reaches the model, because text before the first heading with no Lua block in it is a comment.
+The `args:` key declares the one argument the prompt takes, a required string named `name`. The prompt declares no models, so `models.infer(prose)` runs on the Host's default model. Given the arguments `{"name":"Ada"}`, the first block in `## Main` builds `Hello, Ada!`, the placeholder puts it into the prose, and `models.infer(prose)` sends that prose to the model. The model's reply is the run's result. A prompt can pick another of the five roles (`default`, `strong`, `small`, `fast`, `creative`) with `models.use(role)`, and the Host decides which model fills each role. The paragraph above `## Main` never reaches the model, because text before the first heading with no Lua block in it is a comment.
 
 ## How it fits together
 
