@@ -78,6 +78,17 @@ async fn a_model_list_the_broker_cannot_fetch_keeps_the_brokers_failure() {
 }
 
 #[tokio::test]
+async fn an_invalid_selection_is_rejected_before_fetching_the_catalog() {
+    for selected in ["", "model\nname", "model\u{0085}name"] {
+        let error = current_model(Some(selected), &UnlistedBroker)
+            .await
+            .expect_err("an invalid selection must not leave roles unbound");
+        assert_eq!(error.code, ErrorCode::InvalidValue);
+        assert_eq!(error.facts.get(&ErrorFact::Name), Some(&json!(selected)));
+    }
+}
+
+#[tokio::test]
 async fn a_selection_the_list_lacks_is_an_unmet_requirement_naming_the_selection() {
     let error = current_model(Some("absent"), &EmptyBroker)
         .await

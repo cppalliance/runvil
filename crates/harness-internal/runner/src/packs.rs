@@ -73,7 +73,6 @@ const NO_USER: &str = "this run has no user";
 /// the reason it was inserted unavailable. Built once and shared by every
 /// run of that Host; each run makes its own instance of each Pack it
 /// holds.
-#[derive(Clone)]
 pub struct Packs {
     installed: BTreeMap<&'static str, Installed>,
 }
@@ -86,7 +85,6 @@ impl From<PackRegistry> for Packs {
 
 /// One installed Pack: its Pack id, its `PackInfo`, and its factory or
 /// the reason it was inserted unavailable.
-#[derive(Clone)]
 struct Installed {
     id: PackId,
     info: PackInfo,

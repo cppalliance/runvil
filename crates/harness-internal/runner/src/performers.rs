@@ -131,7 +131,8 @@ pub trait ToolPerformer: Send + Sync {
 /// stamps each run's start.
 ///
 /// The Harness polls each sleep inside the run's own future, so a timer
-/// must not block while polled. It waits on the Host's own runtime.
+/// must not block while polled. A custom timer can wait on the Host's
+/// own runtime; the default uses an executor-independent timer thread.
 pub trait Timer: Send + Sync {
     /// Resolves once `duration` has passed.
     ///
@@ -151,5 +152,15 @@ pub trait Timer: Send + Sync {
             .ok()
             .and_then(|elapsed| i64::try_from(elapsed.as_millis()).ok())
             .map_or(Timestamp::UNIX_EPOCH, Timestamp::from_unix_millis)
+    }
+}
+
+impl<T: Timer + ?Sized> Timer for Arc<T> {
+    fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()> {
+        (**self).sleep(duration)
+    }
+
+    fn now(&self) -> Timestamp {
+        (**self).now()
     }
 }

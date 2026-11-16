@@ -157,8 +157,9 @@ impl Harness {
     /// calling `run`, or while the broker lists its models, ends the run
     /// canceled. A model list the broker fails to fetch ends it with the
     /// broker's failure, and a list that omits the selected model with a
-    /// `RequirementsUnmet` failure. A declared input file the Harness
-    /// fails to put in place ends it with the input's failure, and an
+    /// `RequirementsUnmet` failure. An invalid selected model id ends it
+    /// with `InvalidValue` before the broker is queried. A declared input
+    /// file the Harness fails to put in place ends it with the input's failure, and an
     /// environment that falls short of the prompt's requirements, which
     /// the run's first step finds, with a `RequirementsUnmet` failure. An
     /// environment that falls short after a cancel is raised, as when the
@@ -313,8 +314,8 @@ impl RunControl {
     /// message waits for the run's next read of its inbox instead of
     /// steering that round.
     #[must_use]
-    pub fn send(&self, text: String) -> bool {
-        self.sends.push(text)
+    pub fn send(&self, text: impl Into<String>) -> bool {
+        self.sends.push(text.into())
     }
 
     /// Drops the effects in flight, except tool calls that survive stops,

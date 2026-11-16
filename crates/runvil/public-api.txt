@@ -176,7 +176,7 @@ derives runvil::effect::ToolCaller: Clone, Copy, Debug, Deserialize, Eq, Hash, P
 derives runvil::event::Event: Clone, Debug, Deserialize, PartialEq, Serialize
 derives runvil::event::ReplyOrigin: Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize
 derives runvil::harness::MemoryRecorder: Debug, Default
-derives runvil::harness::Packs: Clone, Debug
+derives runvil::harness::Packs: Debug
 derives runvil::harness::Plugin: Debug
 derives runvil::harness::PluginReport: Debug
 derives runvil::harness::PluginSource: Clone, Debug, Eq, PartialEq
@@ -320,6 +320,7 @@ impl<T: ?core::marker::Sized + core::marker::Send + core::marker::Sync + 'static
 impl<T: ?core::marker::Sized + core::marker::Send + core::marker::Sync + 'static> runvil::plugin::ServiceKey<T>
 impl<T: runvil::harness::InferenceBroker + ?core::marker::Sized> runvil::harness::InferenceBroker for alloc::sync::Arc<T>
 impl<T: runvil::harness::RunRecorder + ?core::marker::Sized> runvil::harness::RunRecorder for alloc::sync::Arc<T>
+impl<T: runvil::harness::Timer + ?core::marker::Sized> runvil::harness::Timer for alloc::sync::Arc<T>
 impl<T> core::marker::Freeze for runvil::plugin::ServiceKey<T> where core::marker::PhantomData<fn() -> alloc::sync::Arc<T>>: core::marker::Freeze, T: ?core::marker::Sized
 impl<T> core::marker::Send for runvil::plugin::ServiceKey<T> where core::marker::PhantomData<fn() -> alloc::sync::Arc<T>>: core::marker::Send, T: ?core::marker::Sized
 impl<T> core::marker::Sync for runvil::plugin::ServiceKey<T> where core::marker::PhantomData<fn() -> alloc::sync::Arc<T>>: core::marker::Sync, T: ?core::marker::Sized
@@ -327,6 +328,8 @@ impl<T> core::marker::Unpin for runvil::plugin::ServiceKey<T> where core::marker
 impl<T> core::panic::unwind_safe::RefUnwindSafe for runvil::plugin::ServiceKey<T> where core::marker::PhantomData<fn() -> alloc::sync::Arc<T>>: core::panic::unwind_safe::RefUnwindSafe, T: ?core::marker::Sized
 impl<T> core::panic::unwind_safe::UnwindSafe for runvil::plugin::ServiceKey<T> where core::marker::PhantomData<fn() -> alloc::sync::Arc<T>>: core::panic::unwind_safe::UnwindSafe, T: ?core::marker::Sized
 pub async fn runvil::Harness::run(self) -> core::result::Result<runvil::RunReport, runvil::Error>
+pub async fn runvil::RunBuilder::output(self) -> core::result::Result<alloc::string::String, runvil::Error>
+pub async fn runvil::RunBuilder::text(self) -> core::result::Result<alloc::string::String, runvil::Error>
 pub const fn runvil::ErrorCode::number(self) -> u16
 pub const fn runvil::ErrorCode::prose(self) -> &'static str
 pub const fn runvil::ErrorCode::tag(self) -> &'static str
@@ -379,21 +382,15 @@ pub fn runvil::Prompt::parse(finder: &dyn runvil::PromptFinder, name: &str) -> c
 pub fn runvil::Prompt::title(&self) -> &str
 pub fn runvil::PromptFinder::find(&self, name: &str) -> core::result::Result<alloc::string::String, runvil::Error>
 pub fn runvil::RunBuilder::args(self, args: impl core::convert::Into<alloc::string::String>) -> Self
-pub fn runvil::RunBuilder::broker(self, broker: impl runvil::harness::InferenceBroker + 'static) -> Self
+pub fn runvil::RunBuilder::configure(self, configure: impl core::ops::function::FnOnce(&mut runvil::RunSetup)) -> Self
 pub fn runvil::RunBuilder::input(self, text: impl core::convert::Into<alloc::string::String>) -> Self
-pub fn runvil::RunBuilder::limits(self, limits: runvil::RunLimits) -> Self
+pub fn runvil::RunBuilder::interactive(self) -> Self
 pub fn runvil::RunBuilder::model(self, model: impl core::convert::Into<alloc::string::String>) -> Self
 pub fn runvil::RunBuilder::prepare(self) -> core::result::Result<runvil::Harness, runvil::Error>
-pub fn runvil::RunBuilder::recorder(self, recorder: impl runvil::harness::RunRecorder + 'static) -> Self
-pub fn runvil::RunBuilder::setup(self, setup: runvil::RunSetup) -> Self
-pub fn runvil::RunBuilder::tool_concurrency(self, maximum: core::num::nonzero::NonZeroUsize) -> Self
-pub fn runvil::RunBuilder::vfs(self, vfs: runvil::vfs::VfsRef) -> Self
-pub fn runvil::RunBuilder::with_user(self) -> Self
-pub fn runvil::RunBuilder::workspace_roots(self, roots: impl core::iter::traits::collect::IntoIterator<Item = std::path::PathBuf>) -> Self
 pub fn runvil::RunControl::cancel(&self)
-pub fn runvil::RunControl::send(&self, text: alloc::string::String) -> bool
+pub fn runvil::RunControl::send(&self, text: impl core::convert::Into<alloc::string::String>) -> bool
 pub fn runvil::RunControl::stop_round(&self)
-pub fn runvil::RunSetup::new(recorder: alloc::sync::Arc<dyn runvil::harness::RunRecorder>, broker: alloc::sync::Arc<dyn runvil::harness::InferenceBroker>) -> runvil::RunSetup
+pub fn runvil::RunSetup::new(recorder: impl runvil::harness::RunRecorder + 'static, broker: impl runvil::harness::InferenceBroker + 'static) -> runvil::RunSetup
 pub fn runvil::SourceLoc::line(file: impl core::convert::Into<alloc::string::String>, line: core::num::nonzero::NonZeroU32) -> runvil::SourceLoc
 pub fn runvil::SourceLoc::new(file: impl core::convert::Into<alloc::string::String>, start_line: core::num::nonzero::NonZeroU32, start_column: core::num::nonzero::NonZeroU32, end_line: core::num::nonzero::NonZeroU32, end_column: core::num::nonzero::NonZeroU32) -> core::option::Option<runvil::SourceLoc>
 pub fn runvil::Timestamp::to_rfc3339(self) -> alloc::string::String

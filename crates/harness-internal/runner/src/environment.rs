@@ -15,8 +15,8 @@ use crate::performers::InferenceBroker;
 /// first listed when `selected` is `None`.
 ///
 /// The model is `None` only when there is no selection and the broker
-/// lists no model, or the selected id is not representable; the prompt's
-/// declared roles then stay unbound. A failed listing or a selection
+/// lists no model; the prompt's declared roles then stay unbound.
+/// A failed listing, an invalid selection, or a selection
 /// absent from the list is a reported failure, never a fabricated
 /// fallback model info. The recorded run ends with that failure as its
 /// result.
@@ -26,25 +26,22 @@ use crate::performers::InferenceBroker;
 /// could not be fetched: `, when the model list cannot be fetched, and
 /// `RequirementsUnmet` with the selected id as the `Name` fact and the
 /// `Reason` fact `model_absent` when the selected id is not in it.
+/// An empty selection or one containing control characters returns
+/// `InvalidValue` before fetching the catalog.
 pub(crate) async fn current_model(
     selected: Option<&str>,
     broker: &dyn InferenceBroker,
 ) -> Result<Option<ModelInfo>, Error> {
+    let selected = selected.map(ModelId::gateway).transpose()?;
     let catalog = broker.models().await.map_err(|mut error| {
         error.message = format!("the model catalog could not be fetched: {}", error.message);
         error
     })?;
-    let Some(selected) = selected else {
+    let Some(id) = selected else {
         return Ok(catalog.models().first().cloned());
     };
-    let id = match ModelId::gateway(selected) {
-        Ok(id) => id,
-        Err(error) => {
-            tracing::warn!(%error, "the selected model id is invalid");
-            return Ok(None);
-        }
-    };
     catalog.get(&id).cloned().map(Some).ok_or_else(|| {
+        let selected = id.name();
         let code = ErrorCode::RequirementsUnmet;
         let mut error = Error::new(
             code,

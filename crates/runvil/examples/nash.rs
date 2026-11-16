@@ -114,6 +114,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
             .to_owned())
         });
-    println!("{}", host.run("nash.md").await?.result?);
+    println!("{}", host.run("nash.md").text().await?);
     Ok(())
 }

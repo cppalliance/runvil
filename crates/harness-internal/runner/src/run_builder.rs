@@ -1,26 +1,22 @@
-//! Configuration of one named run before it starts.
+//! A named run's inputs, its ordinary result, and access to its controls.
 
 use std::future::IntoFuture;
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::sync::Arc;
 
-use runvil_engine::vfs::VfsRef;
-use runvil_engine::{BoxFuture, Error, RunLimits};
+use runvil_engine::{BoxFuture, Error};
 
-use crate::performers::InferenceBroker;
-use crate::recorder::RunRecorder;
+use crate::recorder::of_run;
 use crate::{Harness, Host, RunReport, RunSetup};
 
-/// A named run ready to configure and await, returned by [`Host::run`].
-/// Each setter changes only that run. Awaiting parses the prompt and
-/// records its execution. For interactive runs, [`prepare`](Self::prepare)
-/// returns a Harness whose control can be taken before execution starts.
+/// One configurable run, created by [`Host::run`].
 ///
-/// Awaiting returns a parse error before recording, or `RecorderFailed`
-/// when recording fails. Execution failures remain in [`RunReport::result`].
+/// Await this value to get a complete [`RunReport`], including execution
+/// failures. Use [`text`](Self::text) or [`output`](Self::output) when a
+/// failure should propagate through `?`, or [`prepare`](Self::prepare) to
+/// get the [`Harness`] and take its control before executing it.
+/// The builder owns a Host snapshot and its run settings, so it can
+/// outlive the original Host and move into a spawned task.
 #[derive(Debug)]
-#[must_use = "a run must be awaited or prepared to do any work"]
+#[must_use = "a run request does nothing until awaited or prepared"]
 pub struct RunBuilder {
     host: Host,
     name: String,
@@ -32,85 +28,77 @@ impl RunBuilder {
         Self { host, name, setup }
     }
 
-    /// Sets the text written to the prompt's declared input file.
-    pub fn input(mut self, text: impl Into<String>) -> Self {
-        self.setup.input_text = Some(text.into());
-        self
-    }
-
-    /// Sets the prompt's argument text.
+    /// Passes argument text to the prompt as `args`.
     pub fn args(mut self, args: impl Into<String>) -> Self {
         self.setup.args = args.into();
         self
     }
 
-    /// Selects a model from the broker's catalog. Without a selection,
-    /// the run uses the catalog's first model when one exists.
+    /// Stages text at the prompt's declared `input:` file.
+    pub fn input(mut self, text: impl Into<String>) -> Self {
+        self.setup.input_text = Some(text.into());
+        self
+    }
+
+    /// Selects a model from the configured broker's catalog.
+    /// Without a selection, the run uses the catalog's first model.
     pub fn model(mut self, model: impl Into<String>) -> Self {
         self.setup.selected_model = Some(model.into());
         self
     }
 
-    /// Overrides the Host's inference broker for this run.
-    pub fn broker(mut self, broker: impl InferenceBroker + 'static) -> Self {
-        self.setup.broker = Arc::new(broker);
-        self
-    }
-
-    /// Overrides the Host's recorder for this run. Pass a shared `Arc`
-    /// when the caller will inspect the recorded history afterward.
-    pub fn recorder(mut self, recorder: impl RunRecorder + 'static) -> Self {
-        self.setup.recorder = Arc::new(recorder);
-        self
-    }
-
-    /// Replaces the fresh in-memory filesystem with the supplied one.
-    pub fn vfs(mut self, vfs: VfsRef) -> Self {
-        self.setup.vfs = vfs;
-        self
-    }
-
-    /// Sets resource limits for this run.
-    pub fn limits(mut self, limits: RunLimits) -> Self {
-        self.setup.limits = limits;
-        self
-    }
-
-    /// Limits the number of tool calls in flight; the default is ten.
-    pub fn tool_concurrency(mut self, maximum: NonZeroUsize) -> Self {
-        self.setup.max_tool_calls_in_flight = maximum;
-        self
-    }
-
-    /// Sets the workspace roots reported to the prompt. This does not
-    /// grant filesystem access; configure that through [`vfs`](Self::vfs).
-    pub fn workspace_roots(mut self, roots: impl IntoIterator<Item = PathBuf>) -> Self {
-        self.setup.workspace_roots = roots.into_iter().collect();
-        self
-    }
-
-    /// Enables the user inbox. Use [`prepare`](Self::prepare) and the
-    /// resulting Harness's control to send the user's replies.
-    pub fn with_user(mut self) -> Self {
+    /// Enables the user inbox. Take the control from [`prepare`](Self::prepare)
+    /// to answer it while the run is pending.
+    pub fn interactive(mut self) -> Self {
         self.setup.has_user = true;
         self
     }
 
-    /// Replaces all run settings, including inherited broker and recorder,
-    /// with an explicit setup. Later setters can override individual fields.
-    pub fn setup(mut self, setup: RunSetup) -> Self {
-        self.setup = setup;
+    /// Changes any run setting, including its filesystem, resource limits,
+    /// workspace roots, tool concurrency, broker, or recorder. It receives
+    /// this request's defaults, including the Host's broker and recorder.
+    /// Ordinary inputs have the shorter [`args`](Self::args),
+    /// [`input`](Self::input), and [`model`](Self::model) methods.
+    pub fn configure(mut self, configure: impl FnOnce(&mut RunSetup)) -> Self {
+        configure(&mut self.setup);
         self
     }
 
-    /// Parses the named prompt and returns a Harness without starting it.
-    /// The Harness owns its configuration and can be moved to another task.
+    /// Finds and parses the prompt, then returns its unstarted Harness.
+    /// Take [`Harness::control`] before calling [`Harness::run`].
+    /// Parsing makes no Pack and writes no run record.
     ///
     /// # Errors
-    /// Returns [`Host::parse`]'s failure before any run is recorded.
+    /// Returns the prompt finder's or parser's failure, or a refusal of
+    /// the prompt's Pack requirements.
     pub fn prepare(self) -> Result<Harness, Error> {
         let prompt = self.host.parse(&self.name)?;
         Ok(Harness::new(self.host, prompt, self.setup))
+    }
+
+    /// Executes the prompt and returns its final text.
+    /// Every execution failure propagates as an error carrying its run id.
+    /// A prompt that returns no text produces an empty string.
+    ///
+    /// # Errors
+    /// Returns a parse, recording, or execution failure.
+    pub async fn text(self) -> Result<String, Error> {
+        let report = self.await?;
+        report.result.map_err(|error| of_run(report.run_id, error))
+    }
+
+    /// Executes the prompt and reads its declared `output:` file.
+    /// An execution failure takes precedence over an absent output.
+    ///
+    /// # Errors
+    /// Returns a parse, recording, execution, or output-read failure.
+    /// `NoOutput` means the prompt declares no output file.
+    pub async fn output(self) -> Result<String, Error> {
+        let report = self.await?;
+        report
+            .result
+            .map_err(|error| of_run(report.run_id, error))?;
+        report.output.map_err(|error| of_run(report.run_id, error))
     }
 }
 
@@ -118,6 +106,9 @@ impl IntoFuture for RunBuilder {
     type Output = Result<RunReport, Error>;
     type IntoFuture = BoxFuture<'static, Self::Output>;
 
+    /// Executes the request and returns the full report. Parse and
+    /// recording failures are errors; execution failures are retained
+    /// in [`RunReport::result`] beside the run id and unread messages.
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move { self.prepare()?.run().await })
     }

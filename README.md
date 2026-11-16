@@ -68,6 +68,8 @@ The prompt declares no models, so `models.infer(prose)` runs on the Host's defau
 
 The Engine and the Harness are Rust libraries. The Engine parses a prompt and steps through it, and whenever the run needs a model reply, a Pack's render of the tools a section offers, a Pack tool's result, a timer, or a file outside a prelude's install, it asks for one and waits. The Harness answers each of those requests and records the run. A Host is any application that runs prompts through the Harness. Workshop is one, and your own program becomes one when it embeds the Harness.
 
+Rust applications use the `runvil` crate: configure a `Host` once, then call `host.run(name)` with each run's inputs. Use `text().await?` for the prompt's final text, `output().await?` for its declared output file, or await the run directly for a full report. The [complete example](crates/runvil/examples/run-prompt.rs) runs a [greeting prompt](crates/runvil/examples/prompts/greet.md) with no model service or additional configuration: `cargo run -p runvil --example run-prompt`.
+
 The Gateway is the one process that holds model credentials, so no other process ever sees a vendor key. It serves an OpenAI-compatible API and routes each request to a cloud provider or to a model running on your own machine. It also provides web search, speech-to-text, text-to-speech, and a settings page in your browser, and you can run it on its own, on a desktop or a server. It is developed and released separately, in [cppalliance/runvil-gateway](https://github.com/cppalliance/runvil-gateway).
 
 ## Documentation

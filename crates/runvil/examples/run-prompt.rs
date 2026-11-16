@@ -1,45 +1,12 @@
-//! A complete script-only run, using the same API as a model-backed Host.
+//! Runs a prompt through the Host API and prints its declared output.
 
-use std::sync::Arc;
-
-use runvil::harness::MemoryRecorder;
-use runvil::{Error, ErrorCode, Host};
-
-const GREET: &str = concat!(
-    "---\nname: greet\ndescription: Greets the operator by name\nrunvil: 0\n",
-    "input: { path: name.txt, description: The operator's name }\n",
-    "output: { path: reply.txt, description: The greeting }\n",
-    "---\n\n# Greet\n\n## Answer\n\n```lua\n",
-    "store.write('reply.txt', 'Hello, ' .. store.read('name.txt') .. '.')\n",
-    "```\n",
-);
-
-fn find(name: &str) -> Result<String, Error> {
-    if name == "greet.md" {
-        return Ok(GREET.to_owned());
-    }
-    let code = ErrorCode::NotFound;
-    Err(Error::new(
-        code,
-        format!("no prompt named {name}"),
-        code.prose(),
-    ))
-}
+use runvil::{Error, Host};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Error> {
-    let host = Host::new("./prompts").with_prompt_finder(find);
-    // Keep a shared recorder only when the application wants the history.
-    let history = Arc::new(MemoryRecorder::new());
-    let report = host
-        .run("greet.md")
-        .input("desk")
-        .recorder(history.clone())
-        .await?;
-
-    assert_eq!(history.result(report.run_id), Some(report.result.clone()));
-    report.result?;
-    let greeting = report.output?;
+    let prompts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/prompts");
+    let host = Host::new(prompts);
+    let greeting = host.run("greet.md").input("desk").output().await?;
     assert_eq!(greeting, "Hello, desk.");
     println!("{greeting}");
     Ok(())

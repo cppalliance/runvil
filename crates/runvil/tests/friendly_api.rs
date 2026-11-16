@@ -163,7 +163,7 @@ async fn prepared_runs_keep_control_and_record_cancellation() -> Result<(), Erro
     let history = Arc::new(MemoryRecorder::new());
     let run = host(source("", "return 'done'"))
         .run("demo.md")
-        .recorder(history.clone())
+        .configure(|setup| setup.recorder = history.clone())
         .prepare()?;
     run.control().cancel();
     let report = run.run().await?;
@@ -229,7 +229,7 @@ async fn raw_tools_remain_available_without_typed_schemas() -> Result<(), Error>
 async fn interactive_runs_accept_input_through_the_prepared_control() -> Result<(), Error> {
     let run = host(source("uses:\n  - user\n", "return tasks.receive()"))
         .run("demo.md")
-        .with_user()
+        .interactive()
         .prepare()?;
     assert!(run.control().send("hello".to_owned()));
     assert_eq!(run.run().await?.result?, "hello");
@@ -245,7 +245,7 @@ async fn input_and_output_flow_through_the_configured_filesystem() -> Result<(),
     let vfs = runvil::vfs::VfsRef::default();
     let report = host(source)
         .run("demo.md")
-        .vfs(vfs.clone())
+        .configure(|setup| setup.vfs = vfs.clone())
         .input("hello")
         .await?;
     report.result?;

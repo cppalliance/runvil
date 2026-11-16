@@ -1,25 +1,101 @@
-//! Runs Runvil prompts for a Host. This is the one crate a Host depends on.
+//! Runs prompts for a Host. This is the one crate an application depends on.
 //!
-//! The crate holds three things: the Harness, which runs one prompt for a
-//! Host and records the run; the Engine's items a Host reads and builds,
-//! such as a [`Prompt`], an [`Error`], the events of a run, and a run's
-//! files; and the Plugin contract. Code that steps a run itself, as the
-//! Harness does, takes the Engine's stepping items from `runvil-engine`.
+//! Save this as `prompts/greet.md`:
 //!
-//! Configure a [`Host`] once; each [`Host::run`] returns an owned builder
-//! that you configure and await. No smart pointers or runtime adapters are
-//! needed for the common path. A run gets a fresh in-memory filesystem and
-//! temporary recorder unless you supply them. Script-only prompts need no
-//! broker; model calls use the broker supplied with [`Host::with_broker`].
+//! ````markdown
+//! ---
+//! name: greet
+//! description: Greets the operator by name
+//! runvil: 0
+//! input: { path: name.txt, description: The operator's name }
+//! output: { path: reply.txt, description: The greeting }
+//! ---
+//!
+//! # Greet
+//!
+//! ## Answer
+//!
+//! ```lua
+//! store.write('reply.txt', 'Hello, ' .. store.read('name.txt') .. '.')
+//! ```
+//! ````
+//!
+//! Configure a [`Host`] once, then supply each run's inputs where you run it:
 //!
 //! ```text
-//! use runvil::Host;
+//! use runvil::{Error, Host};
 //!
-//! let host = Host::new("./prompts");
-//! let report = host.run("greet.md").input("desk").await?;
-//! report.result?;
-//! println!("{}", report.output?);
+//! #[tokio::main(flavor = "current_thread")]
+//! async fn main() -> Result<(), Error> {
+//!     let host = Host::new("./prompts");
+//!     let greeting = host.run("greet.md").input("Ada").output().await?;
+//!     assert_eq!(greeting, "Hello, Ada.");
+//!     Ok(())
+//! }
 //! ```
+//!
+//! The Host reads prompt sources from that folder. A run's files live in a
+//! fresh in-memory filesystem: [`RunBuilder::input`] writes its declared
+//! `input:` file, and [`RunBuilder::output`] reads its declared `output:` file.
+//! [`RunBuilder::args`] supplies Lua's `args` string instead. Use
+//! [`RunBuilder::text`] to get the final text returned by the prompt's Lua.
+//! All parse, recording, and execution failures propagate through `?` when
+//! using `text()` or `output()`; their execution errors carry the run id.
+//!
+//! Model calls need a broker configured with [`Host::with_broker`]. Install
+//! optional Packs with [`Host::with_packs`], passing a [`plugin::PackRegistry`]:
+//!
+//! ```text
+//! let host = Host::new("./prompts")
+//!     .with_broker(broker)
+//!     .with_packs(packs);
+//! let answer = host.run("research.md")
+//!     .args("Explain this code")
+//!     .model("my-model")
+//!     .text().await?;
+//! ```
+//!
+//! Without a model selection, the run uses the first model in the broker's
+//! catalog. The default timer works on any executor. Each run gets its own
+//! instances of the Packs its prompt holds. To retain history, configure a
+//! recorder once with [`Host::with_recorder`]. These service methods take
+//! ordinary values and also accept shared `Arc` values when needed.
+//!
+//! Awaiting a [`RunBuilder`] gives the full [`RunReport`]: its run id, final
+//! result, declared output, and unread messages. A recorded execution failure
+//! stays in [`RunReport::result`]; `await?` alone checks parsing and recording:
+//!
+//! ```text
+//! let report = host.run("research.md").args("Explain this code").await?;
+//! println!("run {}: {:?}", report.run_id, report.result);
+//! ```
+//!
+//! Each builder owns a Host snapshot and can outlive it or move into a
+//! spawned task. Snapshots share services and Pack factories. When a
+//! run needs messages, stop, or cancellation, call [`RunBuilder::prepare`],
+//! take [`Harness::control`], and drive [`Harness::run`]:
+//!
+//! ```text
+//! let run = host.run("chat.md").interactive().prepare()?;
+//! let control = run.control();
+//! assert!(control.send("Hello"));
+//! let report = run.run().await?;
+//! ```
+//!
+//! [`RunBuilder::interactive`] enables the prompt's `user` Pack. Controls can
+//! also send messages, stop a round, or cancel while the run is pending.
+//! [`RunBuilder::configure`] exposes all of [`RunSetup`] for filesystem policy,
+//! resource limits, and other settings. Launchers with an already parsed
+//! [`Prompt`] can construct a [`Harness`] directly with their explicit setup.
+//!
+//! Every executed run is recorded, including a cancel before execution and
+//! a failure to resolve its model. Parsing fails before recording begins.
+//! A recorder's refusal is `RecorderFailed` and stops the run. The Engine's
+//! stepping API is in `runvil-engine`; this crate also exposes the Engine's
+//! readable data and the Plugin contract.
+//!
+//! From the repository, run the complete quickstart with
+//! `cargo run -p runvil --example run-prompt`.
 //!
 //! Install tools with [`plugin::PackRegistry::define`]. Its factory runs
 //! once per run that holds the Pack, and adds typed async functions through
@@ -30,24 +106,7 @@
 //! their configuration, and register through [`plugin::ToolPack::add`]. Implement
 //! [`plugin::Pack`] directly for dynamic tool lists or custom rendering.
 //!
-//! For interactive runs, call [`RunBuilder::prepare`], take the Harness's
-//! [`RunControl`], then call [`Harness::run`]. Preparing parses without
-//! recording or execution. A control can send messages, stop a model round,
-//! or cancel the run. For callers that already parsed a prompt,
-//! [`Harness::new`] takes an owned Host snapshot, [`Prompt`], and explicit
-//! [`RunSetup`]. Hosts and their snapshots share service and Pack factories;
-//! each run constructs and drops its own Pack instances.
-//!
-//! Every run gets a record and ends with its result: the final text, or
-//! the error that ended it, where a cancel is the error whose code is
-//! `canceled`. The record begins before anything else, so a run canceled
-//! before it starts, or one whose model cannot be resolved, is recorded
-//! too. The only error [`Harness::run`] returns is a `RecorderFailed`
-//! refusal: a recorder that refuses a write. A prompt that fails to parse
-//! is the caller's error from [`Host::parse`] and leaves no run record.
-//!
-//! The `run-prompt` example runs a prompt end to end. The `nash` example
-//! shows an HTTP tool with typed arguments and output, without JSON plumbing.
+//! The `nash` example demonstrates a stateful HTTP tool with typed arguments.
 
 pub use harness_runner::Harness;
 pub use harness_runner::Host;

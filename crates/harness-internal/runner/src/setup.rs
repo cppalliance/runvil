@@ -28,8 +28,9 @@ pub struct RunSetup {
     pub vfs: VfsRef,
     /// The model id the user selected, if any.
     pub selected_model: Option<String>,
-    /// The workspace roots granted; the first is the `ui()` snapshot's
-    /// `workspace_root`.
+    /// The workspace roots reported to the prompt; the first is the
+    /// `ui()` snapshot's `workspace_root`. These grant no file access;
+    /// configure access through `vfs`.
     pub workspace_roots: Vec<PathBuf>,
     /// The run's argument text.
     pub args: String,
@@ -50,12 +51,16 @@ impl RunSetup {
     /// A setup over `recorder` and `broker`. Every other field starts
     /// empty or at its default: a fresh memory store, no selection, no
     /// roots, no args, no input, `RunLimits::default()`, at most 10 tool
-    /// calls in flight, and no user.
+    /// calls in flight, and no user. Accepts concrete services or shared
+    /// `Arc` values, like the Host's configuration methods.
     #[must_use]
-    pub fn new(recorder: Arc<dyn RunRecorder>, broker: Arc<dyn InferenceBroker>) -> RunSetup {
+    pub fn new(
+        recorder: impl RunRecorder + 'static,
+        broker: impl InferenceBroker + 'static,
+    ) -> RunSetup {
         RunSetup {
-            recorder,
-            broker,
+            recorder: Arc::new(recorder),
+            broker: Arc::new(broker),
             vfs: VfsRef::default(),
             selected_model: None,
             workspace_roots: Vec::new(),
@@ -69,16 +74,11 @@ impl RunSetup {
 }
 
 impl Default for RunSetup {
-    /// A fresh in-memory filesystem and recorder, no models, and the
-    /// limits documented by [`new`](Self::new). This runs script-only
-    /// prompts; supply a broker for
-    /// model calls. Every run is still recorded, and its private record
-    /// is released when the setup is dropped.
+    /// A fresh in-memory recorder and filesystem with no models.
+    /// [`Host::run`](crate::Host::run) replaces the broker and recorder
+    /// with the Host's configured services, when present.
     fn default() -> Self {
-        Self::new(
-            Arc::new(MemoryRecorder::new()),
-            Arc::new(crate::offline::Offline),
-        )
+        Self::new(MemoryRecorder::new(), crate::offline::Offline)
     }
 }
 

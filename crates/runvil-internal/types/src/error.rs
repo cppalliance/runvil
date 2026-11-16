@@ -830,6 +830,6 @@ impl From<std::io::ErrorKind> for ErrorCode {
 impl From<std::io::Error> for Error {
     fn from(io: std::io::Error) -> Self {
         let code = ErrorCode::from(io.kind());
-        Error::new(code, io.to_string(), code.prose())
+        Error::new(code, io.to_string(), code.prose()).with_cause(&io)
     }
 }

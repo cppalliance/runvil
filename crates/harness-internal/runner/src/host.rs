@@ -7,7 +7,7 @@ use std::fmt::{self, Write as _};
 use std::sync::Arc;
 use std::time::Duration;
 
-use runvil_engine::{Error, ErrorCode, Prompt, PromptFinder};
+use runvil_engine::{Error, ErrorCode, ErrorFact, Prompt, PromptFinder};
 use runvil_plugin::{BoxFuture, PackRegistry};
 
 use crate::packs::Packs;
@@ -33,7 +33,7 @@ impl Timer for Clock {
 pub struct Host {
     /// Every Pack the Host installed in its registry, whose factories
     /// make each run's instances.
-    pub(crate) packs: Packs,
+    pub(crate) packs: Arc<Packs>,
     /// Finds each prompt's source by its name.
     pub(crate) prompts: Arc<dyn PromptFinder>,
     /// Performs every run's `Timer` effects.
@@ -50,20 +50,29 @@ impl Host {
     /// finder does not confine paths to that folder.
     #[must_use]
     pub fn new(prompt_folder: impl AsRef<std::path::Path>) -> Self {
-        let prompt_location = prompt_folder.as_ref().to_path_buf();
-
-        let prompts = move |name: &str| {
-            let prompt_location = prompt_location.join(name);
-            std::fs::read_to_string(&prompt_location).map_err(|io| {
-                let code = ErrorCode::from(io.kind());
-                let message = format!("{}: {io}", prompt_location.display());
-                Error::new(code, message, code.prose())
-            })
-        };
-
+        let folder = prompt_folder.as_ref().to_path_buf();
         Self {
-            packs: Packs::new(PackRegistry::new()),
-            prompts: Arc::new(prompts),
+            packs: Arc::new(Packs::new(PackRegistry::new())),
+            prompts: Arc::new(move |name: &str| {
+                let path = folder.join(name);
+                std::fs::read_to_string(&path).map_err(|io| {
+                    let code = ErrorCode::from(io.kind());
+                    let mut error = Error::new(
+                        code,
+                        format!(
+                            "the prompt `{name}` could not be read from `{}`",
+                            path.display()
+                        ),
+                        code.prose(),
+                    )
+                    .with_cause(&io);
+                    error.facts.insert(ErrorFact::Name, name.into());
+                    error
+                        .facts
+                        .insert(ErrorFact::Path, path.to_string_lossy().as_ref().into());
+                    error
+                })
+            }),
             timer: Arc::new(Clock),
             broker: Arc::new(crate::offline::Offline),
             recorder: None,
@@ -80,7 +89,7 @@ impl Host {
     /// Replaces the current [`Packs`] with those installed by `registry`.
     #[must_use]
     pub fn with_packs(mut self, registry: impl Into<Packs>) -> Self {
-        self.packs = registry.into();
+        self.packs = Arc::new(registry.into());
         self
     }
 
@@ -107,7 +116,8 @@ impl Host {
         self
     }
 
-    /// Configures a named run. Await the builder to run it, or call
+    /// Configures a named run. Await it for a full report, use
+    /// [`RunBuilder::text`] or [`RunBuilder::output`] for a result, or call
     /// [`RunBuilder::prepare`] to take its control before starting it.
     /// Nothing is parsed or executed until then. The builder owns its
     /// configuration and can outlive this Host.

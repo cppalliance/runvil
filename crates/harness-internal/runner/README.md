@@ -1,3 +1,5 @@
 # Harness runner
 
-This crate holds the per-run Harness and its effect loop. A Host builds one `Host` at startup with its Packs, its prompt finder, and its timer, and one Harness per run over a parsed prompt and that run's setup: its recorder, inference broker, and filesystem. The Harness then steps the Engine, performs each effect, returns each answer, and records the run. It owns no async runtime, so any async runtime can drive a run, and from outside the run the Host can `send` it a message, stop it, or cancel it. It is private to the Harness family, and clients reach it through the Harness's public API.
+This crate implements the Harness. A Host configures its prompt finder, Packs, broker, recorder, and timer once. `Host::run(name)` returns a `RunBuilder` that owns a snapshot of that Host and its run settings. Await it for a complete report, call `text()` or `output()` for a single result, or `prepare()` for a Harness whose control can send messages, stop work, or cancel it.
+
+Each run gets a fresh filesystem and its own Pack instances. Unless the Host supplies a recorder, the run records in memory and releases that history when it ends. The default timer does not block the executor. The Harness owns no async runtime, so any executor can drive a run. This crate is private to the Harness family; applications reach it through `runvil`.

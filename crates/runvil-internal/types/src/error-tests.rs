@@ -28,6 +28,25 @@ impl std::error::Error for Layer {
 }
 
 #[test]
+fn io_conversion_preserves_the_failure_kind_and_cause_chain() {
+    for (kind, code) in [
+        (std::io::ErrorKind::NotFound, ErrorCode::NotFound),
+        (std::io::ErrorKind::IsADirectory, ErrorCode::IsADirectory),
+        (
+            std::io::ErrorKind::PermissionDenied,
+            ErrorCode::PermissionDenied,
+        ),
+        (std::io::ErrorKind::Other, ErrorCode::Io),
+    ] {
+        let cause = Layer("disk gone", Some(Box::new(Layer("sector 9", None))));
+        let error = Error::from(std::io::Error::new(kind, cause));
+        assert_eq!(error.code, code);
+        assert_eq!(error.prose, code.prose());
+        assert_eq!(error.message, "disk gone: sector 9");
+    }
+}
+
+#[test]
 fn with_cause_appends_the_chain_to_the_message_and_keeps_the_prose() {
     let cause = Layer("disk gone", Some(Box::new(Layer("sector 9", None))));
     let error = Error::new(ErrorCode::Io, "read failed", "Try again.").with_cause(&cause);
