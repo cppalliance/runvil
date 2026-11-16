@@ -5,11 +5,24 @@
 
 use std::fmt::{self, Write as _};
 use std::sync::Arc;
+use std::time::Duration;
 
 use runvil_engine::{Error, ErrorCode, Prompt, PromptFinder};
+use runvil_plugin::{BoxFuture, Pack, PackId, PackInfo, PackRegistry};
 
 use crate::packs::Packs;
 use crate::performers::Timer;
+
+
+struct Clock;
+
+impl Timer for Clock {
+    fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()> {
+        // TODO: consider tokio::sleep to avoid blocking the thread
+        Box::pin(async move { std::thread::sleep(duration) })
+    }
+}
+
 
 /// What every run of one Host shares: its installed Packs, how it finds
 /// prompts, and its timer. A Host builds one and shares it behind an
@@ -25,6 +38,49 @@ pub struct Host {
 }
 
 impl Host {
+    /// Creates a new [`Host`] with the given folder containing prompts.
+    /// 
+    /// The `Host` is given a default implementation of timer using `Clock`.
+    pub fn new(prompt_folder: impl AsRef<std::path::Path>) -> Self {
+        let prompt_location = prompt_folder.as_ref().to_path_buf();
+
+        let prompts = move | name: &str| {
+            let prompt_location             = prompt_location.join(name);
+            std::fs::read_to_string(&prompt_location)
+                .map_err(|io| {
+                    let code = ErrorCode::from(io.kind());
+                    let message = format!("{}: {io}", prompt_location.display());
+                    Error::new(code, message,code.prose())
+                })
+
+        };
+
+        Self {
+            packs: Packs::new(PackRegistry::new()),
+            prompts: Arc::new(prompts),
+            timer: Arc::new(Clock),
+        }
+    }
+
+    /// Replace the current [`PromptFinder`] with `finder`.
+    pub fn with_prompt_finder(mut self, finder: impl PromptFinder + 'static) -> Self {
+        self.prompts = Arc::new(finder);
+        self
+    }
+
+    /// Replace the current [`Packs`] with those installed by `registry`
+    pub fn with_packs(mut self, registry: PackRegistry) -> Self {
+        self.packs = Packs::new(registry);
+        self
+    }
+
+    /// Replace the current [`Timer`] with `timer`.
+    pub fn with_timer(mut self, timer: impl Timer + 'static) -> Self {
+        self.timer = Arc::new(timer);
+        self
+    }
+
+
     /// Parses the prompt `name` with `Prompt::parse` over `prompts`, then
     /// checks its `uses:` against `packs`. Returns the parse failure, a
     /// finder's included, as given, or `RequirementsUnmet` naming each

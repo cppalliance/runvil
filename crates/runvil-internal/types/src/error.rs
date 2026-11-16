@@ -815,3 +815,22 @@ impl ErrorCode {
         }
     }
 }
+
+impl From<std::io::ErrorKind> for ErrorCode {
+    fn from(kind: std::io::ErrorKind) -> Self {
+        match kind {
+            std::io::ErrorKind::NotFound => ErrorCode::NotFound,
+            std::io::ErrorKind::IsADirectory => ErrorCode::IsADirectory,
+            std::io::ErrorKind::PermissionDenied => ErrorCode::PermissionDenied,
+            _ => ErrorCode::Io,
+        }
+    }
+}
+
+
+impl From<std::io::Error> for Error {
+    fn from(io: std::io::Error) -> Self {
+        let code = ErrorCode::from(io.kind());
+        Error::new(code, io.to_string(), code.prose())
+    }
+}
