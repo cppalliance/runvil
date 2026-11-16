@@ -4,12 +4,11 @@
 use std::sync::Arc;
 
 use runvil::effect::Round;
-use runvil::harness::{InferenceBroker, MemoryRecorder, Packs};
+use runvil::harness::{InferenceBroker, MemoryRecorder};
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
 };
-use runvil::plugin::PackRegistry;
 use runvil::{BoxFuture, Error, ErrorCode, Host, RunSetup};
 use workshop_agents::{Conversation, TokioTimer};
 
@@ -54,21 +53,21 @@ pub(crate) fn run_for(
     recorder: Arc<MemoryRecorder>,
     source: String,
 ) -> (Arc<Host>, RunSetup) {
-    let host = Arc::new(Host {
-        packs: Packs::new(PackRegistry::new()),
-        prompts: Arc::new(move |name: &str| {
-            if name == AGENT {
-                return Ok(source.clone());
-            }
-            let code = ErrorCode::NotFound;
-            Err(Error::new(
-                code,
-                format!("no agent named {name}"),
-                code.prose(),
-            ))
-        }),
-        timer: Arc::new(TokioTimer),
-    });
+    let host = Arc::new(
+        Host::new(".")
+            .with_prompt_finder(move |name: &str| {
+                if name == AGENT {
+                    return Ok(source.clone());
+                }
+                let code = ErrorCode::NotFound;
+                Err(Error::new(
+                    code,
+                    format!("no agent named {name}"),
+                    code.prose(),
+                ))
+            })
+            .with_timer(TokioTimer),
+    );
     let setup = RunSetup {
         has_user: true,
         ..RunSetup::new(conversation.recorder(recorder), Arc::new(Offline))

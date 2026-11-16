@@ -451,7 +451,7 @@ async fn each_run_makes_its_own_instance_and_drops_it_by_the_time_harness_run_re
     );
     for runs in 1..=2 {
         let report = Harness::new(
-            Arc::clone(&host),
+            host.as_ref().clone(),
             parsed(CALLS_ECHO),
             setup_over(&recorder()),
         )

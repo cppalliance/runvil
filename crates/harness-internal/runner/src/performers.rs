@@ -72,6 +72,23 @@ pub trait InferenceBroker: Send + Sync {
     ) -> BoxFuture<'static, Result<Box<Completion>, Error>>;
 }
 
+impl<T: InferenceBroker + ?Sized> InferenceBroker for Arc<T> {
+    fn models(&self) -> BoxFuture<'static, Result<ModelCatalog, Error>> {
+        (**self).models()
+    }
+
+    fn chat(
+        &self,
+        binding: ModelBinding,
+        messages: Vec<Message>,
+        tools: Vec<ToolSchema>,
+        options: CompletionOptions,
+        round: Round,
+    ) -> BoxFuture<'static, Result<Box<Completion>, Error>> {
+        (**self).chat(binding, messages, tools, options, round)
+    }
+}
+
 /// Performs a `ToolCall` effect: resolves `tool` to an implementation and
 /// calls it with `args`, lending it the call's `access` and `origin`. Also
 /// performs a `Render` effect: the tools each offered Pack shows the model.

@@ -56,6 +56,7 @@ auto runvil::Harness: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::Host: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::OutputTrust: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Prompt: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::RunBuilder: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunControl: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunLimits: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::RunReport: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -119,6 +120,7 @@ auto runvil::plugin::PackRegistry: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !U
 auto runvil::plugin::RenderContext: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::plugin::ServiceId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::plugin::ToolContext: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
+auto runvil::plugin::ToolPack: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::prompt::ArgDecl: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::ArgType: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::ArgsDecl: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -154,14 +156,15 @@ derives runvil::Error: Clone, Debug, Eq, PartialEq
 derives runvil::ErrorCode: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::ErrorFact: Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd
 derives runvil::Harness: Debug
-derives runvil::Host: Debug
+derives runvil::Host: Clone, Debug
 derives runvil::OutputTrust: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::Prompt: Clone, Debug, Eq, PartialEq
+derives runvil::RunBuilder: Debug
 derives runvil::RunControl: Clone, Debug
 derives runvil::RunLimits: Clone, Copy, Debug, Default, Eq, Hash, PartialEq
 derives runvil::RunReport: Clone, Debug, Eq, PartialEq
 derives runvil::RunSeed: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize
-derives runvil::RunSetup: Debug
+derives runvil::RunSetup: Debug, Default
 derives runvil::SourceLoc: Clone, Debug, Eq, PartialEq
 derives runvil::Timestamp: Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
 derives runvil::ToolId: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
@@ -173,7 +176,7 @@ derives runvil::effect::ToolCaller: Clone, Copy, Debug, Deserialize, Eq, Hash, P
 derives runvil::event::Event: Clone, Debug, Deserialize, PartialEq, Serialize
 derives runvil::event::ReplyOrigin: Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize
 derives runvil::harness::MemoryRecorder: Debug, Default
-derives runvil::harness::Packs: Debug
+derives runvil::harness::Packs: Clone, Debug
 derives runvil::harness::Plugin: Debug
 derives runvil::harness::PluginReport: Debug
 derives runvil::harness::PluginSource: Clone, Debug, Eq, PartialEq
@@ -220,6 +223,7 @@ derives runvil::plugin::PackRegistry: Debug, Default
 derives runvil::plugin::RenderContext: Debug
 derives runvil::plugin::ServiceId: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::plugin::ToolContext: Debug
+derives runvil::plugin::ToolPack: Debug
 derives runvil::prompt::ArgDecl: Clone, Debug, Deserialize, Eq, PartialEq
 derives runvil::prompt::ArgType: Clone, Copy, Debug, Deserialize, Eq, PartialEq
 derives runvil::prompt::ArgsDecl: Clone, Debug, Default, Deserialize, Eq, PartialEq
@@ -251,7 +255,10 @@ derives runvil::vfs::VfsPathBuf: Clone, Debug, Eq, Hash, Ord, PartialEq, Partial
 derives runvil::vfs::VfsRef: Clone, Debug, Default
 derives runvil::vfs::VfsRefBuilder: Debug
 derives runvil::vfs::Writability: Clone, Copy, Debug, Eq, Hash, PartialEq
+impl core::convert::From<core::io::error::Error> for runvil::Error
+impl core::convert::From<core::io::error::ErrorKind> for runvil::ErrorCode
 impl core::convert::From<runvil::ids::ChainId> for runvil::ids::TaskId
+impl core::convert::From<runvil::plugin::PackRegistry> for runvil::harness::Packs
 impl core::convert::From<runvil::vfs::VfsPath> for runvil::vfs::VfsPathBuf
 impl core::error::Error for runvil::Error
 impl core::error::Error for runvil::vfs::VfsError
@@ -271,6 +278,9 @@ impl core::fmt::Display for runvil::vfs::PathReason
 impl core::fmt::Display for runvil::vfs::VfsError
 impl core::fmt::Display for runvil::vfs::VfsPath
 impl core::fmt::Display for runvil::vfs::VfsPathBuf
+impl core::future::into_future::IntoFuture for runvil::RunBuilder
+impl core::future::into_future::IntoFuture for runvil::RunBuilder { type IntoFuture = core::pin::Pin<alloc::boxed::Box<dyn core::future::future::Future<Output = <runvil::RunBuilder as core::future::into_future::IntoFuture>::Output> + core::marker::Send>> }
+impl core::future::into_future::IntoFuture for runvil::RunBuilder { type Output = core::result::Result<runvil::RunReport, runvil::Error> }
 impl core::iter::traits::exact_size::ExactSizeIterator for runvil::prompt::ArgsDeclIter<'_>
 impl core::ops::drop::Drop for runvil::vfs::Access
 impl core::str::traits::FromStr for runvil::ToolId
@@ -286,6 +296,7 @@ impl core::str::traits::FromStr for runvil::packs::GlobalName { type Err = runvi
 impl core::str::traits::FromStr for runvil::packs::PackId
 impl core::str::traits::FromStr for runvil::packs::PackId { type Err = runvil::Error }
 impl runvil::harness::RunRecorder for runvil::harness::MemoryRecorder
+impl runvil::plugin::Pack for runvil::plugin::ToolPack
 impl runvil::vfs::Policy for runvil::vfs::AllowAll
 impl runvil::vfs::Policy for runvil::vfs::ModePolicy
 impl runvil::vfs::Vfs for runvil::vfs::MemoryBackend
@@ -307,6 +318,8 @@ impl<T: ?core::marker::Sized + core::marker::Send + core::marker::Sync + 'static
 impl<T: ?core::marker::Sized + core::marker::Send + core::marker::Sync + 'static> core::fmt::Debug for runvil::plugin::ServiceKey<T>
 impl<T: ?core::marker::Sized + core::marker::Send + core::marker::Sync + 'static> core::marker::Copy for runvil::plugin::ServiceKey<T>
 impl<T: ?core::marker::Sized + core::marker::Send + core::marker::Sync + 'static> runvil::plugin::ServiceKey<T>
+impl<T: runvil::harness::InferenceBroker + ?core::marker::Sized> runvil::harness::InferenceBroker for alloc::sync::Arc<T>
+impl<T: runvil::harness::RunRecorder + ?core::marker::Sized> runvil::harness::RunRecorder for alloc::sync::Arc<T>
 impl<T> core::marker::Freeze for runvil::plugin::ServiceKey<T> where core::marker::PhantomData<fn() -> alloc::sync::Arc<T>>: core::marker::Freeze, T: ?core::marker::Sized
 impl<T> core::marker::Send for runvil::plugin::ServiceKey<T> where core::marker::PhantomData<fn() -> alloc::sync::Arc<T>>: core::marker::Send, T: ?core::marker::Sized
 impl<T> core::marker::Sync for runvil::plugin::ServiceKey<T> where core::marker::PhantomData<fn() -> alloc::sync::Arc<T>>: core::marker::Sync, T: ?core::marker::Sized
@@ -338,6 +351,9 @@ pub const runvil::model::ModelId::GATEWAY: &'static str
 pub const runvil::model::ModelRole::ALL: [runvil::model::ModelRole; 5]
 pub const runvil::model::Role::ALL: &'static [runvil::model::Role]
 pub const runvil::plugin::TOKIO_RUNTIME: &str
+pub const runvil::plugin::Tool::DESCRIPTION: &'static str
+pub const runvil::plugin::Tool::NAME: &'static str
+pub const runvil::plugin::Tool::TRUST: runvil::OutputTrust
 pub enum runvil::ErrorCode
 pub enum runvil::ErrorFact
 pub enum runvil::harness::RecordKind
@@ -348,13 +364,32 @@ pub fn runvil::Error::new(code: runvil::ErrorCode, message: impl core::convert::
 pub fn runvil::Error::with_cause(self, cause: &dyn core::error::Error + 'static) -> runvil::Error
 pub fn runvil::ErrorCode::from_tag(tag: &str) -> core::option::Option<runvil::ErrorCode>
 pub fn runvil::Harness::control(&self) -> runvil::RunControl
-pub fn runvil::Harness::new(host: alloc::sync::Arc<runvil::Host>, prompt: runvil::Prompt, setup: runvil::RunSetup) -> runvil::Harness
+pub fn runvil::Harness::new(host: runvil::Host, prompt: runvil::Prompt, setup: runvil::RunSetup) -> runvil::Harness
+pub fn runvil::Host::new(prompt_folder: impl core::convert::AsRef<std::path::Path>) -> Self
 pub fn runvil::Host::parse(&self, name: &str) -> core::result::Result<runvil::Prompt, runvil::Error>
+pub fn runvil::Host::run(&self, name: impl core::convert::Into<alloc::string::String>) -> runvil::RunBuilder
+pub fn runvil::Host::with_broker(self, broker: impl runvil::harness::InferenceBroker + 'static) -> Self
+pub fn runvil::Host::with_packs(self, registry: impl core::convert::Into<runvil::harness::Packs>) -> Self
+pub fn runvil::Host::with_prompt_finder(self, finder: impl runvil::PromptFinder + 'static) -> Self
+pub fn runvil::Host::with_recorder(self, recorder: impl runvil::harness::RunRecorder + 'static) -> Self
+pub fn runvil::Host::with_timer(self, timer: impl runvil::harness::Timer + 'static) -> Self
 pub fn runvil::Prompt::file(&self) -> &str
 pub fn runvil::Prompt::frontmatter(&self) -> &runvil::prompt::Frontmatter
 pub fn runvil::Prompt::parse(finder: &dyn runvil::PromptFinder, name: &str) -> core::result::Result<runvil::Prompt, runvil::Error>
 pub fn runvil::Prompt::title(&self) -> &str
 pub fn runvil::PromptFinder::find(&self, name: &str) -> core::result::Result<alloc::string::String, runvil::Error>
+pub fn runvil::RunBuilder::args(self, args: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn runvil::RunBuilder::broker(self, broker: impl runvil::harness::InferenceBroker + 'static) -> Self
+pub fn runvil::RunBuilder::input(self, text: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn runvil::RunBuilder::limits(self, limits: runvil::RunLimits) -> Self
+pub fn runvil::RunBuilder::model(self, model: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn runvil::RunBuilder::prepare(self) -> core::result::Result<runvil::Harness, runvil::Error>
+pub fn runvil::RunBuilder::recorder(self, recorder: impl runvil::harness::RunRecorder + 'static) -> Self
+pub fn runvil::RunBuilder::setup(self, setup: runvil::RunSetup) -> Self
+pub fn runvil::RunBuilder::tool_concurrency(self, maximum: core::num::nonzero::NonZeroUsize) -> Self
+pub fn runvil::RunBuilder::vfs(self, vfs: runvil::vfs::VfsRef) -> Self
+pub fn runvil::RunBuilder::with_user(self) -> Self
+pub fn runvil::RunBuilder::workspace_roots(self, roots: impl core::iter::traits::collect::IntoIterator<Item = std::path::PathBuf>) -> Self
 pub fn runvil::RunControl::cancel(&self)
 pub fn runvil::RunControl::send(&self, text: alloc::string::String) -> bool
 pub fn runvil::RunControl::stop_round(&self)
@@ -529,16 +564,23 @@ pub fn runvil::plugin::Pack::ready(&self) -> runvil::BoxFuture<'_, core::result:
 pub fn runvil::plugin::Pack::render<'a>(&'a self, _cx: runvil::plugin::RenderContext<'a>, offered: alloc::vec::Vec<runvil::ToolInfo>) -> runvil::BoxFuture<'a, alloc::vec::Vec<runvil::ToolInfo>> { .. }
 pub fn runvil::plugin::Pack::tools(&self) -> alloc::vec::Vec<runvil::ToolInfo>
 pub fn runvil::plugin::PackFactory::new_pack(&self, id: &runvil::packs::PackId) -> core::result::Result<alloc::sync::Arc<dyn runvil::plugin::Pack>, runvil::Error>
+pub fn runvil::plugin::PackRegistry::define(&mut self, info: runvil::plugin::PackInfo, build: impl core::ops::function::Fn(&mut runvil::plugin::ToolPack) -> core::result::Result<(), runvil::Error> + core::marker::Send + core::marker::Sync + 'static) -> core::result::Result<(), runvil::Error>
 pub fn runvil::plugin::PackRegistry::insert(&mut self, info: runvil::plugin::PackInfo, factory: impl runvil::plugin::PackFactory + 'static) -> core::result::Result<(), runvil::Error>
 pub fn runvil::plugin::PackRegistry::insert_unavailable(&mut self, info: runvil::plugin::PackInfo, reason: runvil::Error) -> core::result::Result<(), runvil::Error>
 pub fn runvil::plugin::PackRegistry::into_entries(self) -> impl core::iter::traits::iterator::Iterator<Item = (runvil::plugin::PackInfo, runvil::packs::PackId, core::result::Result<alloc::sync::Arc<dyn runvil::plugin::PackFactory>, runvil::Error>)>
 pub fn runvil::plugin::PackRegistry::list(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&runvil::plugin::PackInfo, runvil::plugin::PackOrigin)>
 pub fn runvil::plugin::PackRegistry::new() -> runvil::plugin::PackRegistry
 pub fn runvil::plugin::RenderContext::new(entry: &'a str, model: &'a runvil::model::ModelInfo) -> Self
+pub fn runvil::plugin::Tool::call(&self, cx: runvil::plugin::ToolContext<'_>, args: <Self as runvil::plugin::Tool>::Args) -> impl core::future::future::Future<Output = core::result::Result<<Self as runvil::plugin::Tool>::Output, runvil::Error>> + core::marker::Send
 pub fn runvil::plugin::ToolContext::access(&self) -> &'a runvil::vfs::Access
 pub fn runvil::plugin::ToolContext::new(tool: &'a runvil::ToolId, access: &'a runvil::vfs::Access, origin: &'a runvil::effect::ToolCallOrigin) -> Self
 pub fn runvil::plugin::ToolContext::origin(&self) -> &'a runvil::effect::ToolCallOrigin
 pub fn runvil::plugin::ToolContext::tool(&self) -> &'a runvil::ToolId
+pub fn runvil::plugin::ToolPack::add<T: runvil::plugin::Tool>(&mut self, tool: T) -> core::result::Result<(), runvil::Error>
+pub fn runvil::plugin::ToolPack::raw_tool<F, Fut>(&mut self, name: &str, description: impl core::convert::Into<alloc::string::String>, parameters: serde_json::value::Value, handler: F) -> core::result::Result<(), runvil::Error> where F: core::ops::function::Fn(serde_json::value::Value) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = core::result::Result<runvil::ToolOutput, runvil::Error>> + core::marker::Send + 'static
+pub fn runvil::plugin::ToolPack::raw_tool_with_context<F>(&mut self, name: &str, description: impl core::convert::Into<alloc::string::String>, parameters: serde_json::value::Value, handler: F) -> core::result::Result<(), runvil::Error> where F: for<'a> core::ops::function::Fn(runvil::plugin::ToolContext<'a>, serde_json::value::Value) -> runvil::BoxFuture<'a, core::result::Result<runvil::ToolOutput, runvil::Error>> + core::marker::Send + core::marker::Sync + 'static
+pub fn runvil::plugin::ToolPack::tool<Args, Output, F, Fut>(&mut self, name: &str, description: impl core::convert::Into<alloc::string::String>, trust: runvil::OutputTrust, handler: F) -> core::result::Result<(), runvil::Error> where Args: serde_core::de::DeserializeOwned + schemars::JsonSchema + core::marker::Send + 'static, Output: serde_core::ser::Serialize + 'static, F: core::ops::function::Fn(Args) -> Fut + core::marker::Send + core::marker::Sync + 'static, Fut: core::future::future::Future<Output = core::result::Result<Output, runvil::Error>> + core::marker::Send + 'static
+pub fn runvil::plugin::ToolPack::tool_with_context<Args, Output, F>(&mut self, name: &str, description: impl core::convert::Into<alloc::string::String>, trust: runvil::OutputTrust, handler: F) -> core::result::Result<(), runvil::Error> where Args: serde_core::de::DeserializeOwned + schemars::JsonSchema + core::marker::Send + 'static, Output: serde_core::ser::Serialize + 'static, F: for<'a> core::ops::function::Fn(runvil::plugin::ToolContext<'a>, Args) -> runvil::BoxFuture<'a, core::result::Result<Output, runvil::Error>> + core::marker::Send + core::marker::Sync + 'static
 pub fn runvil::prompt::ArgDecl::default(&self) -> core::option::Option<&serde_yaml_ng::value::Value>
 pub fn runvil::prompt::ArgDecl::description(&self) -> core::option::Option<&str>
 pub fn runvil::prompt::ArgDecl::is_optional(&self) -> bool
@@ -736,9 +778,6 @@ pub runvil::ErrorFact::Section
 pub runvil::ErrorFact::Task
 pub runvil::ErrorFact::Tasks
 pub runvil::ErrorFact::ValidUpTo
-pub runvil::Host::packs: runvil::harness::Packs
-pub runvil::Host::prompts: alloc::sync::Arc<dyn runvil::PromptFinder>
-pub runvil::Host::timer: alloc::sync::Arc<dyn runvil::harness::Timer>
 pub runvil::OutputTrust::Trusted
 pub runvil::OutputTrust::Untrusted
 pub runvil::RunLimits::lua_log_events: core::num::nonzero::NonZeroU32
@@ -1177,8 +1216,9 @@ pub runvil::vfs::Writability::ReadOnly
 pub runvil::vfs::Writability::ReadWrite
 pub struct runvil::Error { .. }
 pub struct runvil::Harness { /* private fields */ }
-pub struct runvil::Host { .. }
+pub struct runvil::Host { /* private fields */ }
 pub struct runvil::Prompt { /* private fields */ }
+pub struct runvil::RunBuilder { /* private fields */ }
 pub struct runvil::RunControl { /* private fields */ }
 pub struct runvil::RunReport { .. }
 pub struct runvil::RunSeed(/* private fields */)
@@ -1205,6 +1245,7 @@ pub struct runvil::plugin::PackRegistry { /* private fields */ }
 pub struct runvil::plugin::ServiceId { /* private fields */ }
 pub struct runvil::plugin::ServiceKey<T: ?core::marker::Sized + core::marker::Send + core::marker::Sync + 'static> { /* private fields */ }
 pub struct runvil::plugin::ToolContext<'a> { /* private fields */ }
+pub struct runvil::plugin::ToolPack { /* private fields */ }
 pub struct runvil::prompt::ArgDecl { /* private fields */ }
 pub struct runvil::prompt::ArgsDecl { /* private fields */ }
 pub struct runvil::prompt::ArgsDeclIter<'a> { /* private fields */ }
@@ -1229,7 +1270,10 @@ pub trait runvil::harness::RunRecorder: core::marker::Send + core::marker::Sync
 pub trait runvil::harness::Timer: core::marker::Send + core::marker::Sync
 pub trait runvil::plugin::Pack: core::marker::Send + core::marker::Sync
 pub trait runvil::plugin::PackFactory: core::marker::Send + core::marker::Sync
+pub trait runvil::plugin::Tool: core::marker::Send + core::marker::Sync + 'static
 pub trait runvil::vfs::Policy: core::marker::Send
 pub trait runvil::vfs::Vfs: core::marker::Send
 pub trait runvil::vfs::VfsAccess: core::marker::Send
 pub type runvil::BoxFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<dyn core::future::future::Future<Output = T> + core::marker::Send + 'a>>
+pub type runvil::plugin::Tool::Args: serde_core::de::DeserializeOwned + schemars::JsonSchema + core::marker::Send
+pub type runvil::plugin::Tool::Output: serde_core::ser::Serialize

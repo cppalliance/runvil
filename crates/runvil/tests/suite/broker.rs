@@ -7,15 +7,13 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use runvil::effect::Round;
 use runvil::event::ReplyOrigin;
-use runvil::harness::{InferenceBroker, MemoryRecorder};
+use runvil::harness::InferenceBroker;
 use runvil::ids::RoundId;
 use runvil::model::{
     Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
     ModelInfo, ThinkingMode, ToolSchema,
 };
-use runvil::{BoxFuture, Error, RunSetup};
-
-use crate::support::{launch, no_packs};
+use runvil::{BoxFuture, Error, Host};
 
 /// The one model the scripted broker lists and the Host selects.
 const MODEL: &str = "scripted-model";
@@ -81,12 +79,12 @@ async fn a_sections_round_reaches_the_broker_as_chat_and_a_nested_infer_round_as
         catalog,
         rounds: Mutex::new(Vec::new()),
     });
-    let setup = RunSetup {
-        selected_model: Some(MODEL.to_owned()),
-        ..RunSetup::new(Arc::new(MemoryRecorder::new()), broker.clone())
-    };
-    let report = launch(no_packs(), INFERS_THEN_CHATS, setup)
-        .run()
+    let host = Host::new(".")
+        .with_broker(broker.clone())
+        .with_prompt_finder(|_: &str| Ok(INFERS_THEN_CHATS.to_owned()));
+    let report = host
+        .run("rounds.md")
+        .model(MODEL)
         .await
         .expect("the run is reported");
 

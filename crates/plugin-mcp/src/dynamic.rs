@@ -246,7 +246,7 @@ impl Mcp {
                 .with_status(|status| namespace_entry(name, status, true)),
             (Some(name), Some(tool)) => self.namespace(name)?.with_status(|status| {
                 let Status::Ready(ready) = status else {
-                    return Ok(namespace_entry(name, status, true));
+                    return Ok::<Value, Error>(namespace_entry(name, status, true));
                 };
                 let listed = ready
                     .tools

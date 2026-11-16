@@ -190,15 +190,15 @@ async fn a_timer_effect_is_answered_after_its_duration() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn a_pending_timer_is_torn_down_by_a_cancel() {
     let (recorder, run_id) = begun_log().await;
     let timer = SleepTimer::default();
     let dropped = Arc::clone(&timer.dropped);
     let cancel = CancelHandle::new();
     let trigger = cancel.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(50));
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(50)).await;
         trigger.cancel();
     });
 

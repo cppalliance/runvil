@@ -9,7 +9,7 @@ use runvil_engine::RunLimits;
 use runvil_engine::vfs::VfsRef;
 
 use crate::performers::InferenceBroker;
-use crate::recorder::RunRecorder;
+use crate::recorder::{MemoryRecorder, RunRecorder};
 
 /// The tool calls a run has in flight at once unless its setup says
 /// otherwise.
@@ -65,6 +65,20 @@ impl RunSetup {
             max_tool_calls_in_flight: DEFAULT_MAX_TOOL_CALLS_IN_FLIGHT,
             has_user: false,
         }
+    }
+}
+
+impl Default for RunSetup {
+    /// A fresh in-memory filesystem and recorder, no models, and the
+    /// limits documented by [`new`](Self::new). This runs script-only
+    /// prompts; supply a broker for
+    /// model calls. Every run is still recorded, and its private record
+    /// is released when the setup is dropped.
+    fn default() -> Self {
+        Self::new(
+            Arc::new(MemoryRecorder::new()),
+            Arc::new(crate::offline::Offline),
+        )
     }
 }
 

@@ -98,11 +98,12 @@ pub(super) async fn run_prompt_over(
     let recorder = Arc::new(MemoryRecorder::new());
     let conversation = Conversations::new().open("browses");
     let mut errors = conversation.subscribe_errors();
-    let host = Arc::new(Host {
-        packs,
-        prompts: Arc::new(move |_: &str| -> Result<String, Error> { Ok(source.clone()) }),
-        timer: Arc::new(TokioTimer),
-    });
+    let host = Arc::new(
+        Host::new(".")
+            .with_packs(packs)
+            .with_prompt_finder(move |_: &str| -> Result<String, Error> { Ok(source.clone()) })
+            .with_timer(TokioTimer),
+    );
     let setup = RunSetup {
         vfs,
         has_user: true,

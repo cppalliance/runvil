@@ -11,6 +11,8 @@ publish = false
 [dependencies]
 runvil-types.workspace = true
 runvil-vfs.workspace = true
+schemars.workspace = true
+serde.workspace = true
 # The JSON a Pack's configuration and every tool call's arguments arrive as.
 serde_json.workspace = true
 

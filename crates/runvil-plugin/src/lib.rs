@@ -110,11 +110,16 @@ mod registry;
 mod service;
 #[cfg(feature = "test-support")]
 pub mod testing;
+mod tool;
+mod tool_pack;
+mod tool_schema;
 
 pub use context::{RenderContext, ToolContext};
 pub use pack::{Pack, PackFactory, PackInfo};
 pub use registry::{PackOrigin, PackRegistry};
 pub use service::{HostServices, ServiceId, ServiceKey, TOKIO_RUNTIME};
+pub use tool::Tool;
+pub use tool_pack::ToolPack;
 
 pub use runvil_types::error::{Error, ErrorCode, ErrorFact, SourceLoc};
 pub use runvil_types::future::BoxFuture;

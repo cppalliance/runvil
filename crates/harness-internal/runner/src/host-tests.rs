@@ -15,7 +15,6 @@ use runvil_plugin::{
 use serde_json::Value;
 
 use super::Host;
-use crate::packs::Packs;
 use crate::performers::Timer;
 
 /// A Pack with no tools that answers no call.
@@ -83,16 +82,15 @@ fn host(sources: &[(&str, String)]) -> Host {
         .iter()
         .map(|(name, source)| ((*name).to_owned(), source.clone()))
         .collect();
-    Host {
-        packs: Packs::new(registry),
-        prompts: Arc::new(move |name: &str| {
+    Host::new(".")
+        .with_packs(registry)
+        .with_prompt_finder(move |name: &str| {
             sources
                 .get(name)
                 .cloned()
                 .ok_or_else(|| missing_prompt(name))
-        }),
-        timer: Arc::new(Instant),
-    }
+        })
+        .with_timer(Instant)
 }
 
 /// The finder's failure for a prompt it has no source for.
@@ -178,4 +176,15 @@ fn a_parse_failure_comes_back_as_given_before_any_uses_check() {
         .parse("research.md")
         .expect_err("the parse fails first");
     assert_eq!(error, expected);
+}
+
+#[test]
+fn the_default_timer_can_be_polled_without_a_runtime_and_does_not_block() {
+    use std::task::{Context, Poll, Waker};
+    let host = Host::new(".");
+    let mut sleep = host.timer.sleep(Duration::from_secs(60));
+    assert!(matches!(
+        sleep.as_mut().poll(&mut Context::from_waker(Waker::noop())),
+        Poll::Pending
+    ));
 }

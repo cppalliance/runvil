@@ -387,11 +387,10 @@ impl AgentSessions {
             config.agents.plugins.as_deref(),
         );
         let agents_path = config.agents.path.clone();
-        let host = Host {
-            packs,
-            prompts: Arc::new(agent_finder(agents_path.clone())),
-            timer: Arc::new(TokioTimer),
-        };
+        let host = Host::new(&agents_path)
+            .with_packs(packs)
+            .with_prompt_finder(agent_finder(agents_path.clone()))
+            .with_timer(TokioTimer);
         Self {
             inner: Arc::new(Inner {
                 agents_path,

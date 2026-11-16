@@ -81,6 +81,47 @@ impl Default for PackRegistry {
 }
 
 impl PackRegistry {
+    /// Defines a Pack with async tool handlers, without implementing
+    /// [`Pack`]. `build` runs once per run that holds this Pack, with a
+    /// fresh [`ToolPack`](crate::ToolPack); it must not block or do I/O.
+    /// Capture shared clients outside `build`, and create per-run state
+    /// inside it. Each handler follows [`Pack::call`]'s rules.
+    ///
+    ///
+    /// ```text
+    /// use runvil_plugin::{OutputTrust, PackInfo, PackRegistry};
+    /// use schemars::JsonSchema;
+    /// use serde::Deserialize;
+    ///
+    /// #[derive(Deserialize, JsonSchema)]
+    /// struct Greeting {
+    ///     /// The person to greet.
+    ///     name: String,
+    /// }
+    ///
+    /// let mut packs = PackRegistry::new();
+    /// packs.define(PackInfo::new("acme/greetings"), |pack| {
+    ///     pack.tool("hello", "Greet someone", OutputTrust::Trusted,
+    ///         |args: Greeting| async move { Ok(format!("Hello, {}!", args.name)) })
+    /// })?;
+    /// ```
+    ///
+    /// # Errors
+    /// Refuses the same registrations as [`insert`](Self::insert).
+    /// An error from `build`, including an invalid or duplicate tool
+    /// name, makes the Pack unavailable to that run alone.
+    pub fn define(
+        &mut self,
+        info: PackInfo,
+        build: impl Fn(&mut crate::ToolPack) -> Result<(), Error> + Send + Sync + 'static,
+    ) -> Result<(), Error> {
+        self.insert(info, move |id: &PackId| {
+            let mut pack = crate::ToolPack::new(id.clone());
+            build(&mut pack)?;
+            Ok(Arc::new(pack) as Arc<dyn Pack>)
+        })
+    }
+
     /// A registry holding only the built-ins.
     #[must_use]
     pub fn new() -> PackRegistry {

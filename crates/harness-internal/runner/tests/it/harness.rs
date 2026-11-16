@@ -69,7 +69,11 @@ pub(crate) fn launch(
     source: &str,
     setup: RunSetup,
 ) -> Harness {
-    Harness::new(host_over(packs, timer), parsed(source), setup)
+    Harness::new(
+        host_over(packs, timer).as_ref().clone(),
+        parsed(source),
+        setup,
+    )
 }
 
 /// A Host's Packs with none but the built-ins.

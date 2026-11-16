@@ -6,22 +6,37 @@
 //! files; and the Plugin contract. Code that steps a run itself, as the
 //! Harness does, takes the Engine's stepping items from `runvil-engine`.
 //!
-//! A Host makes a [`plugin::PackRegistry`], calls each Plugin it links,
-//! which inserts its Packs into the registry, and builds one
-//! [`harness::Packs`] over it, which keeps each Pack's factory.
-//! It builds one [`Host`] at startup over those Packs, a
-//! [`PromptFinder`], and its [`harness::Timer`], which also stamps each
-//! run's start as a [`Timestamp`], and shares it behind an `Arc`.
-//! [`Host::parse`] finds a prompt by its name and parses it. For each run
-//! the launcher builds a [`RunSetup`] with the run's recorder, inference
-//! broker, filesystem, model selection, workspace roots, [`RunLimits`],
-//! tool-call cap, arguments, input text, and whether a user answers it,
-//! and [`Harness::new`] takes the Host, the parsed prompt, and that setup.
-//! [`Harness::run`] runs the prompt to its end and returns its
-//! [`RunReport`]. The run makes its own instance of each Pack it holds
-//! and drops the instances when it ends. While the run goes on, the
-//! launcher sends its main chain messages and steers it through the
-//! [`RunControl`] it took from `Harness::control` before the run started.
+//! Configure a [`Host`] once; each [`Host::run`] returns an owned builder
+//! that you configure and await. No smart pointers or runtime adapters are
+//! needed for the common path. A run gets a fresh in-memory filesystem and
+//! temporary recorder unless you supply them. Script-only prompts need no
+//! broker; model calls use the broker supplied with [`Host::with_broker`].
+//!
+//! ```text
+//! use runvil::Host;
+//!
+//! let host = Host::new("./prompts");
+//! let report = host.run("greet.md").input("desk").await?;
+//! report.result?;
+//! println!("{}", report.output?);
+//! ```
+//!
+//! Install tools with [`plugin::PackRegistry::define`]. Its factory runs
+//! once per run that holds the Pack, and adds typed async functions through
+//! [`plugin::ToolPack::tool`]. Rust argument types supply their JSON schemas
+//! and decoding; Rust results are serialized automatically. Raw JSON and
+//! borrowed-context handlers are available when needed. Stateful tools can
+//! implement [`plugin::Tool`] with an ordinary async method that borrows
+//! their configuration, and register through [`plugin::ToolPack::add`]. Implement
+//! [`plugin::Pack`] directly for dynamic tool lists or custom rendering.
+//!
+//! For interactive runs, call [`RunBuilder::prepare`], take the Harness's
+//! [`RunControl`], then call [`Harness::run`]. Preparing parses without
+//! recording or execution. A control can send messages, stop a model round,
+//! or cancel the run. For callers that already parsed a prompt,
+//! [`Harness::new`] takes an owned Host snapshot, [`Prompt`], and explicit
+//! [`RunSetup`]. Hosts and their snapshots share service and Pack factories;
+//! each run constructs and drops its own Pack instances.
 //!
 //! Every run gets a record and ends with its result: the final text, or
 //! the error that ended it, where a cancel is the error whose code is
@@ -31,10 +46,12 @@
 //! refusal: a recorder that refuses a write. A prompt that fails to parse
 //! is the caller's error from [`Host::parse`] and leaves no run record.
 //!
-//! The crate's `run-prompt` example runs one prompt from start to end.
+//! The `run-prompt` example runs a prompt end to end. The `nash` example
+//! shows an HTTP tool with typed arguments and output, without JSON plumbing.
 
 pub use harness_runner::Harness;
 pub use harness_runner::Host;
+pub use harness_runner::RunBuilder;
 pub use harness_runner::RunControl;
 pub use harness_runner::RunReport;
 pub use harness_runner::RunSetup;
@@ -114,7 +131,9 @@ pub mod plugin {
     pub use runvil_plugin::ServiceId;
     pub use runvil_plugin::ServiceKey;
     pub use runvil_plugin::TOKIO_RUNTIME;
+    pub use runvil_plugin::Tool;
     pub use runvil_plugin::ToolContext;
+    pub use runvil_plugin::ToolPack;
 }
 
 pub mod effect {

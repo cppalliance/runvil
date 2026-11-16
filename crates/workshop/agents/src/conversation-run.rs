@@ -48,7 +48,7 @@ impl Conversation {
                 return;
             }
         };
-        let harness = Harness::new(host, prompt, setup);
+        let harness = Harness::new(host.as_ref().clone(), prompt, setup);
         {
             let mut control = lock(&self.core.control);
             let held = control.insert(harness.control());

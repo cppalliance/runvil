@@ -309,8 +309,10 @@ async fn send_large_frame_then_disconnect(
     ws: WebSocketUpgrade,
 ) -> Response {
     ws.on_upgrade(move |mut socket| async move {
+        // Fill the browser's socket buffers without exceeding the relay's
+        // default 16 MiB WebSocket frame limit.
         if socket
-            .send(Message::Binary(vec![0x5a; 32 * 1024 * 1024].into()))
+            .send(Message::Binary(vec![0x5a; 16 * 1024 * 1024].into()))
             .await
             .is_ok()
         {

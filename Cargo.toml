@@ -79,6 +79,8 @@ workshop-plugin-bashkit = { path = "crates/workshop/plugin-bashkit" }
 # `getopts` binary.
 pulldown-cmark = { version = "0.12", default-features = false }
 serde = { version = "1", features = ["derive"] }
+# Derive tool argument schemas from the same Rust types used to decode calls.
+schemars = "1"
 serde_yaml_ng = "0.10"
 # `float_roundtrip` makes `from_str` reproduce the exact `f64` that
 # `to_string` printed, so a payload the run log stores reads back bit-for-bit.
@@ -118,6 +120,8 @@ tokio-tungstenite = "0.29"
 async-trait = "0.1"
 flate2 = "1"
 futures-util = "0.3"
+# Executor-independent sleeps for the default Host timer.
+futures-timer = "3"
 mlua = { version = "0.12", features = ["lua55", "vendored", "serialize", "send"] }
 # 1.x rather than 0.8 so the resolver unifies with the copy tauri-utils
 # already pulls in, instead of compiling two toml lines (and the 0.8 line's

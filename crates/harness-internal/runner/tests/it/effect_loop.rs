@@ -53,12 +53,13 @@ async fn begun_log() -> (Arc<MemoryRecorder>, RunId) {
     (recorder, run_id)
 }
 
-/// Fires `cancel` from another thread after `delay`: the Host's cancel
-/// arriving while the loop waits, from outside the run's own future.
+/// Fires `cancel` on the test clock after `delay`, outside the run's
+/// own future. Paused time keeps construction and scheduling load from
+/// canceling a run before the effects under test have started.
 fn cancel_after(cancel: &CancelHandle, delay: Duration) {
     let trigger = cancel.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(delay);
+    tokio::spawn(async move {
+        tokio::time::sleep(delay).await;
         trigger.cancel();
     });
 }
@@ -195,7 +196,7 @@ async fn await_raised(flag: &AtomicBool, what: &str) {
     panic!("{what} within a second");
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn a_cancel_writes_one_dropped_answer_per_outstanding_effect() {
     let (recorder, run_id) = begun_log().await;
     let timer_dropped = Arc::new(AtomicBool::new(false));
@@ -413,7 +414,7 @@ async fn a_run_left_with_nothing_to_await_ends_recorded_with_an_internal_error()
     );
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn a_run_waiting_for_input_with_nothing_in_flight_waits_for_a_cancel_instead_of_stalling() {
     let (recorder, run_id) = begun_log().await;
     let cancel = CancelHandle::new();

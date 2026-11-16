@@ -8,78 +8,117 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use runvil_engine::{Error, ErrorCode, Prompt, PromptFinder};
-use runvil_plugin::{BoxFuture, Pack, PackId, PackInfo, PackRegistry};
+use runvil_plugin::{BoxFuture, PackRegistry};
 
 use crate::packs::Packs;
-use crate::performers::Timer;
+use crate::performers::{InferenceBroker, Timer};
+use crate::recorder::{MemoryRecorder, RunRecorder};
+use crate::{RunBuilder, RunSetup};
 
-
+/// An executor-independent timer backed by the timer library's shared thread.
 struct Clock;
 
 impl Timer for Clock {
     fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()> {
-        // TODO: consider tokio::sleep to avoid blocking the thread
-        Box::pin(async move { std::thread::sleep(duration) })
+        Box::pin(futures_timer::Delay::new(duration))
     }
 }
 
-
 /// What every run of one Host shares: its installed Packs, how it finds
-/// prompts, and its timer. A Host builds one and shares it behind an
-/// `Arc`.
+/// prompts, its timer, and its default broker and recorder. Configure it
+/// once, then call [`run`](Self::run) for each invocation. Clones share
+/// services and Pack factories; every run gets fresh Pack instances and
+/// a fresh in-memory filesystem unless the caller supplies one.
+#[derive(Clone)]
 pub struct Host {
     /// Every Pack the Host installed in its registry, whose factories
     /// make each run's instances.
-    pub packs: Packs,
+    pub(crate) packs: Packs,
     /// Finds each prompt's source by its name.
-    pub prompts: Arc<dyn PromptFinder>,
+    pub(crate) prompts: Arc<dyn PromptFinder>,
     /// Performs every run's `Timer` effects.
-    pub timer: Arc<dyn Timer>,
+    pub(crate) timer: Arc<dyn Timer>,
+    broker: Arc<dyn InferenceBroker>,
+    recorder: Option<Arc<dyn RunRecorder>>,
 }
 
 impl Host {
     /// Creates a new [`Host`] with the given folder containing prompts.
-    /// 
-    /// The `Host` is given a default implementation of timer using `Clock`.
+    ///
+    /// Uses an executor-independent, nonblocking timer and the built-in
+    /// Packs. Prompt paths are resolved relative to the folder; this
+    /// finder does not confine paths to that folder.
+    #[must_use]
     pub fn new(prompt_folder: impl AsRef<std::path::Path>) -> Self {
         let prompt_location = prompt_folder.as_ref().to_path_buf();
 
-        let prompts = move | name: &str| {
-            let prompt_location             = prompt_location.join(name);
-            std::fs::read_to_string(&prompt_location)
-                .map_err(|io| {
-                    let code = ErrorCode::from(io.kind());
-                    let message = format!("{}: {io}", prompt_location.display());
-                    Error::new(code, message,code.prose())
-                })
-
+        let prompts = move |name: &str| {
+            let prompt_location = prompt_location.join(name);
+            std::fs::read_to_string(&prompt_location).map_err(|io| {
+                let code = ErrorCode::from(io.kind());
+                let message = format!("{}: {io}", prompt_location.display());
+                Error::new(code, message, code.prose())
+            })
         };
 
         Self {
             packs: Packs::new(PackRegistry::new()),
             prompts: Arc::new(prompts),
             timer: Arc::new(Clock),
+            broker: Arc::new(crate::offline::Offline),
+            recorder: None,
         }
     }
 
-    /// Replace the current [`PromptFinder`] with `finder`.
+    /// Replaces the current [`PromptFinder`] with `finder`.
+    #[must_use]
     pub fn with_prompt_finder(mut self, finder: impl PromptFinder + 'static) -> Self {
         self.prompts = Arc::new(finder);
         self
     }
 
-    /// Replace the current [`Packs`] with those installed by `registry`
-    pub fn with_packs(mut self, registry: PackRegistry) -> Self {
-        self.packs = Packs::new(registry);
+    /// Replaces the current [`Packs`] with those installed by `registry`.
+    #[must_use]
+    pub fn with_packs(mut self, registry: impl Into<Packs>) -> Self {
+        self.packs = registry.into();
         self
     }
 
-    /// Replace the current [`Timer`] with `timer`.
+    /// Replaces the current [`Timer`] with `timer`.
+    #[must_use]
     pub fn with_timer(mut self, timer: impl Timer + 'static) -> Self {
         self.timer = Arc::new(timer);
         self
     }
 
+    /// Uses `broker` for every run unless that run overrides it.
+    /// Accepts a concrete broker or an `Arc` shared with the application.
+    #[must_use]
+    pub fn with_broker(mut self, broker: impl InferenceBroker + 'static) -> Self {
+        self.broker = Arc::new(broker);
+        self
+    }
+
+    /// Records every run through `recorder` unless that run overrides it.
+    /// Without this setting each run has its own temporary memory record.
+    #[must_use]
+    pub fn with_recorder(mut self, recorder: impl RunRecorder + 'static) -> Self {
+        self.recorder = Some(Arc::new(recorder));
+        self
+    }
+
+    /// Configures a named run. Await the builder to run it, or call
+    /// [`RunBuilder::prepare`] to take its control before starting it.
+    /// Nothing is parsed or executed until then. The builder owns its
+    /// configuration and can outlive this Host.
+    pub fn run(&self, name: impl Into<String>) -> RunBuilder {
+        let recorder = self
+            .recorder
+            .clone()
+            .unwrap_or_else(|| Arc::new(MemoryRecorder::new()));
+        let setup = RunSetup::new(recorder, Arc::clone(&self.broker));
+        RunBuilder::new(self.clone(), name.into(), setup)
+    }
 
     /// Parses the prompt `name` with `Prompt::parse` over `prompts`, then
     /// checks its `uses:` against `packs`. Returns the parse failure, a

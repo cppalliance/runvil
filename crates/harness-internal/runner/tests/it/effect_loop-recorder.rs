@@ -122,7 +122,7 @@ async fn a_recorder_error_under_another_code_ends_the_drive_as_a_recorder_failur
     );
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn a_recorder_that_refuses_an_answer_aborts_the_performers_still_out() {
     // Two effects are out in the first step, a timer that never fires and
     // a tool call that answers at once. A run canceled after the answer

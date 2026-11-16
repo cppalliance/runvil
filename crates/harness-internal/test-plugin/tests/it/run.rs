@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use harness_plugin_loader::{PluginReport, insert_plugin_dir};
 use runvil::effect::Round;
-use runvil::harness::{InferenceBroker, MemoryRecorder, Packs, Timer};
+use runvil::harness::{InferenceBroker, MemoryRecorder, Timer};
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     make_completion_error, phrase,
@@ -68,21 +68,22 @@ fn host_over(dir: &Path, source: String) -> (Arc<Host>, PluginReport) {
     let mut packs = PackRegistry::new();
     let report = insert_plugin_dir(&mut packs, dir).expect("the directory reads");
     assert!(report.failures().is_empty(), "{:?}", report.failures());
-    let host = Arc::new(Host {
-        packs: Packs::new(packs),
-        prompts: Arc::new(move |name: &str| {
-            if name == PROMPT {
-                return Ok(source.clone());
-            }
-            let code = ErrorCode::NotFound;
-            Err(Error::new(
-                code,
-                format!("no prompt named {name}"),
-                code.prose(),
-            ))
-        }),
-        timer: Arc::new(Clock),
-    });
+    let host = Arc::new(
+        Host::new(".")
+            .with_packs(packs)
+            .with_prompt_finder(move |name: &str| {
+                if name == PROMPT {
+                    return Ok(source.clone());
+                }
+                let code = ErrorCode::NotFound;
+                Err(Error::new(
+                    code,
+                    format!("no prompt named {name}"),
+                    code.prose(),
+                ))
+            })
+            .with_timer(Clock),
+    );
     (host, report)
 }
 
@@ -98,7 +99,7 @@ fn harness_over(host: &Arc<Host>, vfs: VfsRef) -> Harness {
         vfs,
         ..RunSetup::new(Arc::new(MemoryRecorder::new()), Arc::new(Offline))
     };
-    Harness::new(Arc::clone(host), prompt, setup)
+    Harness::new(host.as_ref().clone(), prompt, setup)
 }
 
 #[tokio::test]

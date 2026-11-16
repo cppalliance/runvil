@@ -24,6 +24,7 @@
 //! an `Internal` error.
 
 use std::fmt;
+use std::sync::Arc;
 
 use runvil_engine::{BoxFuture, Error, ErrorCode, ErrorFact};
 use runvil_engine::{RunSeed, Timestamp};
@@ -111,6 +112,24 @@ pub trait RunRecorder: Send + Sync {
         run: RunId,
         result: Result<String, Error>,
     ) -> BoxFuture<'_, Result<(), Error>>;
+}
+
+impl<T: RunRecorder + ?Sized> RunRecorder for Arc<T> {
+    fn begin_run(&self, meta: RunMeta) -> BoxFuture<'_, Result<RunId, Error>> {
+        (**self).begin_run(meta)
+    }
+
+    fn append(&self, run: RunId, record: Record) -> BoxFuture<'_, Result<(), Error>> {
+        (**self).append(run, record)
+    }
+
+    fn end_run(
+        &self,
+        run: RunId,
+        result: Result<String, Error>,
+    ) -> BoxFuture<'_, Result<(), Error>> {
+        (**self).end_run(run, result)
+    }
 }
 
 /// The id a recorder assigns to a run.

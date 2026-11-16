@@ -238,6 +238,8 @@ derives runvil_engine::vfs::VfsPathBuf: Clone, Debug, Eq, Hash, Ord, PartialEq, 
 derives runvil_engine::vfs::VfsRef: Clone, Debug, Default
 derives runvil_engine::vfs::VfsRefBuilder: Debug
 derives runvil_engine::vfs::Writability: Clone, Copy, Debug, Eq, Hash, PartialEq
+impl core::convert::From<core::io::error::Error> for runvil_engine::Error
+impl core::convert::From<core::io::error::ErrorKind> for runvil_engine::ErrorCode
 impl core::convert::From<runvil_engine::ids::ChainId> for runvil_engine::ids::TaskId
 impl core::convert::From<runvil_engine::vfs::VfsPath> for runvil_engine::vfs::VfsPathBuf
 impl core::error::Error for runvil_engine::Error

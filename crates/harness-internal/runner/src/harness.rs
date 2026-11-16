@@ -1,8 +1,8 @@
 //! The per-run Harness: one object per run of a parsed prompt, which
 //! drives that one run as a single future.
 //!
-//! A launcher builds a [`Harness`] from the Host it shares behind an
-//! `Arc`, the prompt `Host::parse` returned, and the run's own
+//! A launcher builds a [`Harness`] from an owned Host snapshot, the
+//! prompt `Host::parse` returned, and the run's own
 //! [`RunSetup`], takes the run's [`RunControl`], and awaits
 //! [`Harness::run`] on whatever executor it likes. The run begins its
 //! record, resolves the run's model through the setup's broker, prepares
@@ -37,11 +37,11 @@ use crate::setup::RunSetup;
 
 /// Drives one run of a prompt for a Host.
 ///
-/// It holds what the run needs: the Host it shares with every other run,
+/// It owns what the run needs: its snapshot of the Host configuration,
 /// the parsed prompt, and the run's own setup. [`Harness::run`] consumes
 /// it.
 pub struct Harness {
-    host: Arc<Host>,
+    host: Host,
     prompt: Prompt,
     setup: RunSetup,
     control: RunControl,
@@ -118,7 +118,7 @@ impl Harness {
     /// flight; the rest wait and start oldest first. All of this work
     /// happens in [`Harness::run`].
     #[must_use]
-    pub fn new(host: Arc<Host>, prompt: Prompt, setup: RunSetup) -> Harness {
+    pub fn new(host: Host, prompt: Prompt, setup: RunSetup) -> Harness {
         let control = RunControl::new(CancelHandle::new());
         Harness {
             host,

@@ -827,7 +827,6 @@ impl From<std::io::ErrorKind> for ErrorCode {
     }
 }
 
-
 impl From<std::io::Error> for Error {
     fn from(io: std::io::Error) -> Self {
         let code = ErrorCode::from(io.kind());

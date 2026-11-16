@@ -72,18 +72,19 @@ pub(crate) fn registry(packs: &[(PackInfo, Make)]) -> PackRegistry {
 /// prompt: a suite parses its own with [`parsed`], so a prompt the Host's
 /// Packs cannot serve still reaches the run.
 pub(crate) fn host_over(packs: Packs, timer: impl Timer + 'static) -> Arc<Host> {
-    Arc::new(Host {
-        packs,
-        prompts: Arc::new(|name: &str| -> Result<String, Error> {
-            let code = ErrorCode::NotFound;
-            Err(Error::new(
-                code,
-                format!("no prompt named {name}"),
-                code.prose(),
-            ))
-        }),
-        timer: Arc::new(timer),
-    })
+    Arc::new(
+        Host::new(".")
+            .with_packs(packs)
+            .with_prompt_finder(|name: &str| -> Result<String, Error> {
+                let code = ErrorCode::NotFound;
+                Err(Error::new(
+                    code,
+                    format!("no prompt named {name}"),
+                    code.prose(),
+                ))
+            })
+            .with_timer(timer),
+    )
 }
 
 /// `source` parsed as the prompt named `prompt`.

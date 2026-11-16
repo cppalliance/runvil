@@ -65,7 +65,7 @@ pub(super) const FACADES: [Facade; 2] = [
             crate::engine_guards::ENGINE_CONTAINER,
         ],
         public: &["runvil-plugin"],
-        allowed: &["runvil_plugin_sys"],
+        allowed: &["runvil_plugin_sys", "schemars"],
     },
 ];
 

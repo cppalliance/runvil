@@ -56,24 +56,25 @@ pub(crate) fn no_packs() -> Packs {
 /// finds `source` by its name and sleeps on [`Clock`].
 pub(crate) fn launch(packs: Packs, source: &str, setup: RunSetup) -> Harness {
     let source = source.to_owned();
-    let host = Arc::new(Host {
-        packs,
-        prompts: Arc::new(move |name: &str| {
-            if name == PROMPT {
-                return Ok(source.clone());
-            }
-            let code = ErrorCode::NotFound;
-            Err(Error::new(
-                code,
-                format!("no prompt named {name}"),
-                code.prose(),
-            ))
-        }),
-        timer: Arc::new(Clock),
-    });
+    let host = Arc::new(
+        Host::new(".")
+            .with_packs(packs)
+            .with_prompt_finder(move |name: &str| {
+                if name == PROMPT {
+                    return Ok(source.clone());
+                }
+                let code = ErrorCode::NotFound;
+                Err(Error::new(
+                    code,
+                    format!("no prompt named {name}"),
+                    code.prose(),
+                ))
+            })
+            .with_timer(Clock),
+    );
     let prompt = match host.parse(PROMPT) {
         Ok(prompt) => prompt,
         Err(error) => panic!("the suite's prompt parses: {error:?}"),
     };
-    Harness::new(host, prompt, setup)
+    Harness::new(host.as_ref().clone(), prompt, setup)
 }

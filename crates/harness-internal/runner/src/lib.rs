@@ -67,11 +67,13 @@ mod environment;
 pub mod files;
 mod harness;
 mod host;
+mod offline;
 mod packs;
 pub mod performers;
 mod prepare;
 pub mod recorder;
 mod recorder_memory;
+mod run_builder;
 mod setup;
 
 pub use display_chain::display_chain;
@@ -81,4 +83,5 @@ pub use packs::Packs;
 pub use recorder::{
     MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder, make_recorder_error,
 };
+pub use run_builder::RunBuilder;
 pub use setup::RunSetup;
