@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 license = "BSL-1.0"
 repository = "https://github.com/cppalliance/runvil"
@@ -50,7 +50,7 @@ libraries = [{ git = "https://github.com/cppalliance/dylints", rev = "982b297ede
 # differs from this workspace's.
 [workspace.metadata.workshop]
 git = "https://github.com/cppalliance/runvil-workshop"
-rev = "623eb7aa33c84fb3ceb7fc1628845120f607dfb7"
+rev = "3c12833c83aa4953463137a65c21dc2f6220acbb"
 
 [workspace.lints.rust]
 unsafe_code = "deny"
