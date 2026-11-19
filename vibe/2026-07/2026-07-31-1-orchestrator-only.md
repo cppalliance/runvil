@@ -1,6 +1,6 @@
 ---
 name: Runvil Orchestrator Design
-overview: Markdown-driven pipeline runtime (Rust + mlua). A prompt is a function (parameters in, a string out, side effects possible) shaped as a bounded linear pipeline - H2 steps run top to bottom, `---`-marked H2s are subroutines, forks/cycles/fanouts allowed; H3-H6 are document structure, not steps; larger programs compose from multiple prompt files. A file is a runvil prompt only if its YAML frontmatter declares a `runvil:` version; runvil offers a detection function and runs only its own prompts (plain prompts without that version are the caller's concern, not runvil's). Control flow is deterministic and declared in Lua (cycles legal, bounded by budgets); state lives in a run-scoped store/VFS shared by Lua and the model; capabilities (files, shell, network) are injected by the Harness (sandbox or real). Design docs in runvil-design are provisional; this plan and the conversation override them.
+overview: Markdown-driven pipeline runtime (Rust + mlua). A prompt is a function (parameters in, a string out, side effects possible) shaped as a bounded linear pipeline - H2 steps run top to bottom, `---`-marked H2s are subroutines, forks/cycles/fanouts allowed; H3-H6 are document structure, not steps; larger programs compose from multiple prompt files. A file is a runvil prompt only if its YAML frontmatter declares a `runvil:` version; runvil offers a detection function and runs only its own prompts (plain prompts without that version are the caller's concern, not runvil's). Control flow is deterministic and declared in Lua (cycles legal, bounded by budgets); state lives in a run-scoped store/VFS shared by Lua and the model; capabilities (files, shell, network) are injected by the Harness (sandbox or real). Design docs are provisional; this plan and the conversation override them.
 todos:
   - id: mark-docs-provisional
     content: Add provisional status to design document headers. This plan overrides them.
@@ -27,7 +27,7 @@ todos:
     content: "Rung 6: cyclic state-machine pipelines (mentograph-shaped) driven by Lua conditionals. Model-surface transfer stays deferred."
     status: completed
   - id: generate-design-doc
-    content: "Final step, after all rungs: spawn one subagent to read this plan, grep <design-doc>, and write design-runvil-orchestrator.md from the finished build; it supersedes the provisional runvil-design docs."
+    content: "Final step, after all rungs: spawn one subagent to read this plan, grep <design-doc>, and write design-runvil-orchestrator.md from the finished build; it supersedes the provisional docs."
     status: completed
 isProject: false
 ---
@@ -38,7 +38,7 @@ A Rust runtime that executes pipelines defined in a single markdown file. The ma
 
 A prompt is a **function**: parameters in, a string out, side effects possible. It is a **bounded linear pipeline** - forks, cycles, and fanouts are allowed, but it is not a general recursive program and it has a natural size limit. Larger programs are composed from multiple prompt files, each called as a function. **H2 headings are the pipeline steps; H3-H6 are document structure within a step, not steps themselves.**
 
-Design documents in `runvil-design/design/` are **provisional**; this plan and the conversation override them.
+Design documents are **provisional**; this plan and the conversation override them.
 
 ## Built so far
 
@@ -230,15 +230,12 @@ Deferred `rust-how-to.md` conformance (from the repo audit, mechanical fixes alr
 
 ## Key files
 
-- [design-runvil.md](runvil-design/design/design-runvil.md) - prompt language (provisional)
-- [design.md](runvil-design/design/design.md) - system architecture (provisional)
-- [example-diligence.md](runvil-design/example-diligence.md) - idiom-complete teaching example
 - research: `cabinet/_research/2026-07-29-fanout-*` - fan-out / task / budgets prior-art (two rounds)
 - [how-to-write-prompts.md](tools-public/how-to/how-to-write-prompts.md) - prompt engineering rules
 
 ## Design document (generated last)
 
-After **all** implementation is complete, the plan's final step generates the design document - so it reflects what was actually built, not this pre-build sketch. Spawn one subagent whose entire prompt is: *read this plan at its path, grep for `<design-doc>`, and follow the block inside it.* The agent never spawns this generator during design; running the plan does, once the build is done. The generated `design-runvil-orchestrator.md` **supersedes** the provisional docs in `runvil-design/design/`; on generation, the superseded files move to `cabinet/_trash/` per workspace rules.
+After **all** implementation is complete, the plan's final step generates the design document - so it reflects what was actually built, not this pre-build sketch. Spawn one subagent whose entire prompt is: *read this plan at its path, grep for `<design-doc>`, and follow the block inside it.* The agent never spawns this generator during design; running the plan does, once the build is done. The generated `design-runvil-orchestrator.md` **supersedes** the provisional docs; on generation, the superseded files move to `cabinet/_trash/` per workspace rules.
 
 <design-doc>
 OUTPUT A DESIGN DOCUMENT, NOT CODE. Write one markdown file, design-runvil-orchestrator.md,

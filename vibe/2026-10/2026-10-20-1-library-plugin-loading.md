@@ -987,7 +987,6 @@ The loader's unit tests drive the whole contract with fake entry points inserted
   - **A config per Plugin,** passed in `RV_PLUGIN_LOAD`'s arguments. Revisit with `insert_pack`.
   - **The dynamic library's hash in the Pack roster.** Revisit with `insert_pack`.
   - **Workshop loading from its `plugins` workspace directory** (`crates/workshop/workspace/src/workspace_file/siblings.rs`, line 14). Revisit with `insert_pack`.
-  - **Revising the C draft** (`research/2026-10-18-mlua-c-wrapper.md` in the sibling `runvil-design` repository, the earlier design of the full C API, including the Lua API) to this contract: one entry point shape taking `RvCall`, `RvStr` strings, the verbs, the instance pointers, and no `RvPlugin` token. Revisit before the Lua API is built.
 - Out of scope:
   - every verb other than `RV_PLUGIN_LOAD` and `RV_PLUGIN_UNLOAD`
   - Packs, tools, Lua, or mlua through the entry point, and so `PackOrigin::Library`

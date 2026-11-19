@@ -1,6 +1,6 @@
 ---
 name: Exact Markdown Source
-overview: Every parsed block keeps the exact text it came from, the blank lines after it included, so joining the blocks gives back the document. `markdown.render` becomes that join plus two spacing rules, the writer that rebuilt text in a fixed style is deleted, and the guide and design are brought in line.
+overview: Every parsed block keeps the exact text it came from, the blank lines after it included, so joining the blocks gives back the document. `markdown.render` becomes that join plus two spacing rules, the writer that rebuilt text in a fixed style is deleted, and the guide is brought in line.
 todos:
   - id: plan-copy
     content: "runvil: on `master`, copy this plan to `plan/2026-11-12-1-exact-markdown-source.plan.md` before any other change"
@@ -16,9 +16,6 @@ todos:
     status: completed
   - id: verify
     content: "runvil: run every check in AGENTS.md"
-    status: completed
-  - id: design-docs
-    content: "runvil-design: bring the design document and the language spec in line, one commit"
     status: completed
   - id: guide
     content: "runvil-docs: bring the guide's markdown section, selector table, and quick reference in line with examples run against the build, one commit"
@@ -133,7 +130,6 @@ A later version could ask the parser about each such pair. That would be a chang
 
 They are written once the code passes its checks, and committed in their own repositories before the `runvil` commit, so the plan copy can record them as done. They are pushed after it.
 
-- **`runvil-design`:** [the design](https://github.com/cppalliance/runvil-design/blob/master/design/2026-11-11-1-markdown-and-prompt-reads.md) (block model, parsing rules, worked example, edge cases, selectors, `render`, identity, bytes copied, tests to carry over) and [the language spec](https://github.com/cppalliance/runvil-design/blob/master/design/architect-runvil-prompting-language.md). The design is a dated record, so the fixed-style writer and a separate kind for blank lines go under rejected alternatives with their reasons, and the general spacing rule goes under open questions. The spec describes the language as it is.
 - **`runvil-docs`:** the `markdown` section of [05-lua-environment.md](https://github.com/cppalliance/runvil-docs/blob/master/src/language/05-lua-environment.md), the selector table in [03-blocks-and-prose.md](https://github.com/cppalliance/runvil-docs/blob/master/src/language/03-blocks-and-prose.md), and two rows of [17-quick-reference.md](https://github.com/cppalliance/runvil-docs/blob/master/src/language/17-quick-reference.md). Every changed example value comes from a run of the built code.
 
 ## Git and pull requests
@@ -142,7 +138,7 @@ These steps follow the commit, in this order. They are not todos, because the pl
 
 1. The commit goes on `master` of your fork, which is the head of [#210](https://github.com/cppalliance/runvil/pull/210), and is pushed there.
 2. `bash-pack` is rebased onto it, the Workshop checks run again, and it is pushed with `--force-with-lease`, which updates [#211](https://github.com/cppalliance/runvil/pull/211). Your checkout is left on `bash-pack`, as it is now.
-3. `runvil-docs` and `runvil-design` are pushed to `master`. In `runvil-design` that also publishes your unpushed commit `cc16539`, "Add Why Runvil two pagers".
+3. `runvil-docs` is pushed to `master`.
 4. I watch CI on both pull requests, then reply on [the review thread](https://github.com/cppalliance/runvil/pull/211#discussion_r4549082619) with the commit and resolve it.
 
 If CI on #210 finds something, the fix is amended into the same commit and `master` is pushed with `--force-with-lease`, so #210 still gains one commit. `bash-pack` is then rebased and pushed again.
@@ -164,4 +160,4 @@ The design held. These points differ from the plan above, or add to it.
 - **The unknown-kind message** now ends `kinds are frontmatter, section, prose, fence, list, rule, and * selects every block`.
 - **Sizes.** The sample texts are the guide and 74 bodies, 75 in all, where the plan said 75 bodies. `render.rs` is 98 lines with its comments, where the plan said about 40. The field reader removed from `runvil-lua` was about 140 lines.
 - **Verification.** Every check listed passed. One Workshop test, `gateway::tests::recovery::successful_publication_disarms_late_child_cleanup`, failed once in the first run of its set, then passed alone and in a second run of the set. It starts a child process, and this change touches nothing it uses.
-- **Documents.** `runvil-design` commit `f1b91cf` and `runvil-docs` commit `8129065` hold the document changes.
+- **Documents.** `runvil-docs` commit `8129065` holds the document changes.

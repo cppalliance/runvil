@@ -350,7 +350,7 @@ Authors offer a Plugin whole with `plugins.offer`, in the section the call runs 
 ### Deferred and Out of Scope
 
 - Deferred to stage 2, the late-bound plan: model-shaped rendering, listed and unlisted tools, the `tools.offer` error that names a Plugin's listed tools, name-clash numbering, and local tools no longer hiding catalog tools.
-- Out of scope: the separate `runvil-docs` repository and the language spec in `../runvil-design`.
+- Out of scope: the separate `runvil-docs` repository.
 
 </decision-record>
 <project-survey>

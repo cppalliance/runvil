@@ -293,7 +293,7 @@ impl BodyText {
   - `Debug` output for sections and blocks must not change. `BodyText`'s `Debug` delegates to the text's own, so a `{:?}` of a section prints what it printed before.
   - Moving `SlicePath` touches every scheduler file that names it. The compiler finds each one, and each change is an import path.
   - The suggested doc wording may need adjusting to pass the docs-claims scan. The scan decides.
-  - The analysis did not inspect repositories outside `runvil`. A follow-up search found no stale install wording in `runvil-docs`, and only historical hits (old chats, scratch, earlier drafts) in `runvil-design`.
+  - The analysis did not inspect repositories outside `runvil`. A follow-up search found no stale install wording in `runvil-docs`.
 
 ### Deferred and Out of Scope
 

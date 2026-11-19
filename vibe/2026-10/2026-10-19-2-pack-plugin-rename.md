@@ -23,9 +23,6 @@ todos:
   - id: docs
     content: "runvil-docs commit: unit-sense Plugin to Pack, plugins: to uses:, plugins.* to packs.*, .plugin to .pack, Plugin id to Pack id, quoted messages, heading anchors and links; rewrite every passage the reorganization makes false or incomplete (Host installation, Host-chosen ids with the browse and operator examples, undeclared third-party Packs, vendor/name entries), found by search; draft after Step 2, land after Step 5; pass the docs site build, the runvil-docs completeness search, and the anchor check"
     status: completed
-  - id: design
-    content: "runvil-design commit: whole-file placeholder-based name swap in the mlua wrapper report, Appendix A included; superseded status line on the naming report; land after the runvil-docs commit, whose heading names the report's references take"
-    status: completed
   - id: close
     content: "Close commit in runvil, with the subject Close plan: pack-plugin-rename and the Plan: trailer naming the record; mark every todo completed in the record and remove vibe/ACTIVE; push nothing"
     status: completed
@@ -38,14 +35,14 @@ isProject: false
 
 ## Product Requirements
 
-Runvil's code and docs call the named unit of tools and preludes a Plugin, and the 2026-10-18 rename reserved "package" for the crate or dynamic library that ships it. The owner, who is the repository's owner and the source of every quoted decision below, reversed both names: the unit becomes a Pack, "Plugin" moves to the one entry point a crate or dynamic library provides, which installs Packs, and the frontmatter key `uses:` replaces `plugins:`. A crate that provides a Plugin is a Plugin crate. This plan renames the code, the language guide, and the two live design reports to match, shrinks the root `AGENTS.md` to one-line definitions, rebuilds the mcp Pack around two static tools, and then makes the smallest reorganization that puts Plugins in charge: a Host only calls Plugins, and every Pack they register is built. Paths are relative to the `runvil` repository unless they start with `runvil-docs/`, `runvil-design/`, or `wg21-paperflow/`, which are sibling repositories.
+Runvil's code and docs call the named unit of tools and preludes a Plugin, and the 2026-10-18 rename reserved "package" for the crate or dynamic library that ships it. The owner, who is the repository's owner and the source of every quoted decision below, reversed both names: the unit becomes a Pack, "Plugin" moves to the one entry point a crate or dynamic library provides, which installs Packs, and the frontmatter key `uses:` replaces `plugins:`. A crate that provides a Plugin is a Plugin crate. This plan renames the code and the language guide to match, shrinks the root `AGENTS.md` to one-line definitions, rebuilds the mcp Pack around two static tools, and then makes the smallest reorganization that puts Plugins in charge: a Host only calls Plugins, and every Pack they register is built. Paths are relative to the `runvil` repository unless they start with `runvil-docs/` or `wg21-paperflow/`, which are sibling repositories.
 
 - Problem and users:
   - Today a Plugin is the unit with tools and a Lua prelude, installed by its fully qualified name (FQN) under a Plugin id, and "Plugins ship in packages" (`AGENTS.md` line 12). The owner's model is the reverse: a crate or dynamic library provides one entry point, the Plugin, which the Host calls once and which installs zero or more Packs, and each Pack can have zero or more tools, an optional native prelude, and an optional Lua prelude.
   - Today the Host fills the registry, then picks Packs and installs each under an id with its own config. Workshop installs the MCP Pack once per server, under the server's name, with that server's `mcp.json` entry as config (`crates/workshop/server/src/agents.rs` lines 153-190; `crates/plugin-mcp/src/lib.rs` lines 85-125). The owner calls that per-server Pack "broken" and "a mistake".
   - Users: Host authors (Workshop, and Paperweight through a vendored snapshot), Plugin crate authors, coding agents that read `AGENTS.md` and crate docs, and prompt authors through the language guide.
 - Goals:
-  - Every name for the unit in code, messages, docs, and the two live design reports says Pack, following the name map in Technical Design.
+  - Every name for the unit in code, messages, and docs says Pack, following the name map in Technical Design.
   - "Plugin" means only an entry point that installs zero or more Packs, as the root `AGENTS.md` defines it. The crate that provides one is a Plugin crate, and a dynamic library will provide a library Plugin.
   - Prompts declare Packs as `uses: [web, mcp, json]`, and `plugins:` no longer parses.
   - The root `AGENTS.md` defines Pack and Plugin in one line each and keeps no rule that conflicts with the planned design.
@@ -68,7 +65,7 @@ Runvil's code and docs call the named unit of tools and preludes a Plugin, and t
   - `crates/runvil/public-api.txt` is generated: regenerate it, never edit it by hand.
   - Renamed source files keep the flat `parent-label.rs` form with explicit `#[path]` attributes.
   - `runvil-plugin` is an Engine crate for the Engine guards (`crates/build-xtask/src/engine_guards.rs` line 16) and the Engine clippy bans (`crates/runvil-plugin/clippy.toml`). Code and tests that Step 5 moves into it follow the Engine rules: no tokio, no wall clock, no timeouts, and no Harness crate.
-  - Nothing under `vibe/` changes except this plan's own record. In `runvil-design`, only the two reports named in Technical Design change.
+  - Nothing under `vibe/` changes except this plan's own record.
 - Open questions: None
 
 ## Functional Specification
@@ -88,7 +85,7 @@ Prompt authors work as today, under new names: a prompt declares Packs under `us
     - The UI accepts any string id (`run-api.ts` lines 80-88) and only skips the field (`crates/workshop/ui/src/parts/run/run-rows.ts` lines 1-4), so it needs no other change.
   - Tool ids keep their text, such as `web/fetch`. Their first segment is now called the Pack id, and a Pack id is always the second segment of the Pack's FQN, so `runvil/web` is `web`. The FQN's first segment is the vendor, so a Plugin names its vendor through every Pack it adds. Runvil's own Packs use the vendor `runvil`.
   - A `uses:` entry is either a bare Pack id, which always means the `runvil` Pack of that id (`web` means `runvil/web`), or a full `vendor/name`, which is the only way to name a third-party Pack (`acme/poop`).
-  - The mcp Pack (`runvil/mcp`, Pack id `mcp`) takes the whole `mcpServers` object as its config, connects to every server in it, and offers exactly two static tools. They are modeled on Cursor's `GetDynamicTools` and `CallDynamicTool` (`runvil-design/research/2026-10-14-harness-mcp-dynamic-tools.md`, Appendix A, lines 2526-2584), and a namespace is a server's name exactly as written in `mcpServers`:
+  - The mcp Pack (`runvil/mcp`, Pack id `mcp`) takes the whole `mcpServers` object as its config, connects to every server in it, and offers exactly two static tools. They are modeled on Cursor's `GetDynamicTools` and `CallDynamicTool`, and a namespace is a server's name exactly as written in `mcpServers`:
     - `mcp/get_dynamic_tools`, with optional `namespace` and `toolName`. With no arguments it lists each namespace, its status (`ready`, `loading`, or `error` with the reason), and its tools' names and descriptions. With `namespace` it returns every tool of that server as `tool`, `description`, and `inputSchema`. With both it returns one tool.
     - `mcp/call_dynamic_tool`, with required `namespace` and `toolName` and optional `arguments`. It calls that server's tool, as today's per-server call does.
     - Input schemas: `get_dynamic_tools` takes an object with the optional strings `namespace` and `toolName`. `call_dynamic_tool` takes an object with the required strings `namespace` and `toolName` and an optional object `arguments`, which defaults to `{}`. Arguments that are not an object are refused before anything is sent, as today.
@@ -407,14 +404,6 @@ impl HostContext {
     - `runvil-docs/plans/build-language-guide.md` is a dated plan and stays verbatim.
     - Heading anchors change, and so does every link to them. Of the 37 headings that contain "plugin" in any letter case, 11 have incoming links, 80 in all, such as the 23 links to `#tool-objects-and-plugin-objects` and the 20 to `#offering-tools-with-toolsoffer-and-pluginsoffer`. The docs site build does not check fragments, so the anchor check in Testing Plan finds the broken ones.
     - `table.pack` (`language/05-lua-environment.md` line 506) and Lua's `package` library (same file, lines 567-570) stay.
-  - Design reports:
-    - `runvil-design/research/2026-10-18-mlua-c-wrapper.md`, the whole report, with prose to match. The old names run through all of it, not only sections 2 and 3: Appendix A (lines 723-845) is a full C example that uses them, and the contents list, the headings of sections 5.2 and 6.3-6.5, and the references name them too. The references' language guide headings, such as "Declaring Plugins under `plugins:`", take the names the `runvil-docs` commit gives them. Each "plugin" and "package" hit is classified, because Lua's `package` library keeps its name:
-      - `runvil_package_init` becomes `runvil_plugin_init`, `RvPackage` becomes `RvPlugin`, `RvPackageInfo` becomes `RvPluginInfo`, and `describe_package` becomes `describe_plugin`.
-      - The old `RvPluginInfo` becomes `RvPackInfo`, `register_plugin` becomes `register_pack`, `plugin_data` and `plugin_id` become `pack_data` and `pack_id`, and `plugins:` becomes `uses:`.
-      - `RvPluginInfo` exists both before and after with different meanings, so the swap runs in three passes. First, every old Plugin-sense name becomes a unique temporary token, such as `@@PACK_INFO@@` for `RvPluginInfo`. Second, every package-sense name becomes its Plugin name. Third, every token becomes its Pack name. The report has no `@@` today, so afterward a search for `@@` in it prints nothing.
-      - The C example's values and parameters follow the same split: `ACME_URL_PACKAGE` becomes `ACME_URL_PLUGIN`, `URL_PLUGIN` becomes `URL_PACK`, `plugin_id_len` becomes `pack_id_len`, a parameter that holds an `RvPackage` becomes `plugin`, and a parameter of the old `RvPluginInfo` type becomes `pack`. `ACME_URL_PACKAGE` and `URL_PLUGIN` also go through the three passes, because swapping in the wrong order turns `ACME_URL_PLUGIN` into `ACME_URL_PACK`.
-      - Prose names the code as it stands after this plan: `Plugin::call` (line 604) becomes `Pack::call`, the reference at line 701 names `crates/runvil-plugin/src/pack.rs`, `PackInfo`, and the `Pack` trait, and the Vocabulary line (line 8) states the new names.
-    - `runvil-design/research/2026-10-18-runvil-plugin-naming.md` gets one status line at the top saying the 2026-10-19 Pack and Plugin rename supersedes its package and Plugin names. The body stays verbatim.
 - Data, persistence, failure, security, and privacy constraints:
   - The Workshop prompt contract's JSON field changes on the server and in the UI in the same commit.
   - No other serialized format names Plugins. A search of `crates/` for serde renames and quoted `plugin` keys finds only Debug output field names (`crates/harness-internal/runner/src/host.rs` line 215 and `crates/harness-internal/runner/src/host-run.rs` line 248), the Lua global, and Tauri's config. `Frontmatter` derives only `Deserialize`, and `Requirements` and its entries derive no serde, so their renamed fields change no wire format. Old runs are not replayed.
@@ -561,7 +550,6 @@ The owner swapped the two names because the unit is a Pack of tools and preludes
       - Rationale: one bad entry would otherwise take every server down, where today only that server is unavailable; tool names never become tool ids; and a script can read JSON with `json.decode`.
       - An agent recommendation, accepted with this plan.
   - Dated records stay verbatim.
-    - The owner chose: "Leave them verbatim; update only living docs, code, and the two design reports".
   - No replay compatibility work.
     - The owner: "there are no replays of old runs."
   - The two mcp tools' input schemas and descriptions are fixed in Functional Specification.
@@ -623,7 +611,7 @@ The owner swapped the two names because the unit is a Pack of tools and preludes
   - One mcp Pack per configured server:
     - Reason: the owner called it "broken" and "a mistake". It also needed one install per server, which no longer exists.
     - Revisit: none.
-  - The research report's three-tool bridge, `tool_search`, `tool_describe`, and `tool_call` (`runvil-design/research/2026-10-14-harness-mcp-dynamic-tools.md` Section 10, lines 1322-1348):
+  - A research report's three-tool bridge, `tool_search`, `tool_describe`, and `tool_call`:
     - Reason: the owner asked for two tools matching Cursor's.
     - Revisit: if models struggle to find tools without a separate search tool.
   - A trait or function table in `runvil-plugin` instead of passing `PackRegistry` itself:
@@ -681,7 +669,7 @@ The owner swapped the two names because the unit is a Pack of tools and preludes
     - Reason: it would save one full run of the gates, but a rename this wide is easier to review in two halves.
     - Revisit: none.
 - Assumptions, risks, and notes:
-  - Note: "the dynamic-library step" means the planned work that loads Plugins from dynamic libraries through the C API drafted in `runvil-design/research/2026-10-18-mlua-c-wrapper.md`. "The toolset design" means the planned design for naming and offering groups of tools, from the open findings of `runvil-design/research/2026-10-18-runvil-plugin-naming.md`. Neither is written yet.
+  - Note: "the dynamic-library step" means the planned work that loads Plugins from dynamic libraries through the C API drafted in a research report. "The toolset design" means the planned design for naming and offering groups of tools, from the open findings of a research report. Neither is written yet.
   - Note: `json`, `url`, and `markdown` in examples such as `uses: [web, mcp, json]` are illustrative. No such Packs exist today. The Packs that exist are `runvil/web`, `runvil/user-input`, `runvil/mcp`, and the built-in `runvil/subagents`.
   - Note: this reverses the 2026-10-04 decision that retired "pack" as a second name for the unit (`vibe/2026-10/2026-10-04-2-plugin-rename.md` line 208). That record stays verbatim.
   - Note: each crate's constant was `PACKAGE` until 2026-10-18 (`vibe/2026-10-18-2-plugin-registry-rename.md` line 3), is `PLUGIN` now, and becomes private in Step 5, where `install` takes its public place.
@@ -694,7 +682,6 @@ The owner swapped the two names because the unit is a Pack of tools and preludes
   - Note: other senses of "pack" stay: Lua's `table.pack` (`runvil-docs/src/language/05-lua-environment.md` line 506 and `crates/runvil-internal/lua/src/globals-tests.rs` line 321), the verb and "packed" in `crates/build-llama-cuda/src/bundle.rs` and `src/lib.rs` line 7, `crates/runvil-internal/engine/src/execute/tests/scheduler/fanout/scheduling.rs` lines 13 and 119, `crates/runvil-internal/types/src/ids.rs` line 13, and `crates/gateway/stt/README.md` line 79, CodeMirror's language packs in `crates/workshop/ui/src/parts/editor/editor-surface.ts` line 331, the private function `pack_sequence` in `crates/runvil-internal/lua/src/vm.rs`, and the test name `my-pack` in `crates/runvil-internal/types/src/names-tests.rs` line 51. Only the doc of `pack_sequence` changes, because it opens with the capitalized "Packs".
   - Risk: classifying "Plugin" in prose is manual, and mixed sentences such as "links the Plugin crate into the Host" keep "Plugin". The completeness searches and a read of every remaining hit catch mistakes.
   - Risk: renamed headings in the language guide break links, and the docs site build's link check does not catch a broken fragment, because it confirms only that the linked file exists (`crates/build-xtask/src/site.rs`, `resolve`). The anchor check in Testing Plan catches them.
-  - Risk: the mlua report uses lowercase "plugin" loosely (lines 584-606, and sections 5 and 6). Each occurrence is classified as Pack or Plugin.
   - Risk: crate prose that the reorganization makes false has no zero-hit gate. Step 5's prose search finds the candidates, and each hit is read.
 
 ### Deferred and Out of Scope
@@ -702,8 +689,8 @@ The owner swapped the two names because the unit is a Pack of tools and preludes
 - Deferred: the dynamic-library entry point and its C function table, and any `PackSet` type. Revisit in the dynamic-library step.
 - Deferred: native preludes. Revisit in the dynamic-library step.
 - Deferred: the rest of Cursor's pair for MCP: `pattern` search, short descriptions in the listing, `mcpDetails`, and an authentication flow. Revisit when MCP use shows the need.
-- Deferred: tool identity and selection: whether Lua names tools, toolsets chosen by behavior traits, and wire names. These are the open findings F1, F2, and F5 in `runvil-design/research/2026-10-18-runvil-plugin-naming.md` (Table 1). F6, who picks Pack ids, is settled here: nobody does, because the id is the FQN's second segment. Revisit in the toolset design.
-- Out of scope: `vibe/` (apart from this plan's record), and `runvil-design` chats, huddles, datasets, and dated research other than the two reports.
+- Deferred: tool identity and selection: whether Lua names tools, toolsets chosen by behavior traits, and wire names. These are the open findings F1, F2, and F5 in a research report. F6, who picks Pack ids, is settled here: nobody does, because the id is the FQN's second segment. Revisit in the toolset design.
+- Out of scope: `vibe/` (apart from this plan's record).
 - Out of scope: `wg21-paperflow/vendor/runvil` and Paperweight. The snapshot predates the 2026-10-18 rename (it still has `crates/harness-internal/runner/src/packages.rs`) and picks up both renames when it is next vendored.
 
 </decision-record>
@@ -733,7 +720,6 @@ The repositories, their starting points, the tools, and the commands every gate 
   - Repositories, each clean on `master` when this plan was written. Every line number in this plan refers to these commits. Where a cited line no longer matches, find the passage by its quoted text.
     - `runvil` at `c:\Users\Vinnie\cursor\runvil`, commit `fc4a1c0ed`
     - `runvil-docs` at `c:\Users\Vinnie\cursor\runvil-docs`, commit `5bead4f34`, with the language guide under `src/language/`
-    - `runvil-design` at `c:\Users\Vinnie\cursor\runvil-design`, commit `971f8652c`, with the design reports under `research/`
   - In `runvil`, `crates/` holds all code, `AGENTS.md` is the root rulebook, `prompts/` holds the shipped prompts, `vibe/` holds dated plan records and `ACTIVE`, and `guide/` holds the documentation site's landing page and chrome. The shell is Windows PowerShell.
   - Four directories without a manifest of their own hold private crates: `crates/runvil-internal/` (the Engine's `types`, `parser`, `lua`, `engine`, `vfs`, and `model-client`), `crates/harness-internal/` (`runner`, package `harness-runner`), `crates/gateway/`, and `crates/workshop/`.
 - Component boundaries: `runvil-plugin` depends on `runvil-types`, `runvil-vfs`, and `serde_json` (`crates/runvil-plugin/Cargo.toml` lines 11-15). A `plugin-*` crate may depend only on `runvil-plugin`, `shared-*` crates, and outside libraries (`crates/build-xtask/src/product.rs` lines 19-22). `harness` depends on `harness-runner`, `runvil`, and `runvil-plugin` (`crates/harness/Cargo.toml` lines 14-16). `runvil-plugin` is an Engine crate for the Engine guards (`crates/build-xtask/src/engine_guards.rs` line 16) and the Engine clippy bans (`crates/runvil-plugin/clippy.toml`). `cargo test -p build-xtask` enforces these boundaries.
@@ -757,9 +743,9 @@ The repositories, their starting points, the tools, and the commands every gate 
   - `git grep -n -E "Four words|named unit of tools|never capability|Plugin lifecycle wording" -- AGENTS.md` prints nothing
   - `git grep -n -i "capabilit" -- crates/workshop/ui/test/docs-claims.mjs` prints nothing
 
-- Component placement: first of six. It states the two definitions every later step follows, it changes no Rust, and the `docs-claims.mjs` gate that Steps 2 to 5 run scans the rulebook it rewrites.
+- Component placement: first of five. It states the two definitions every later step follows, it changes no Rust, and the `docs-claims.mjs` gate that Steps 2 to 5 run scans the rulebook it rewrites.
 - Piece: one piece in one step. The `AGENTS.md` sentence "never capability, pack, or addon" and the capability check that enforces it must go in the same commit for `docs-claims.mjs` to pass.
-- Before editing: read the root `AGENTS.md`, confirm the Project Survey, and check that each repository is at its listed commit (`runvil` at `fc4a1c0ed`, `runvil-docs` at `5bead4f34`, `runvil-design` at `971f8652c`) or that the cited lines still match. Where a cited line has moved, find the passage by its quoted text.
+- Before editing: read the root `AGENTS.md`, confirm the Project Survey, and check that each repository is at its listed commit (`runvil` at `fc4a1c0ed`, `runvil-docs` at `5bead4f34`) or that the cited lines still match. Where a cited line has moved, find the passage by its quoted text.
 - `AGENTS.md`:
   - Replace the whole Plugin paragraph (line 12, which starts "- **Plugin**: a named unit of tools") with exactly the two lines in the block below.
   - Change "Four words" (line 7) to "Five words".
@@ -803,7 +789,7 @@ The repositories, their starting points, the tools, and the commands every gate 
   - `$env:RUSTDOCFLAGS="-D warnings"; cargo doc -p runvil --no-deps`
   - `git grep -n -E "PluginId|UnavailablePlugin|PluginDto|PluginListError|RunContractPlugin|LuaPluginHandle|PLUGIN_OBJECTS_REGISTRY|@plugin:|plugin_segment|::plugins|plugins\.(offer|get|required|extras)|plugins:" -- crates prompts AGENTS.md` prints only the esbuild `plugins:` lines in `crates/workshop/ui/build.mjs` and `crates/workshop/ui/test/tab-shimmer.mjs`
 
-- Component placement: second of six. It renames the code to the vocabulary Step 1 defines, and the two code components after it are written against its names and widen the `uses:` key it adds.
+- Component placement: second of five. It renames the code to the vocabulary Step 1 defines, and the two code components after it are written against its names and widen the `uses:` key it adds.
 - Piece: Engine names, the first of this component's two pieces, built sequentially before Step 3. Step 3's names build on these (`PackInfo`'s construct takes `&PackId`), and each commit must compile and pass alone. The owner kept the rename as two commits because a rename this wide is easier to review in halves.
 - Scope, as Technical Design lists it: the public facade changes, the Engine internals, the Lua global `plugins` to `packs` and the Tool object field `plugin` to `pack`, the prelude chunk name, the Engine messages below, and the frontmatter key `plugins:` to `uses:`. Change every caller in the same commit: the Harness, `runvil-plugin`'s re-export (`src/lib.rs` line 68), the `plugin-*` crates (`plugin-mcp`'s `connect::run` takes a `PackId` until Step 4), the Workshop server and UI, `prompts/`, and test fixtures.
 - Messages, each with Plugin in the unit sense replaced by Pack and the same meaning. Update every test that pins one:
@@ -838,7 +824,7 @@ The repositories, their starting points, the tools, and the commands every gate 
   - The names in Technical Design's "Names that stay Plugin" list, and the phrase "Plugin crate".
   - Other senses of pack: Lua's `table.pack` (`crates/runvil-internal/lua/src/globals-tests.rs` line 321), the verb and "packed" in `crates/build-llama-cuda/src/bundle.rs` and `src/lib.rs` line 7, `crates/runvil-internal/engine/src/execute/tests/scheduler/fanout/scheduling.rs` lines 13 and 119, `crates/runvil-internal/types/src/ids.rs` line 13, `crates/gateway/stt/README.md` line 79, CodeMirror's language packs (`crates/workshop/ui/src/parts/editor/editor-surface.ts` line 331), the function `pack_sequence`, and the test name `my-pack` (`crates/runvil-internal/types/src/names-tests.rs` line 51). No `Pack*` or `PACK` identifier exists in `crates/` or `prompts/` before this step.
   - The unrelated `uses` field in `crates/build-xtask/src/api/items.rs` (lines 102-180).
-  - `runvil-docs`, `runvil-design`, `vibe/`, and `wg21-paperflow/vendor/runvil`.
+  - `runvil-docs`, `vibe/`, and `wg21-paperflow/vendor/runvil`.
 - Commit: one commit in `runvil` holding this step's code and tests, made once every test above passes, in the repository's usual form: an imperative subject, a paragraph, bullets, and trailers that end with `Plan:` and the record path that `vibe/ACTIVE` holds (`git show c5d883452` shows the form). Push nothing.
 - Stop and report, instead of improvising, when a test fails for a reason this plan does not cover, a cited passage cannot be found by its line or its quoted text, or the step would need a change this plan rules out.
 
@@ -874,7 +860,7 @@ The repositories, their starting points, the tools, and the commands every gate 
 - Behavior does not change. The registry and install tests (`crates/harness-internal/runner/src/registry-tests.rs` and `tests/it/registry.rs`) pass under the new names and messages, and renamed tests keep their assertions.
 - Docs in these crates say Pack for the unit. Sentences about installing a Pack under a Pack id stay true until Step 5, which rewrites them, so leave their meaning alone here.
 - This step does not bless the facade listing. If `xtask api --check` fails, the `runvil` facade changed by accident: stop and report.
-- Leave Cargo's, npm's, and Lua's package, other programs' plugins (Tauri, ProseMirror, CodeMirror, esbuild, and NSIS), the names in Technical Design's "Names that stay Plugin" list, and the phrase "Plugin crate" as they are, and make no blind search and replace. `runvil-docs`, `runvil-design`, `vibe/`, and `wg21-paperflow/vendor/runvil` stay untouched.
+- Leave Cargo's, npm's, and Lua's package, other programs' plugins (Tauri, ProseMirror, CodeMirror, esbuild, and NSIS), the names in Technical Design's "Names that stay Plugin" list, and the phrase "Plugin crate" as they are, and make no blind search and replace. `runvil-docs`, `vibe/`, and `wg21-paperflow/vendor/runvil` stay untouched.
 - Commit: one commit in `runvil` holding this step's code and tests, made once every test above passes, in the repository's usual form: an imperative subject, a paragraph, bullets, and trailers that end with `Plan:` and the record path that `vibe/ACTIVE` holds (`git show c5d883452` shows the form). Push nothing.
 - Stop and report, instead of improvising, when a test fails for a reason this plan does not cover, a cited passage cannot be found by its line or its quoted text, or the step would need a change this plan rules out.
 
@@ -898,14 +884,14 @@ The repositories, their starting points, the tools, and the commands every gate 
   - `$env:RUSTDOCFLAGS="-D warnings"; cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api`
   - `$env:RUSTDOCFLAGS="-D warnings"; cargo doc -p runvil --no-deps`
 
-- Component placement: third of six. It is written against the pack-rename component's names, and it comes before the plugin-entry-points component, whose `plugin_mcp::install` only adds this one Pack with `config["mcp"]`. The owner chose to land it in its own commit, on today's install API, before the reorganization.
+- Component placement: third of five. It is written against the pack-rename component's names, and it comes before the plugin-entry-points component, whose `plugin_mcp::install` only adds this one Pack with `config["mcp"]`. The owner chose to land it in its own commit, on today's install API, before the reorganization.
 - Piece: one piece, built jointly. The construct's config changes from one server entry to the whole server map, so `plugin-mcp`, Workshop's install, and their tests must change in the same commit to compile and pass.
 - Build what Technical Design lists under "Step 4, the mcp Pack": the construct over the whole `mcpServers` object, with each entry parsed on its own by today's `entry::parse` and one connection per parsed entry reusing `crates/plugin-mcp/src/connect.rs`, `result.rs`, and `server.rs`; one new Pack object that holds every server; the removal of the per-server `ToolInfo` ids and of the tool-id filter in `catalog` (`server.rs` lines 51-87); `connect::run` (`connect.rs` line 68) taking the server's name as a `String`; the doc rewrites; and Workshop's single install.
 - Config:
   - The construct takes the whole `mcpServers` object. A `null` config means no servers. Any other config that is not an object refuses the construct, and so does a missing runtime service, as today.
   - Each entry is parsed on its own. An entry that fails, such as a local `command` entry, a bad header, or an unset `${env:NAME}`, becomes a namespace with status `error` and that reason, and the other servers still connect. One bad entry never fails the construct. A local entry's reason is "local MCP servers (command) are not supported yet".
   - A namespace is the server's name exactly as written in `mcpServers`, with no lowercasing, because namespaces never become tool ids.
-- Tools: the Pack offers exactly two static tools under the Pack id `construct` receives (`mcp` in Workshop), modeled on Cursor's `GetDynamicTools` and `CallDynamicTool` (`runvil-design/research/2026-10-14-harness-mcp-dynamic-tools.md`, Appendix A, lines 2526-2584). `ready` resolves at once, and each server's state shows through `get_dynamic_tools`.
+- Tools: the Pack offers exactly two static tools under the Pack id `construct` receives (`mcp` in Workshop), modeled on Cursor's `GetDynamicTools` and `CallDynamicTool`. `ready` resolves at once, and each server's state shows through `get_dynamic_tools`.
   - `mcp/get_dynamic_tools` takes an object with the optional strings `namespace` and `toolName`. Its description reads: "List the tools of the configured MCP servers. With no arguments, list each server's namespace, status, and tool names; with namespace, that server's tools and their input schemas; with namespace and toolName, one tool."
   - `mcp/call_dynamic_tool` takes an object with the required strings `namespace` and `toolName` and an optional object `arguments`, which defaults to `{}`. Arguments that are not an object are refused before anything is sent, as today. It calls that server's tool as today's per-server call does. Its description reads: "Call a tool of a configured MCP server by namespace and toolName, with arguments as a JSON object that matches the tool's input schema. List the servers' tools first to see it."
   - Both tools' output is untrusted, because descriptions, schemas, and results all come from the servers.
@@ -954,7 +940,7 @@ The repositories, their starting points, the tools, and the commands every gate 
   - `git grep -n -i plugin -- crates prompts AGENTS.md`, with every hit read and classified as below
   - `git grep -n -i -E "installed (it )?under|installed as|picks another|chose|chooses|default (name|plugin id|pack id)|plain name|declared or not|every usable" -- crates`, with every hit read and each one about Packs rewritten
 
-- Component placement: fourth of six, and the last code component. It needs the Pack names and the one-Pack mcp Pack, and the docs and design components describe what it builds.
+- Component placement: fourth of five, and the last code component. It needs the Pack names and the one-Pack mcp Pack, and the docs component describes what it builds.
 - Piece: one piece in one commit, built jointly, because removing `HostContext::install`, Plugins that add Packs, the per-run pick, and `PackRef` all change the same call sites and tests. The owner chose to keep this step whole rather than split it in two.
 - Build what Technical Design lists under "Step 5, the reorganization", with the signatures in its Rust block:
   - The move of `PackRegistry`, `PackOrigin`, `InstallError`, and the built-in `runvil/subagents` Pack with its unreachable object into `crates/runvil-plugin/src/registry.rs`, with `registry-tests.rs` beside it, the `thiserror` dependency, the hand-written Debug, `into_entries`, and the re-exports from `runvil-plugin` and `harness::pack`.
@@ -998,7 +984,7 @@ The repositories, their starting points, the tools, and the commands every gate 
 - Prose: rewrite every crate doc and comment the reorganization makes false, that is, every one that says the Host installs a Pack by FQN, picks or defaults its Pack id, or that every run receives every usable Pack. Technical Design lists the known ones. Engine crate docs say "the caller", never the Host. Neither the name searches nor rustdoc finds these, so read every hit of the prose search in Tests.
 - The background that the old `AGENTS.md` Plugin paragraph held lives in crate docs once this step lands, chiefly `runvil-plugin`'s crate doc: a Pack has an FQN such as `runvil/web`, and its Pack id is the FQN's second segment, `web`, which prefixes its tools (`web/fetch`); a linked Plugin is the `install` function of a Plugin crate (a `plugin-*` crate), and a library Plugin will be the entry point a dynamic library exports (not built yet); and `runvil/subagents` is a built-in Pack that reserves its id for the Engine's subagent tools.
 - Classify every hit of the case-insensitive search. Each remaining one means a Plugin (an entry point that installs Packs), sits in "Plugin crate" or a crate name (`plugin-web`, `plugin-mcp`, `plugin-user-input`, `runvil-plugin`, or their `_` forms), belongs to the Plugin crate family checks in `crates/build-xtask`, is in Technical Design's "Names that stay Plugin" list, or names another program's plugin. Hits on crate names, other programs' names, and "Plugin crate" pass on sight. Rename every other one.
-- Out of scope: `wg21-paperflow/vendor/runvil` and Paperweight, the dynamic-library entry point and its C function table, native preludes, and library Plugins. `runvil-docs`, `runvil-design`, and `vibe/` stay untouched.
+- Out of scope: `wg21-paperflow/vendor/runvil` and Paperweight, the dynamic-library entry point and its C function table, native preludes, and library Plugins. `runvil-docs` and `vibe/` stay untouched.
 - Commit: one commit in `runvil` holding this step's code and tests, made once every test above passes, in the repository's usual form: an imperative subject, a paragraph, bullets, and trailers that end with `Plan:` and the record path that `vibe/ACTIVE` holds (`git show c5d883452` shows the form). Push nothing.
 - Stop and report, instead of improvising, when a test fails for a reason this plan does not cover, a cited passage cannot be found by its line or its quoted text, or the step would need a change this plan rules out.
 
@@ -1015,7 +1001,7 @@ The repositories, their starting points, the tools, and the commands every gate 
   - The old-slug check block below prints nothing
   - The fragment check block below prints `unresolved: 0`
 
-- Component placement: fifth of six. The guide quotes messages and Pack ids that Steps 2 and 5 fix, so it lands after Step 5. Check every quoted message and Pack id against the `runvil` code at that point, and stop and report any difference from the texts below.
+- Component placement: last of five. The guide quotes messages and Pack ids that Steps 2 and 5 fix, so it lands after Step 5. Check every quoted message and Pack id against the `runvil` code at that point, and stop and report any difference from the texts below.
 - Piece: one piece, built jointly. Heading renames and the links to them must change together for the anchor check, and the passages to rewrite overlap the passages to rename.
 - Work in `c:\Users\Vinnie\cursor\runvil-docs`, under `src/`. Do what Technical Design lists under "Language guide": the renames (unit-sense Plugin to Pack, `plugins:` to `uses:`, `plugins.*` to `packs.*`, `.plugin` to `.pack`, "Plugin id" to "Pack id", "bundled Plugins" to "bundled Packs", and the lowercase spots it lists), the quoted messages, the heading anchors and every link to them, and the rewrite of every passage in its four groups, found by reading every hit of `git grep -n -i -E "install|picks? (a|no|another) plugin id|chooses|browse|operator|extras|undeclared|not declared|declared or not|every usable|every installed|one segment|single segment|plain name|runvil/" -- src/language`.
 - What the rewritten passages say:
@@ -1075,33 +1061,5 @@ $bad
 - Stop and report, instead of improvising, when a test fails for a reason this plan does not cover, a cited passage cannot be found by its line or its quoted text, or the step would need a change this plan rules out.
 
 </step-6>
-
-<step-7>
-
-### Step 7: Design report updates [completed]
-
-- Component: design-reports
-- Tests: run in PowerShell:
-  - `git -C c:\Users\Vinnie\cursor\runvil-design grep -n -F "@@" -- research/2026-10-18-mlua-c-wrapper.md` prints nothing
-  - `git -C c:\Users\Vinnie\cursor\runvil-design grep -n -w -E "runvil_package_init|RvPackage|RvPackageInfo|describe_package|register_plugin|plugin_data|plugin_id|plugin_id_len|ACME_URL_PACKAGE|URL_PLUGIN" -- research/2026-10-18-mlua-c-wrapper.md` prints nothing (36 lines match at `971f8652c`)
-  - `git -C c:\Users\Vinnie\cursor\runvil-design grep -n -F -e "plugins:" -e "Plugin::call" -e "runvil-plugin/src/plugin.rs" -- research/2026-10-18-mlua-c-wrapper.md` prints nothing
-  - `git -C c:\Users\Vinnie\cursor\runvil-design grep -n -i -E "plugin|package" -- research/2026-10-18-mlua-c-wrapper.md`, with every hit read; each remaining one names a Plugin (an entry point that installs Packs), a Plugin crate, or Lua's `package` library
-  - `git -C c:\Users\Vinnie\cursor\runvil-design grep -n -F "Pack and Plugin rename supersedes" -- research/2026-10-18-runvil-plugin-naming.md` prints one line, line 3
-
-- Component placement: last of six. The mlua report's references cite language guide headings by name and take the names Step 6 gives them.
-- Piece: one piece holding both reports, built jointly because they share one commit in `runvil-design`.
-- Work in `c:\Users\Vinnie\cursor\runvil-design`. Change only `research/2026-10-18-mlua-c-wrapper.md` and `research/2026-10-18-runvil-plugin-naming.md`. Chats, huddles, datasets, and other dated research stay verbatim.
-- The mlua report: the whole file, with prose to match, as Technical Design lists under "Design reports". The old names run through Appendix A (lines 723-845), the contents list, the headings of sections 5.2 and 6.3-6.5, and the references, not only sections 2 and 3.
-  - Package-sense names become Plugin names: `runvil_package_init` to `runvil_plugin_init`, `RvPackage` to `RvPlugin`, `RvPackageInfo` to `RvPluginInfo`, `describe_package` to `describe_plugin`, `ACME_URL_PACKAGE` to `ACME_URL_PLUGIN`, and a parameter that holds an `RvPackage` to `plugin`.
-  - Old Plugin-sense names become Pack names: `RvPluginInfo` to `RvPackInfo`, `register_plugin` to `register_pack`, `plugin_data` to `pack_data`, `plugin_id` to `pack_id`, `plugin_id_len` to `pack_id_len`, `URL_PLUGIN` to `URL_PACK`, a parameter of the old `RvPluginInfo` type to `pack`, and `plugins:` to `uses:`.
-  - `RvPluginInfo` exists before and after with different meanings, and `ACME_URL_PACKAGE` and `URL_PLUGIN` collide the same way, so swap in three passes. First, every old Plugin-sense name becomes a unique temporary token, such as `@@PACK_INFO@@` for `RvPluginInfo`. Second, every package-sense name becomes its Plugin name. Third, every token becomes its Pack name. The report has no `@@` today, so afterward a search for `@@` in it prints nothing.
-  - Classify each remaining "plugin" and "package" hit by meaning. Lua's `package` library keeps its name, and the loose lowercase "plugin" (lines 584-606, and sections 5 and 6) becomes Pack or Plugin.
-  - Prose names the code as it stands after Step 5: `Plugin::call` (line 604) becomes `Pack::call`, the references at lines 604 and 701 name `crates/runvil-plugin/src/pack.rs`, line 701 names `PackInfo` and the `Pack` trait, and the Vocabulary line (line 8) states the new names.
-  - The references to language guide headings, such as "Declaring Plugins under `plugins:`" (line 714) and "Declared Plugins are required Plugins" and "Which Plugins add globals" (line 598), take each heading's exact new text from `runvil-docs` after Step 6.
-- The naming report: insert one line directly below the H1 title, before the metadata bullets, reading `- Superseded: the 2026-10-19 Pack and Plugin rename supersedes this report's package and Plugin names.` Keep every other line verbatim, the existing Status bullet included.
-- Commit: one commit in `runvil-design` containing only these two files, made once every test above passes, in that repository's usual form (`git -C c:\Users\Vinnie\cursor\runvil-design log -3` shows it). Push nothing.
-- Stop and report, instead of improvising, when a test fails for a reason this plan does not cover, a cited passage cannot be found by its line or its quoted text, or the step would need a change this plan rules out.
-
-</step-7>
 
 </execution-plan>

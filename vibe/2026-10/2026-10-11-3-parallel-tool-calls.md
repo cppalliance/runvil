@@ -15,7 +15,7 @@ todos:
     content: "Step 2: set fanout on the tasks table instead of as a global (two lines in coro.rs); drop fanout from RESERVED_NAMES (61 to 60); four error texts; rename every call site in 25 test files and 5 fixtures; update three exact asserts and tighten three loose ones"
     status: completed
   - id: fanout-docs
-    content: "Step 2: the doc and comment lines that name the call or the global; language spec edits in ../runvil-design committed there"
+    content: "Step 2: the doc and comment lines that name the call or the global"
     status: completed
   - id: verify
     content: "Each step: both nextest runs, both clippy runs with warnings denied, fmt, docs and facade docs, xtask api --check, build-xtask, docs-claims"
@@ -224,10 +224,6 @@ pub(super) batch: Vec<Option<Result<String>>>,
   - Engine: `execute/protocol.rs` line 5; `execute/section_context-construct.rs` line 97; `heading_address.rs` line 6; `execute/scheduler/tasks.rs` lines 115 and 147
   - Types: `types/src/ids.rs` line 253
   - These stay accurate, since they name the shim, an arm, or the spawn mark: `__impl_coro.lua` lines 24-27 and 340-342, `coro.rs` lines 50, 53, and 115, `collection.rs` lines 2 and 112, `heading_address.rs` line 9, `protocol/parse.rs` lines 292 and 342, `protocol/answer.rs` line 150, `protocol/request.rs` lines 47 and 70, `types/src/event.rs` line 285, `execute/scheduler.rs` line 59, `subst.rs` line 139, and `execute/scheduler/tasks.rs` lines 4 and 114.
-- Language spec, in the separate `../runvil-design` repository, committed there on its own. The coding sub-agent leaves the file unstaged. The session commits `design/architect-runvil-prompting-language.md` alone in `../runvil-design` after the coding sub-agent returns and before Step 2's `runvil` commit is finalized, and amends that commit after any later round that changes the file. That repository holds unrelated changes (a modified and an untracked file under `research/`), so nothing else is staged. Nothing is pushed. The edits, in `design/architect-runvil-prompting-language.md`:
-  - the F index line (44) and the `### Deferred fanout(section, inputs)` entry (408) become `tasks.fanout(worker, collection)`, with an `**Implementation status:**` line like its neighbors
-  - the T index gains `tasks.fanout`, and a `tasks` entry says the namespace is in every prompt, with no declaration, and that author tasks end with their chain
-  - the "Deferred fanout review" example (lines 468-490) calls `tasks.fanout`, and its prose at line 470 names it
 
 </implementation-contract>
 
@@ -521,9 +517,8 @@ This plan lands the parallel-tool-call and `tasks.fanout` parts of the subagents
   - Types: `types/src/ids.rs`
   - The lines the Technical Design lists as naming the shim, an arm, or the spawn mark stay.
 - Asserts, with no new tests: update the three exact asserts in `engine/src/lua/tests/shims.rs` (lines 93-96) and `engine/src/execute/tests/scheduler/fanout/failure_semantics.rs` (lines 105 and 110). Tighten the three loose ones in `suite/exec_flow/fanout_arms.rs` (line 316), `suite/exec_flow/fanout_collections.rs` (line 281), and `scheduler/fanout/arms.rs` (line 250), all under `engine/src/execute/tests/`.
-- Language spec, `design/architect-runvil-prompting-language.md` in `../runvil-design`: the F index line and the Deferred fanout entry, the T index and the `tasks` entry, and the "Deferred fanout review" example, as the Technical Design says. The coding sub-agent leaves the file unstaged. The session commits it alone there before this step's `runvil` commit is finalized, amends that commit after any later round that changes the file, and stages nothing else in that repository.
 - Tests line, which Verify runs as written: every exit criterion in the Testing Plan, plus `rg -n "(^|[^\w.])fanout\(|pcall\(fanout|\\nfanout\(" crates --glob "!**/__impl_fanout.lua"` printing nothing. The 25 renamed test files prove `tasks.fanout` works, and the two-way `RESERVED_NAMES` test in `engine/src/lua/tests/globals.rs` proves no `fanout` global is left. Fixes land in this step's commit.
-- Commits: one `runvil` commit, `Move fanout into the tasks table as tasks.fanout`, and the spec commit in `../runvil-design`, `Rename fanout to tasks.fanout in the language spec`. Nothing is pushed.
+- Commit: one `runvil` commit, `Move fanout into the tasks table as tasks.fanout`. Nothing is pushed.
 
 </step-2>
 

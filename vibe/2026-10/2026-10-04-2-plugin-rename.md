@@ -222,7 +222,7 @@ The owner chose Plugin over Addon and Extension, and asked for one defined term 
   - **Wrong sense calls.** A kept sense could be renamed, or a Plugin could be left behind. The kept and ambiguous lists in Technical Design, plus the residual reports, catch these.
   - **Lockfile.** Every `--locked` command fails until `Cargo.lock` is rewritten after the crate is renamed.
   - **Docs lag.** The guide's quoted messages are stale between the code step and the guide step. No test reads them.
-  - **External references.** References to the old names outside the two repositories stay as they are: cabinet reports, the `runvil-design` repository, `~/.cursor/plans`, and the sibling checkouts `runvil2/` and `runvil3/`.
+  - **External references.** References to the old names outside the two repositories stay as they are: cabinet reports, `~/.cursor/plans`, and the sibling checkouts `runvil2/` and `runvil3/`.
   - **The shell.** If the shell cannot run commands on this machine, edits still proceed, and Vinnie runs the gates.
 
 ### Deferred and Out of Scope
@@ -230,7 +230,7 @@ The owner chose Plugin over Addon and Extension, and asked for one defined term 
 - Deferred: **the Plugin API redesign** (a manifest as data, a Plugin source that loads Plugins from configuration, lazy per-run creation, teardown, and configuration tiers). Revisit after this rename lands.
 - Out of scope:
   - the `tools-public` repository, which uses "capability" in its plain-English sense
-  - the `runvil-design` repository and cabinet reports
+  - cabinet reports
   - the sibling checkouts `runvil2/` and `runvil3/`
   - the gateway's model-capability vocabulary
 

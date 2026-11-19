@@ -20,7 +20,6 @@
   - the outline holds tests, benches, and examples, so reachability is settled by search
   - one vibelight warning: 99 items written more than one way, in Spellings
   - `vibe/` is not a doc root: 264 dated records, too stale to settle anything
-  - `runvil-design/design/` is provisional by its own record, so it is not a doc root
   - the guide goes stale too, so source settles every disagreement, not the doc
   - a doc claim is drift only when the code contradicts it today, not when it is merely old
   - four dispatch aborts did not stop their agents, so two wrote each of three files

@@ -133,7 +133,7 @@ Components in dependency order: rule-landing first (the initial-commit constrain
 
 - Component: rule-landing
 
-Commit exactly the working tree's `AGENTS.md` revisions together with the two `design/` deletions (`design/design-gateway-tts-phase-1.md`, `design/note-gateway-tts-phase-1-verification.md`, the operator's file move to `runvil-design/`) and nothing else. Verification: `git show --stat` of the commit lists exactly those three paths.
+Commit exactly the working tree's `AGENTS.md` revisions together with the two `design/` deletions (`design/design-gateway-tts-phase-1.md`, `design/note-gateway-tts-phase-1-verification.md`) and nothing else. Verification: `git show --stat` of the commit lists exactly those three paths.
 
 </step-1>
 

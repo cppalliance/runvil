@@ -1,10 +1,7 @@
 ---
 name: Remove tool picker
-overview: Archive `runvil-tool-picker` as a frozen non-compiling artifact in the sibling `runvil-design` repository, then remove the crate and every feature that existed only for it (fuzzy tool slots, near-duplicate tool conflicts, the Plugin description lint, the dead `models.bind` resolver) from the Runvil workspace, together with the candle/tokenizers/hf-hub dependency stack, the embedded embedding model, and the CI model cache.
+overview: Remove the crate `runvil-tool-picker` and every feature that existed only for it (fuzzy tool slots, near-duplicate tool conflicts, the Plugin description lint, the dead `models.bind` resolver) from the Runvil workspace, together with the candle/tokenizers/hf-hub dependency stack, the embedded embedding model, and the CI model cache.
 todos:
-  - id: archive
-    content: Copy the crate to runvil-design/study-tool-picker/crate/ with a README note and commit there
-    status: completed
   - id: consumers
     content: Remove the picker, fuzzy slots, conflicts, the Plugin lint, and the models.bind resolver from model-client, lua, parser, runtime, and workshop-workspace
     status: completed
@@ -22,18 +19,17 @@ isProject: false
 
 # Remove the tool picker
 
-All paths below are relative to the Runvil repository root (`runvil/` in the workspace) unless prefixed with `../runvil-design/`, the sibling design-archive repository. Facts about the dependency graph come from `vibe/dependency-surface.md`, measured on 2026-09-18 at the commit landing the `toml 1` pin with cargo 1.98.0.
+All paths below are relative to the Runvil repository root (`runvil/` in the workspace). Facts about the dependency graph come from `vibe/dependency-surface.md`, measured on 2026-09-18 at the commit landing the `toml 1` pin with cargo 1.98.0.
 
 <product-contract>
 
 ## Product Requirements
 
-The tool picker is a local sentence-embedding engine that maps prose capability descriptions to tools. It is switched off in every shipped build: the Workshop builds its session environment without a picker, so fuzzy slots already go unfilled and the near-duplicate scan already records nothing. Its only live use is an advisory lint inside the Plugin registry. Yet every binary that links the runtime still embeds the fp16 `BAAI/bge-small-en-v1.5` weights, compiles the 50-crate candle and tokenizers stack, needs network access to Hugging Face on a first build, and drags a model cache through four CI workflows. The picker is removed outright, archived as a frozen artifact in the design repository, and the three language and public-API features that existed only for it are removed with it.
+The tool picker is a local sentence-embedding engine that maps prose capability descriptions to tools. It is switched off in every shipped build: the Workshop builds its session environment without a picker, so fuzzy slots already go unfilled and the near-duplicate scan already records nothing. Its only live use is an advisory lint inside the Plugin registry. Yet every binary that links the runtime still embeds the fp16 `BAAI/bge-small-en-v1.5` weights, compiles the 50-crate candle and tokenizers stack, needs network access to Hugging Face on a first build, and drags a model cache through four CI workflows. The picker is removed outright, and the three language and public-API features that existed only for it are removed with it.
 
 - Problem and users: `crates/workshop/sessions/src/agents/environment.rs` builds `Environment::new().registry(registry)` with no `.picker(...)`, so the fuzzy fill and the conflict scan in `crates/runvil-api-runtime/src/execute/fill.rs` are inert in production; the single live use is `PluginRegistry::new()` building `ToolPicker::empty` for a registration-time lint (`crates/runvil-api-runtime/src/capabilities.rs`). The cost is paid by everyone who builds or ships the runtime or the Workshop: `crates/runvil/tool-picker/build.rs` downloads and converts the model on first build and `src/assets.rs` embeds it with `include_bytes!`; the candle-core/candle-nn/candle-transformers/tokenizers set is 50 exclusive crates, the second-largest exclusive cost in the tree (`vibe/dependency-surface.md`, ranked table); `.github/actions/hf-model-cache/action.yml` is used eleven times across `ci.yml`, `nightly.yml`, `release-workshop.yml`, and `workshop-installer-smoke.yml`.
 - Goals:
   - The crate `runvil-tool-picker` and every reference to it leave the Runvil repository: code, tests, benches, manifests, hakari output, nextest configuration, CI, crate READMEs, and the user guide.
-  - The crate's source is preserved verbatim as a non-compiling artifact in `../runvil-design/study-tool-picker/crate/`, beside the study that produced it.
   - Fuzzy tool slots (the frontmatter `tools:` map form with `want` and `optional`), near-duplicate tool conflicts (bind-time recording and the scope-time error), and the Plugin description lint are removed as features.
   - The dead `models.bind` semantic resolver in `crates/runvil/model-client` and its error variants are removed, since that machinery is the model client's only reason to name the picker and `models.bind` itself is already gone from the language.
   - The workspace pins `candle-core`, `candle-nn`, `candle-transformers`, `tokenizers`, `hf-hub`, `safetensors`, and `half` leave the root `Cargo.toml` when no remaining crate needs them.
@@ -46,7 +42,6 @@ The tool picker is a local sentence-embedding engine that maps prose capability 
 - Success criteria:
   - `cargo tree --workspace -e normal,build --target all -i candle-core` prints nothing, and likewise for `tokenizers`, `hf-hub`, and `safetensors`.
   - A search of `crates/`, `.github/`, `.config/`, `guide/src/`, `Cargo.toml`, and `AGENTS.md` for `tool-picker`, `tool_picker`, `ToolPicker`, `FuzzySlot`, `NearDuplicate`, `hf-model-cache`, and `HF_TOKEN` returns nothing. History under `vibe/` is exempt, and so are the gateway's own `HF_TOKEN` reads under `crates/gateway/` (its Hugging Face download token for local model artifacts, unrelated to the picker).
-  - `../runvil-design/study-tool-picker/crate/` holds the 20 files of the crate as they were at the removal commit, and `../runvil-design/study-tool-picker/README.md` names it.
   - Every verification gate in the Testing Plan passes; `cargo hakari verify` is clean; `cargo test -p build-xtask` passes.
 - Constraints:
   - Workspace lints (`Cargo.toml`, `[workspace.lints]`): `unsafe_code` forbidden; `unwrap_used`, `expect_used`, clippy `all` and `pedantic` denied; `missing_docs` and `unreachable_pub` warn. Removal must not leave dead imports, unused fields, or orphaned doc links (`rustdoc::broken_intra_doc_links` is denied).
@@ -54,7 +49,6 @@ The tool picker is a local sentence-embedding engine that maps prose capability 
   - Repository policy admits no new structural check without explicit user approval; this plan adds none.
   - `ToolSlot` in `crates/runvil/parser/src/contract.rs` keeps `#[non_exhaustive]`: the deferred open Host-offered posture is still planned to join it.
   - Files stay under the 500-line ceiling enforced on the workshop crates carrying the invariants marker (`AGENTS.md`).
-  - The `../runvil-design` worktree carries unrelated uncommitted changes; the archive commit stages only the copied crate files and the README edit.
 - Open questions: None
 
 ## Functional Specification
@@ -77,7 +71,7 @@ No shipped behavior changes for the Workshop's chat sessions, which never had a 
 
 ## Technical Design
 
-The change is a removal across eight crates, the workspace manifests, CI, the Workshop SPA, and documentation, plus one copy into the sibling repository. No new abstractions are introduced. Exact tool slots, the Plugin registry, and the run's tool catalog keep their shapes minus the picker-dependent members.
+The change is a removal across eight crates, the workspace manifests, CI, the Workshop SPA, and documentation. No new abstractions are introduced. Exact tool slots, the Plugin registry, and the run's tool catalog keep their shapes minus the picker-dependent members.
 
 - Architecture: unchanged product topology. `runvil-api-runtime` remains the one door; `crates/runvil/` loses one private member. Dependency directions are unaffected: `runvil-model-client` stops depending on the picker, and nothing else gains an edge.
 - Modules and interfaces:
@@ -102,7 +96,6 @@ The change is a removal across eight crates, the workspace manifests, CI, the Wo
   - CI: every `uses: ./.github/actions/hf-model-cache` step and its `name: Cache the embedding model` line are removed (`ci.yml` five, `nightly.yml` three, `release-workshop.yml` one, `workshop-installer-smoke.yml` one); the `HF_TOKEN: ${{ secrets.HF_TOKEN }}` env entries in `ci.yml`, `nightly.yml`, and `workshop-installer-smoke.yml` are removed; the explanatory comments at `ci.yml` lines 12-18, `nightly.yml` lines 20-22, and `release-workshop.yml` lines 125-126 are removed or rewritten to drop the picker.
   - Documentation: `crates/README.md` (the `runvil-api-runtime` paragraph no longer lists `tool-picker`); `crates/runvil/README.md` (the `runvil-tool-picker` section is removed and the `runvil-model-client` paragraph no longer names it); `crates/runvil/model-client/README.md` if it names the resolver; `crates/workshop/server/README.md` if its one "picker" mention is the tool picker rather than the model picker; guide sources `guide/src/language/01-frontmatter-and-structure.md` (line 38), `02-the-run.md` (line 7), `07-tools.md` (lines 31, 97, 124), then the assembled `guide/runvil-language-guide.md` regenerated with the `build-user-guide` crate. The `guide/src/workshop/*` "picker" hits are the UI model picker and stay.
   - `vibe/dependency-surface.md`: remove the candle row from the ranked table and the picker note in measurement trap 4; remove the `base64 0.13` (via `spm_precompiled`) and `rand 0.8` (via candle) entries from the duplicate-versions list if they left; add a row to "What was replaced, and why" (removed: the picker crate and its embedding stack; replacement: none, exact slots only, with `cargo tree -i candle-core` output as evidence); rerun the shipped-shape counts and update the header commit and date per that file's "Reproducing the measurements" section.
-  - Archive: `../runvil-design/study-tool-picker/crate/` receives a verbatim copy of `crates/runvil/tool-picker/` (all 20 files: `Cargo.toml`, `build.rs`, `README.md`, `src/{assets,catalog,config,embed,error,lib,model,picker,picker-tests,policy,policy-tests,rank,selected}.rs`, `tests/it/{main,behavior,public_api}.rs`, `tests/fixtures/mixed-servers.json`); `../runvil-design/study-tool-picker/README.md` gains a paragraph naming the directory as the frozen crate source at the Runvil removal commit, non-compiling because `version.workspace`, `edition.workspace`, `[lints] workspace`, and `runvil-api-types.workspace` have no workspace to inherit from there. No manifest in the design repository is edited.
 - Data, persistence, failure, security, and privacy constraints:
   - No persisted data or wire format changes. The Workshop's prompt-contract JSON loses an enum case that was never produced by shipped prompts that parse.
   - `Cargo.lock` changes and is committed; `--locked` gates run against the updated lock.
@@ -146,7 +139,6 @@ Verification is the workspace's existing gate list plus dependency-graph invaria
 
 - Decisions:
   - Remove the picker entirely rather than relocate it. Rationale: it is inert in every shipped build, its only live use is an advisory lint, and its cost (50 exclusive crates, embedded fp16 weights in every runtime-linking binary, a first-build network fetch, eleven CI cache steps) is paid for nothing. User's words: "I want to eliminate the tool picker completely."
-  - Archive the crate source in `../runvil-design/study-tool-picker/crate/` as a non-compiling artifact. Rationale: the design repository already holds the study (`study-tool-picker/`) and spike (`spike-tool-picker/`) the crate came from, so the frozen source sits beside its evidence; no workspace there means it cannot compile, which is the intent. User's words: "Put it in runvil-design as a non-compiling artifact."
   - Remove fuzzy tool slots, near-duplicate tool conflicts, and the Plugin description lint as features rather than stub them. Rationale: each exists only to consume picker output; a grammar that can never fill and a conflict record nothing can produce are traps for authors and Hosts. User's words: "I agree with your recommend removing all three (Fuzzy tool slots, near-dup tool conflicts, capability description lint)."
   - Remove the `models.bind` resolver machinery in `runvil-model-client` (`PickerModelResolver`, `ModelBindOpts`, `ModelResolver`, `ResolvedModel`, the id escape helpers, the `ModelBind*` error variants). Rationale: `models.bind` was already removed from the language (`crates/runvil-api-runtime/src/execute/tests/exec_flow.rs` near line 2392 asserts calling it fails), nothing constructs the resolver, and it is the model client's only edge to the picker. Falls under "remove all code that references it."
   - Keep `#[non_exhaustive]` on `ToolSlot`. Rationale: the deferred open Host-offered posture is documented on the enum as a future member.
@@ -154,16 +146,13 @@ Verification is the workspace's existing gate list plus dependency-graph invaria
   - Keep the step count low and run a single full verification at the end. User's words: "keep the number of steps low and only do a full verify at the end".
 - Rejected alternatives:
   - Move the crate to `crates/runvil-tool-picker/` at the workspace root. Reason: the root is the documented public layer (`crates/README.md`, `AGENTS.md`), and a private substrate crate there would be the first exception; it also removes nothing. Revisit: never, superseded by removal.
-  - Move the crate to `../runvil-design/crates/` as a compiling path dependency. Reason: it depends on `runvil_api_types::tools::ToolId` and `shared_progress::ProgressHandle`, so the two repositories would depend on each other through path edges that `actions/checkout` breaks, the crate would leave the product-boundary matrix (`crates/build-xtask/src/product.rs` binds workspace members only), and the design repository has no CI. Revisit: never, superseded by removal.
-  - Cut only the `model-client` edge and leave the crate consumed by the runtime alone. Reason: still ships the weights and the stack for a feature that is off. Revisit: if fuzzy slot resolution is wanted again, restore from the archive as a new design.
+  - Cut only the `model-client` edge and leave the crate consumed by the runtime alone. Reason: still ships the weights and the stack for a feature that is off. Revisit: if fuzzy slot resolution is wanted again, restore from an archive outside this repository as a new design.
   - Shrink build cost through a hakari `[traversal-excludes]` entry instead of removal. Reason: keeps the crate and its build script; the floor question (Finding 2) is independent and stays deferred.
 - Assumptions, risks, and notes:
   - `cargo-hakari` must be installed locally to regenerate `crates/workspace-hack/Cargo.toml`; `.config/hakari.toml` governs it.
   - `crates/runvil-api-runtime/src/capabilities.rs` (line 66) imports `ToolId` through the picker's re-export (`crates/runvil/tool-picker/src/catalog.rs` line 18, `pub use runvil_api_types::tools::ToolId`); after removal that import comes from `runvil_api_types::tools::ToolId` directly.
   - `half` appears in `crates/workspace-hack/Cargo.toml` with features that may be requested by another transitive puller; the pin is removed from the root manifest only if `cargo tree -i half` shows no remaining normal or build edge from a workspace member. The same check governs each of the seven pins.
   - The `HF_TOKEN` repository secret lives in GitHub settings, outside the repository; retiring it is a manual follow-up after CI stops referencing it.
-  - The `../runvil-design` worktree has five unrelated uncommitted paths; the archive commit stages only `study-tool-picker/crate/**` and `study-tool-picker/README.md`.
-  - The archive lands in a different repository from the one the run operates on, so it is committed there directly by the session rather than through the per-step review cycle; the Runvil-side deletion is what the run reviews.
   - Post-removal closure counts are projections until measured: roughly 51 fewer packages in the `runvil-api-runtime`, `workshop`, `runvil-lua`, `runvil-parser`, and `runvil-model-client` closures, low single digits for `gateway`, and about 67 MB of embedded weights out of the Workshop binary. The `dependency-surface.md` refresh records the measured numbers.
   - The `guide/runvil-language-guide.md` assembled export is regenerated from `guide/src/` by the `build-user-guide` crate; edit sources, not the export.
 
@@ -196,7 +185,7 @@ Verification is the workspace's existing gate list plus dependency-graph invaria
 
 ## Execution Instructions
 
-The objective is one removal: the tool picker leaves Runvil, its source is frozen in the design repository, and the three features and the dependency stack that existed only for it leave with it. The archive already landed: `../runvil-design/study-tool-picker/crate/` holds a verbatim copy of the 20 crate files and `../runvil-design/study-tool-picker/README.md` names it, committed in that repository as `c973a42` (Runvil `HEAD` at copy time was `bf8cb465`). The Runvil work divides into three components, each one shippable slice, each one piece, each one step with one commit. The operator asked for few steps and one full verification at the end, so no component is divided further.
+The objective is one removal: the tool picker leaves Runvil, and the three features and the dependency stack that existed only for it leave with it. The Runvil work divides into three components, each one shippable slice, each one piece, each one step with one commit. The operator asked for few steps and one full verification at the end, so no component is divided further.
 
 - Component order and reasons:
   - `rust-consumers` first. The five consuming crates stop naming the picker while the crate is still a workspace member, so the commit builds on its own and the crate becomes an orphan with no in-workspace edge.
@@ -226,7 +215,7 @@ The objective is one removal: the tool picker leaves Runvil, its source is froze
 ### Step 2: Delete the crate and prune the workspace, nextest, CI, and crate READMEs [completed]
 
 - Component: `workspace`
-- Crate: `git rm -r crates/runvil/tool-picker` (the 20 files already archived in `../runvil-design` at `c973a42`). This removes the only `build.rs` in the runtime and Workshop closure that reaches the network, and the `include_bytes!` of the fp16 `BAAI/bge-small-en-v1.5` weights.
+- Crate: `git rm -r crates/runvil/tool-picker`. This removes the only `build.rs` in the runtime and Workshop closure that reaches the network, and the `include_bytes!` of the fp16 `BAAI/bge-small-en-v1.5` weights.
 - Root `Cargo.toml`: remove `"crates/runvil/tool-picker"` from `members`; remove `runvil-tool-picker` from `[workspace.dependencies]`; then, for each of `candle-core`, `candle-nn`, `candle-transformers`, `tokenizers`, `hf-hub`, `safetensors`, and `half`, run `cargo tree --workspace -e normal,build --target all -i <crate>` and remove the pin (with the `tokenizers` unification comment) only when the command prints nothing. A pin that still has a puller stays and is named in the step's return.
 - Hakari: `cargo hakari generate`, then `cargo hakari manage-deps`, then `cargo hakari verify` clean; `crates/workspace-hack/Cargo.toml` and `Cargo.lock` are committed.
 - Nextest: `.config/nextest.toml` loses `package(runvil-tool-picker)` from both `heavy` group filters (lines 23 and 28); the `heavy` group itself stays for `gateway-stt-backend-whisper` and `gateway-stt`.
@@ -246,7 +235,7 @@ The objective is one removal: the tool picker leaves Runvil, its source is froze
 - Guide: edit the sources `guide/src/language/01-frontmatter-and-structure.md` (line 38), `guide/src/language/02-the-run.md` (line 7), and `guide/src/language/07-tools.md` (lines 31, 97, 124) so `tools:` is documented as alias-to-exact-path strings only, then regenerate `guide/runvil-language-guide.md` with the `build-user-guide` crate (never edit the export by hand). The `guide/src/workshop/*` "picker" hits are the UI model picker and stay.
 - Other READMEs: `crates/workshop/server/README.md` only if its one "picker" mention is the tool picker rather than the model picker.
 - `vibe/dependency-surface.md`: remove the candle row from the ranked table and the picker note in measurement trap 4; remove the `base64 0.13` (via `spm_precompiled`) and `rand 0.8` (via candle) entries from the duplicate-versions list when `cargo tree -i` shows they left; add a row to "What was replaced, and why" (removed: `runvil-tool-picker` and its candle, tokenizers, hf-hub, safetensors stack; replacement: none, exact slots only; evidence: the empty `cargo tree --workspace -e normal,build --target all -i candle-core` output); rerun the shipped-shape closure counts for `runvil-api-runtime`, `workshop`, `runvil-lua`, `runvil-parser`, `runvil-model-client`, and `gateway` per the file's "Reproducing the measurements" section, replacing the projected figures (about 51 packages and about 67 MB of embedded weights) with measured ones; update the header commit hash and date.
-- Tests: `npm run typecheck && npm test` in `crates/workshop/server/ui`; the reference sweep `rg -n "tool-picker|tool_picker|ToolPicker|FuzzySlot|NearDuplicate|hf-model-cache|HF_TOKEN" crates .github .config guide/src Cargo.toml AGENTS.md --glob '!crates/gateway/**' --glob '!guide/src/gateway/**'` returns nothing and `rg -n "tool-picker|tool_picker|ToolPicker|FuzzySlot|NearDuplicate|hf-model-cache" crates/gateway` returns nothing (history under `vibe/` exempt; the gateway's own `HF_TOKEN` reads stay); `../runvil-design/study-tool-picker/crate/` still holds 20 files and `../runvil-design/study-tool-picker/README.md` names it.
+- Tests: `npm run typecheck && npm test` in `crates/workshop/server/ui`; the reference sweep `rg -n "tool-picker|tool_picker|ToolPicker|FuzzySlot|NearDuplicate|hf-model-cache|HF_TOKEN" crates .github .config guide/src Cargo.toml AGENTS.md --glob '!crates/gateway/**' --glob '!guide/src/gateway/**'` returns nothing and `rg -n "tool-picker|tool_picker|ToolPicker|FuzzySlot|NearDuplicate|hf-model-cache" crates/gateway` returns nothing (history under `vibe/` exempt; the gateway's own `HF_TOKEN` reads stay).
 - Verification (`FULL`, the only standalone Verify dispatch in this plan), all of which must pass:
   - `cargo fmt --all --check`
   - `cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features -- -D warnings`

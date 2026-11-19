@@ -36,7 +36,7 @@ The Engine calls its file effect "Store" although every one of its operations is
 - Success criteria: the residual searches in the Testing Plan return nothing relevant, the gates pass, two work commits exist on top of the starting HEAD, and the tree is clean.
 - Constraints:
   - Repository `c:\Users\Vinnie\cursor\runvil`, branch `master`. At planning time HEAD was `2ea6bb6b` with a clean tree (re-checked on 2026-10-01); note HEAD before starting, because it is the rollback point.
-  - Never touch the sibling directories `runvil2`, `runvil3` or `runvil-design`. Never edit an existing dated plan record under `vibe/`; `vibe/archdoc.md` is a living document and the one file there this change edits. Do not push.
+  - Never touch the sibling directories `runvil2` or `runvil3`. Never edit an existing dated plan record under `vibe/`; `vibe/archdoc.md` is a living document and the one file there this change edits. Do not push.
   - Engine, Harness and Host are capitalized terms with one meaning each. Engine: `crates/runvil/` and `crates/runvil-internal/`; it parses a prompt and steps a run, and emits an effect whenever it needs a model reply, a tool result, a timer or a file. Harness: `crates/harness/` and `crates/harness-internal/`; it steps the Engine, performs every effect, returns each answer and keeps the run log. Host: an application such as Workshop that runs prompts through the Harness.
   - Prose: plain English, no em dashes, no double dashes outside code spans, error messages written for a model reader, comments only for non-obvious constraints.
   - Crates with an `## Invariants` marker keep every file at or under 500 lines (`crates/harness-internal/runner/src/effect_loop.rs` is 451). Source directories stay flat, with kebab-case sibling files wired by `#[path]`.
@@ -269,7 +269,7 @@ The owner chose the rename scope and the waiver of the Cicerone run, accepted in
 
 - Deferred: a Host-supplied offload hook for blocking VFS work, until change 9 (dropping tokio).
 - Deferred: any tool tier or tool-call path that touches the VFS, until the separate future work on the tool-call path.
-- Out of scope: `c:\Users\Vinnie\cursor\runvil2`, `runvil3` and `runvil-design`.
+- Out of scope: `c:\Users\Vinnie\cursor\runvil2` and `runvil3`.
 - Out of scope: anything else under `vibe/` (only the `vibe/archdoc.md` Harness component line is in scope), and the rule text in `AGENTS.md`.
 - Out of scope: a new panic-to-error mapping, a merge of `VfsOp` with `vfs::Op`, structural checks for the old names, and pushing.
 

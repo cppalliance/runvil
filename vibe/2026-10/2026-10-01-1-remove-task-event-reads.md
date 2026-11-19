@@ -37,7 +37,7 @@ A task can currently read the history of events another task reported, through a
   - No push and no Cicerone run.
 - Success criteria: The residual searches in the Testing Plan return nothing relevant, the verification in the Testing Plan passes, `git status` is clean, three work commits exist (plus the run tool's closing commit), and nothing is pushed.
 - Constraints:
-  - Repository `c:\Users\Vinnie\cursor\runvil`, branch `master` tracking `origin/master`. Never touch `c:\Users\Vinnie\cursor\runvil2`, `runvil3` or `runvil-design` (a separate repo of research notes). Never edit an existing record under `vibe/` (dated plan records). The run tool's own additions there (this plan's dated copy and the `vibe/ACTIVE` pointer) are allowed, and the residual searches skip `vibe/`. Do not push.
+  - Repository `c:\Users\Vinnie\cursor\runvil`, branch `master` tracking `origin/master`. Never touch `c:\Users\Vinnie\cursor\runvil2` or `runvil3`. Never edit an existing record under `vibe/` (dated plan records). The run tool's own additions there (this plan's dated copy and the `vibe/ACTIVE` pointer) are allowed, and the residual searches skip `vibe/`. Do not push.
   - Write Engine, Harness and Host capitalized, with these meanings only. Engine: the `runvil` crates under `crates/runvil/` and `crates/runvil-internal/`, which parse a prompt, step a run and emit effects. Harness: the `harness` crates under `crates/harness/` and `crates/harness-internal/`, which step the Engine, perform effects, return answers and keep the run log. Host: an application such as Workshop or Papergate that runs prompts through the Harness and makes every policy decision.
   - Prose: plain English, no em dashes, no double dashes in prose (flags inside code spans are fine), guide code fences open with four backticks, one paragraph per line in guide Markdown.
   - Structure: 500-line file ceiling in crates that have an `## Invariants` marker (split first, then edit; the Engine states the marker in `crates/runvil-internal/engine/src/lib.rs`), flat source directories, error messages written for a model reader.
@@ -243,7 +243,7 @@ The owner chose a complete cut with no leftovers, and fixed the guide shape and 
 - Deferred: a host-owned log and dropping tokio from the Harness. This removal unblocks both; revisit when that work is planned.
 - Deferred: any redesigned way to read task history. Revisit only if a concrete use appears.
 - Deferred: regenerating the facade pages with Cicerone. Revisit at the next regular run.
-- Out of scope: `c:\Users\Vinnie\cursor\runvil2`, `runvil3` and `runvil-design`.
+- Out of scope: `c:\Users\Vinnie\cursor\runvil2` and `runvil3`.
 - Out of scope: anything under `vibe/`.
 - Out of scope: the rule text in `AGENTS.md`.
 - Out of scope: structural checks or retired-symbol seeds for the removed names.

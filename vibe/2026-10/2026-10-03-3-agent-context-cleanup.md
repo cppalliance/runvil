@@ -3,7 +3,7 @@ name: Agent context cleanup
 overview: Hide stale docs from the agent, one audited item at a time.
 todos:
   - id: "1"
-    content: Remove all rustdoc markdown includes (runvil, harness, engine) and archive them, plus tools/cicerone, in runvil-design/saved-docs/
+    content: Remove all rustdoc markdown includes (runvil, harness, engine) and archive them, plus tools/cicerone
     status: completed
   - id: "2"
     content: Move or delete every remaining doctest, remove the doctest steps, and add a tidy check that rejects new doctests
@@ -76,7 +76,7 @@ Runvil is at version 0 and changes fast: one vibe-coding session can land a hund
   - Every crate inherits one strict workspace lint table, the enforcement this plan names exists, and the `AGENTS.md` text it replaces is gone.
   - No Rust file in any crate exceeds 500 lines, a violation fails the build with split guidance, and no `pub(crate)` or `pub(super)` item is wider than its uses need.
 - Constraints:
-  - Changes land in the `runvil` repository (`c:\Users\Vinnie\cursor\runvil`), with two named exceptions. Archived rustdoc pages go to the `runvil-design` repository (`c:\Users\Vinnie\cursor\runvil-design`) under `saved-docs/<crate>/`, and `tools/cicerone` goes under `saved-docs/cicerone/`. Guide chapters go to the `runvil-docs` repository (`c:\Users\Vinnie\cursor\runvil-docs`). Touch nothing else in the surrounding workspace folder `c:\Users\Vinnie\cursor`.
+  - Changes land in the `runvil` repository (`c:\Users\Vinnie\cursor\runvil`), with two named exceptions. Archived rustdoc pages and `tools/cicerone` go to an archive outside this repository. Guide chapters go to the `runvil-docs` repository (`c:\Users\Vinnie\cursor\runvil-docs`). Touch nothing else in the surrounding workspace folder `c:\Users\Vinnie\cursor`.
   - Retired files are removed with git, and the history keeps them. In the user's words: "override the workspace rule. we have git."
   - Installers must not break: the Tauri desktop build of `crates/workshop/desktop`, and the cargo-dist release of `crates/gateway/app` configured in `dist-workspace.toml`.
   - The development machine runs Windows with PowerShell. The toolchain is the unpinned `stable` channel (`rust-toolchain.toml`), currently Cargo 1.99.
@@ -119,8 +119,8 @@ Enforcement moves out of prose and into the compiler, clippy, cargo-deny, and th
 - Rules every step follows:
   - Find each edit by its quoted text. Line numbers and counts in this plan are as of 2026-10-03, and they drift.
   - Remove retired files with `git rm`, because the history keeps them.
-  - Commit edits to `runvil-design` (`c:\Users\Vinnie\cursor\runvil-design`) and `runvil-docs` (`c:\Users\Vinnie\cursor\runvil-docs`) in those repositories first, as separate commits, and push each one right away. The run does every push itself, and it never asks the operator to push.
-  - Sub-agents never stage or commit in any repository. They delete retired files from the worktree outright, never moving them to `cabinet/_trash/`, because the user overrode that workspace rule for this plan ("we have git"). The step's runvil commit records each removal, which is what `git rm` means in this plan. They write sibling-repository copies unstaged. The session running the step commits and pushes `runvil-design` or `runvil-docs` after the coding sub-agent returns and before the step's runvil commit, and again after any later round that changes them.
+  - Commit edits to `runvil-docs` (`c:\Users\Vinnie\cursor\runvil-docs`) in that repository first, as separate commits, and push each one right away. The run does every push itself, and it never asks the operator to push.
+  - Sub-agents never stage or commit in any repository. They delete retired files from the worktree outright, never moving them to `cabinet/_trash/`, because the user overrode that workspace rule for this plan ("we have git"). The step's runvil commit records each removal, which is what `git rm` means in this plan. They write sibling-repository copies unstaged. The session running the step commits and pushes `runvil-docs` after the coding sub-agent returns and before the step's runvil commit, and again after any later round that changes it.
   - The last step pushes runvil after full verification passes. It then starts the site workflow with `gh workflow run site.yml`, and watches that run and the CI run for the pushed commit with `gh run watch` until both succeed. A failure in either is fixed in that same step.
   - A step that spans many crates divides the work among parallel sub-agents, one crate group each, with disjoint files. Every sub-agent leaves its changes unstaged, and the step's coding agent merges them, runs the step's checks, and returns as usual.
   - Parallel sub-agents share one worktree and one Cargo target directory. Each compiles only its own packages, and when a build fails only in files another sub-agent owns, it waits and retries instead of editing them. A pass that breaks a crate on purpose while it compiles, such as Step 9's narrow-then-restore loop, walks crates in dependency order in one sub-agent or scripted walker, or runs each sub-agent in its own git worktree whose diff the step's coding agent applies to the main worktree.
@@ -203,7 +203,7 @@ Enforcement moves out of prose and into the compiler, clippy, cargo-deny, and th
     - `rustls::crypto::CryptoProvider::install_default`.
     - Each reason reads "use X instead, because Y". Add `replacement` only where the call shape matches, and drop any entry whose crate isn't in `Cargo.lock`.
   - `deny.toml` gains a `[[bans.features]]` entry: `crate = "serde_json"`, `deny = ["preserve_order"]`.
-  - `tools/cicerone.md` and `tools/cicerone/` (two plans and ten Python scripts) move to `runvil-design/saved-docs/cicerone/`. Nothing outside `vibe/` references them.
+  - `tools/cicerone.md` and `tools/cicerone/` (two plans and ten Python scripts) move to an archive outside this repository. Nothing outside `vibe/` references them.
   - `.cargo/config.toml` gains `[env] CLIPPY_DISABLE_DOCS_LINKS = "1"`.
   - Warnings as errors:
     - Gate commands (CI and `.githooks/pre-push`) set `CARGO_BUILD_WARNINGS=deny` instead of passing `-- -D warnings`.
@@ -263,7 +263,7 @@ The user settled each decision below in conversation, and their words are quoted
 
 - Decisions:
   - Only doc comments document code inside runvil: "The ONLY docs in the repo will be doc comments". Rustdoc stays in runvil because "runvil repo is the source of truth for the Rustdocs".
-  - Every markdown file pulled into rustdoc is removed and archived: "I want all lib.md and related markdown includes removed from runvil and archived in the runvil-design repo under a directory in saved-docs".
+  - Every markdown file pulled into rustdoc is removed and archived.
   - Doctests go, because removing them speeds up the gate. Each one is moved or deleted at the implementer's discretion: "for each doctest either move it or delete it (your call)".
   - READMEs become generic: "rewritten to be so generic they can never go out of date. Just describe the crate's responsibility in broad terms. Sand off anything that could go stale." The root README keeps its images and badges: "keep the badges. lose anything related to crates.io - we don't publish there."
   - The landing page becomes "a simple table. No images", and the Workshop guide keeps a row. It is generated from the rustdoc and book lists because the hand-written page already missed `harness-gateway-client` as a top-level crate.
@@ -284,9 +284,9 @@ The user settled each decision below in conversation, and their words are quoted
     - So these six crates' `build.rs` files pull in `crates/build-ceiling/src/lib.rs` with `#[path]` and call `build_ceiling::check()`, the way `build-ceiling`'s own `build.rs` does. Both existing rules stay unchanged, and the ceiling-wiring check accepts either form.
     - Rejected: exempting `build-ceiling` from both rules. It weakens a product boundary, and a rule its owner marked never to weaken, for the sake of tooling.
     - The user confirmed this choice when asked during review.
-  - `tools/cicerone` is archived to `runvil-design/saved-docs/cicerone/`. It generated the rustdoc tutorial pages this plan deletes, and its instructions still target `lib.md` and `guide/src/`, so an agent could regenerate them. The user chose archiving during review.
+  - `tools/cicerone` is archived. It generated the rustdoc tutorial pages this plan deletes, and its instructions still target `lib.md` and `guide/src/`, so an agent could regenerate them. The user chose archiving during review.
   - A tidy check rejects new doctests, because once the doctest steps are gone, a doctest an agent writes later would never run. The user chose adding it during review.
-  - The run does everything, pushes included: "YOU DO EVERYTHING". It pushes the two sibling repositories as it commits to them, and it pushes runvil and checks CI and the site workflow at the end.
+  - The run does everything, pushes included: "YOU DO EVERYTHING". It pushes the sibling repository as it commits to it, and it pushes runvil and checks CI and the site workflow at the end.
   - The run uses nine steps, not 29, because each step's fixed cost of review, verification, and commit message dominated: "do we REALLY need 29 steps?" The steps group work by subject, and the three largest (the doctest sweep, the file splits, and the visibility pass) fan out to parallel sub-agents inside the step.
   - `runvil-docs` keeps the old `guide/` layout (added during decomposition, 2026-10-03): chapters under `src/<book>/`, plus `src/introduction.md`, with `CONTRIBUTING.md` at its root. `RUNVIL_DOCS` names the root of that checkout, and `build-user-guide` and `cargo xtask site` read `$RUNVIL_DOCS/src/` where they read `guide/src/` before. Both fail with a message naming the variable when it is unset or names no such directory.
   - `build_ceiling::check()` returns `Result<(), build_ceiling::Violations>` instead of exiting the process (added during decomposition, 2026-10-03):
@@ -330,7 +330,7 @@ The user settled each decision below in conversation, and their words are quoted
   - `CARGO_BUILD_WARNINGS` might not cover rustdoc warnings, so rustdoc steps keep `RUSTDOCFLAGS="-D warnings"` unless that's verified. Cargo ignores `build.warnings` under `--message-format=json`, which rust-analyzer uses, so the editor still shows warnings.
   - Whether the Tauri bundler or cargo-dist reads `description` is unverified. That's why it stays on both shipped binaries.
   - `runvil-docs` sits at `c:\Users\Vinnie\cursor\runvil-docs`, inside the workspace folder. An agent opened on `c:\Users\Vinnie\cursor` can still read the guides there, so vibe with `runvil` opened as its own workspace. The repository is public (`git@github.com:cppalliance/runvil-docs`, default branch `master`) and holds only `README.md` and `LICENSE`.
-  - Edits to `runvil-design` and `runvil-docs` are committed in those repositories, separately from runvil's commits.
+  - Edits to `runvil-docs` are committed in that repository, separately from runvil's commits.
   - `core.hooksPath` is a per-clone git setting, and this plan sets it only in this clone. The hooks are bash scripts, which Git for Windows runs.
   - The 500-line limit as of 2026-10-03:
     - The tidy ceiling covered 23 of 49 crates. 0 of their 751 files are over 500 lines.
@@ -408,15 +408,15 @@ The user settled each decision below in conversation, and their words are quoted
 
 ## Execution Instructions
 
-The work runs as 9 steps in four components. Each step is one runvil commit holding its code and its tests. A step that also changes `runvil-design` or `runvil-docs` commits there first, as a separate commit, and pushes that repository right away. The run does every push itself: it pushes the two sibling repositories as it commits to them, and the last step pushes runvil after full verification, starts the site workflow, and watches that run and the CI run until both succeed. The three largest bodies of work (the doctest sweep in Step 2, the file splits in Step 7, and the visibility pass in Step 9) fan out to parallel sub-agents on disjoint files inside their step, and the step's coding agent merges the results and runs the step's checks. Work item numbers refer to the 13 todos in the frontmatter.
+The work runs as 9 steps in four components. Each step is one runvil commit holding its code and its tests. A step that also changes `runvil-docs` commits there first, as a separate commit, and pushes that repository right away. The run does every push itself: it pushes the sibling repository as it commits to it, and the last step pushes runvil after full verification, starts the site workflow, and watches that run and the CI run until both succeed. The three largest bodies of work (the doctest sweep in Step 2, the file splits in Step 7, and the visibility pass in Step 9) fan out to parallel sub-agents on disjoint files inside their step, and the step's coding agent merges the results and runs the step's checks. Work item numbers refer to the 13 todos in the frontmatter.
 
 - Rules for every step:
   - Find each edit by its quoted text. Line numbers and line counts below are as of 2026-10-03 and drift.
   - Verify with the Project Survey commands for the crates the step touches, plus `cargo fmt --all --check` and the checks the step names. Each step repeats this in its own checks.
-  - Remove retired files with `git rm`; the history keeps them. Touch nothing in `c:\Users\Vinnie\cursor` outside `runvil`, `runvil-design`, and `runvil-docs`.
+  - Remove retired files with `git rm`; the history keeps them. Touch nothing in `c:\Users\Vinnie\cursor` outside `runvil` and `runvil-docs`.
   - Write new prose without em dashes or double dashes, in the Engine, Harness, and Host vocabulary that `crates/workshop/ui/test/docs-claims.mjs` checks.
   - Until Step 8 removes it, the tidy ceiling still binds the 23 crates with the `## Invariants` marker. A step that grows one of their files past 500 lines splits it under the split rule in Technical Design.
-  - Sub-agents never stage or commit, and the session running the step commits and pushes the sibling repositories, as the rules in Technical Design set out.
+  - Sub-agents never stage or commit, and the session running the step commits and pushes the sibling repository, as the rules in Technical Design set out.
 - Components, in dependency order:
   1. Docs out of rustdoc (Steps 1 and 2; items 1 and 2). First, because item 2 needs item 1 done, and dropping the doctest steps takes about 67 seconds off every later local gate run.
   2. READMEs, manifests, and docs site (Steps 3 and 4; items 3, 4, 5, and 6). Independent of the enforcement work. Early, so the steps that later edit the same manifests (the lint tables in Step 5, the build-dependencies in Step 8) start from trimmed files, and so the Docs line of `AGENTS.md` is final before Step 6 shrinks the file.
@@ -435,11 +435,7 @@ The work runs as 9 steps in four components. Each step is one runvil commit hold
 - Component: Docs out of rustdoc
 - Work item: 1, for `runvil`, `runvil-engine`, `harness`, and `tools/cicerone`.
 - Archive:
-  - Copy the 13 pages in `crates/runvil/src/` (`lib`, `effect`, `event`, `ids`, `model`, `tools`, `capabilities`, `prompt`, `vfs`, `cancel`, `timestamp`, `metrics`, and `replay`, each `.md`) to `runvil-design/saved-docs/runvil/`.
-  - Copy `crates/runvil-internal/engine/src/lib.md` to `runvil-design/saved-docs/runvil-engine/`.
-  - Copy `crates/harness/src/{lib,capability,record,vfs}.md` to `runvil-design/saved-docs/harness/`.
-  - Copy `tools/cicerone.md` and `tools/cicerone/` (two plans and ten Python scripts) to `runvil-design/saved-docs/cicerone/`. Cicerone wrote the rustdoc pages this step deletes, and its instructions still target `lib.md` and `guide/src/`. Nothing outside `vibe/` references it.
-  - Commit the copies in `runvil-design` (`c:\Users\Vinnie\cursor\runvil-design`) and push that repository right away. Then `git rm` the 18 pages and both cicerone paths from runvil.
+  - `git rm` the 18 pages and both cicerone paths from runvil.
 - Tests:
   - Port into `crates/runvil/tests/suite/`, one topic module per page wired from `tests/suite/main.rs`, every `runvil` page example whose behavior no suite test covers, with its assertions.
   - Port the engine page's version-detection and parse example into the engine's `tests/` binary if no test covers it.
@@ -458,7 +454,6 @@ The work runs as 9 steps in four components. Each step is one runvil commit hold
   - `cargo +nightly-2026-09-05 xtask api --check` and `cargo test -p build-xtask`.
   - `rg 'doc = include_str!' crates` matches only the fixture strings in `crates/build-xtask/src/*-tests.rs`, so it finds nothing in `runvil`, `runvil-engine`, or `harness`.
   - `tools/cicerone.md` and `tools/cicerone/` no longer exist, and `rg -i cicerone --glob '!vibe/**'` finds nothing.
-  - `git -C c:\Users\Vinnie\cursor\runvil-design status -sb` shows no unpushed commit.
 
 </step-1>
 

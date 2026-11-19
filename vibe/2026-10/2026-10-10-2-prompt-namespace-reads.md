@@ -11,11 +11,8 @@ todos:
   - id: prompt-change
     content: "One atomic change in three parts. Table: SectionText, read_visible replacing list_items_from_visible (plus the stale home_without doc paragraph), install_prompt_table replacing install_list_global (Send + Sync read callback), prompt for list_from_section in RESERVED_NAMES, the read callback through setup_section_vm and both SectionContext constructors, the seven test stubs. Removal: every remaining list_from_section use (calls, test names, doc comments, the four fanout fixtures, the collection.rs error). Tests: prompt_reads.rs replacing list_from_section.rs, the two nil-rule edits, the three deletions"
     status: completed
-  - id: docs
-    content: "Update the language spec: index entries, the whole H1 availability sentence (call and jump work there too), the deferred markdown note, and the list_from_section API entry replaced by prompt.section and prompt.list entries with Implementation status lines"
-    status: completed
   - id: verify
-    content: nextest (both sets), clippy with warnings denied (both sets), fmt, docs and facade docs builds, xtask api --check, build-xtask tests, the docs-claims test, and a list_from_section search over crates/ and the spec that finds nothing
+    content: nextest (both sets), clippy with warnings denied (both sets), fmt, docs and facade docs builds, xtask api --check, build-xtask tests, the docs-claims test, and a list_from_section search over crates/ that finds nothing
     status: completed
 isProject: false
 ---
@@ -261,11 +258,6 @@ One lookup, `find_visible`, searches a visible set for a heading and answers wit
     - [crates/runvil-internal/lua/src/globals.rs](crates/runvil-internal/lua/src/globals.rs): `("list_from_section", ...)` becomes `("prompt", Reserved::EngineGlobal)` between `plugins` and `prose`; the array stays 61.
     - [crates/runvil-internal/lua/src/collection.rs](crates/runvil-internal/lua/src/collection.rs): the error becomes "fanout's second parameter is a collection; for a list section use prompt.list(heading), which returns nil when no visible section has that heading", plus its doc comment and test assertion. A message string only.
   - Test stubs, return type only (`Ok(None)`, or the existing `Err` reworded to "prompt reads are not needed here"), under `crates/runvil-internal/`: `lua/src/tests.rs`, `lua/src/prelude-tests.rs`, `lua/src/globals-tests.rs`, `lua/src/tests/shared_replay.rs` (two sites), `engine/src/lua/tests.rs`, and `engine/src/lua/tests/globals.rs`. The two engine stubs bind a local named `list_callback`; it becomes `read`.
-  - Docs, [../runvil-design/design/architect-runvil-prompting-language.md](../runvil-design/design/architect-runvil-prompting-language.md), in the separate `runvil-design` repository that sits beside `runvil` and is committed on its own:
-    - line 48 (the L index line) drops `list_from_section(heading)`; line 52 (the P line) adds `prompt.list(heading)` and `prompt.section(heading)` after `pfanout` and before `runvil: 0`, where they sort
-    - line 92: the whole sentence is corrected, not just the read. `call`, `jump`, and `list_from_section` leave the list of forms it calls unavailable in H1, which keeps `call_async` and the deferred `execute` and `execute_async`, and the sentence says `call`, `jump`, and both `prompt` reads work in H1 over the whole top-level slice
-    - line 125, the deferred `markdown` note, says heading-resolved reads live in `prompt` and `markdown` stays for parsing arbitrary text
-    - lines 362 to 366: the `list_from_section(heading)` entry becomes entries for `prompt.section(heading)` and `prompt.list(heading)`, each opening with an `**Implementation status:**` line like its neighbors, then the same Effect, Return, Failure, Example format. The status lines describe behavior without naming the removed global, because the language is at `runvil: 0`, where removed forms simply stop existing, and the exit search over the spec must find no `list_from_section`: `prompt.list` reads "Active: the list-section read, now `nil` on a miss", and `prompt.section` reads "Active: new in this plan"
 - Data, persistence, failure, security, and privacy constraints:
   - Nothing is persisted, and no event or effect changes. A read is a pure function of the prompt and the caller's visible set, so replay is unaffected.
   - No scheduler, task runtime, Harness, or public API code changes.
@@ -308,7 +300,7 @@ The test suite gets smaller. One parser test pins the span, one unit test pins t
   - Module docs that list `list_from_section` are updated in `exec_flow.rs`, `suite/exec_flow.rs`, `suite/exec_flow/h1_control.rs`, `suite/exec_flow/fanout_arms.rs`, and `scheduler/live_h1/control_flow.rs`, and the doc comment on the `suite/exec_flow/fanout_collections.rs` two-string test.
 - Regression, security, and performance:
   - The `call` and `jump` suites pass unchanged, which pins that the adapter kept their behavior and messages.
-  - A search over `crates/` and the language spec finds no `list_from_section` outside history files.
+  - A search over `crates/` finds no `list_from_section` outside history files.
   - The docs-claims test passes.
 - Exit criteria:
   - `cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features`, then `cargo nextest run --locked -p workshop -p workshop-server -p workshop-server-api`
@@ -318,7 +310,7 @@ The test suite gets smaller. One parser test pins the span, one unit test pins t
   - `cargo +nightly-2026-09-05 xtask api --check`; the nightly is the one pinned in `crates/build-xtask/src/api/toolchain.rs`, so use whatever that file names if it has moved
   - `cargo test -p build-xtask`
   - the docs-claims test: `node --test test/docs-claims.mjs`, run from `crates/workshop/ui` (`npm test` there runs it with the rest of the UI tests)
-  - `rg -n list_from_section crates` and `rg -n list_from_section ../runvil-design/design/architect-runvil-prompting-language.md` both print nothing. This is the only gate that catches a leftover test name or doc comment.
+  - `rg -n list_from_section crates` prints nothing. This is the only gate that catches a leftover test name or doc comment.
 
 </verification-contract>
 <decision-record>
@@ -354,12 +346,11 @@ The test suite gets smaller. One parser test pins the span, one unit test pins t
   - Keeping `list_from_section` as a deprecated alias. Reason: the user chose removal. No revisit.
 - Assumptions, risks, and notes:
   - Assumption: no Plugin prelude in `crates/` defines a `prompt` or `section` global (searched at planning time), so the new reserved name collides with nothing.
-  - Assumption: `list_from_section` already works from H1, though the language spec's line 92 says it doesn't; `crates/runvil-internal/engine/src/execute/tests/scheduler/live_h1/control_flow.rs` pins it today. The same sentence also calls `call` and `jump` unavailable in H1, which is wrong too: `resolve_chain_target`'s H1 branch in `engine/src/execute/scheduler/walk.rs` and `end_live_h1_at_jump` in `engine/src/execute/scheduler/h1.rs` implement both. This plan rewrites that sentence anyway, so it corrects all three forms rather than leave a known-false claim in a sentence it edits.
+  - Assumption: `list_from_section` already works from H1, though the language spec's line 92 says it doesn't; `crates/runvil-internal/engine/src/execute/tests/scheduler/live_h1/control_flow.rs` pins it today. The same sentence also calls `call` and `jump` unavailable in H1, which is wrong too: `resolve_chain_target`'s H1 branch in `engine/src/execute/scheduler/walk.rs` and `end_live_h1_at_jump` in `engine/src/execute/scheduler/h1.rs` implement both.
   - Risk: because both reads return `nil` on a miss, a misspelled heading fails silently and surfaces later, for example as "attempt to concatenate a nil value" or as the `fanout` collection error. Authors who want a strict read write `assert(prompt.section(h), 'missing section: ' .. h)`.
   - Risk: authors who name a local `prompt` hide the namespace for the rest of that scope.
-  - Note: the spec edit is committed in `runvil-design` (`c:\Users\Vinnie\cursor\runvil-design`) as its own commit, staging only the spec file and none of that repository's other untracked files. It goes with the step that removes `list_from_section`, which the spec describes, so no step's `runvil` commit holds only a plan marker. Sub-agents leave the spec edit unstaged like any change; the session running the step commits it after the coding sub-agent returns and before that step's `runvil` commit, and amends it after any later round that changes it. Nothing is pushed.
   - Note: `SectionText` copies both the Markdown and the items on every read, even though each read uses one. Section text is small, and one callback is simpler than two.
-  - Note: repository paths are relative to the `runvil` repository unless they start with `../`, and line numbers are from planning time, so search by name if they have moved. History files that mention `list_from_section` stay as they are: `vibe/` in `runvil`, and `design-prev/`, `chats/`, and `research/` in `runvil-design`, along with the prose-lint word list in `runvil-design/saved-docs/cicerone/scripts/checks.py`.
+  - Note: repository paths are relative to the `runvil` repository unless they start with `../`, and line numbers are from planning time, so search by name if they have moved. History files that mention `list_from_section` stay as they are: `vibe/` in `runvil`.
 
 ### Deferred and Out of Scope
 
@@ -436,8 +427,8 @@ The test suite gets smaller. One parser test pins the span, one unit test pins t
 
 - Component: prompt-namespace
 - Component placement: last. It needs `Section::markdown()` from Step 1 and `find_visible` from Step 2, and it is the only component prompt authors see.
-- Pieces: the table, the removal, the tests, and the language spec. Construction: joint. Removing `list_items_from_visible` and the `list_from_section` global, and moving every user of both (including the `exec_flow.rs` test that calls `list_items_from_visible` directly), must land together to keep the suite green, and the spec describes the removed global, so it lands with the removal.
-- Work items: `prompt-change` and `docs`, closing with the full `verify` gate
+- Pieces: the table, the removal, and the tests. Construction: joint. Removing `list_items_from_visible` and the `list_from_section` global, and moving every user of both (including the `exec_flow.rs` test that calls `list_items_from_visible` directly), must land together to keep the suite green.
+- Work item: `prompt-change`, closing with the full `verify` gate
 - The table, under `crates/runvil-internal/`:
   - `lua/src/handles.rs`: `SectionText { markdown, items }` deriving `Debug, Clone, PartialEq, Eq` (no `Default`), beside `resolve_section_target`, and the module doc's first line names it; `lua/src/lib.rs` adds it to `pub use handles::{...}`, and `engine/src/lua.rs` re-exports it
   - `lua/src/vm/install.rs`: `install_prompt_table` replaces `install_list_global` and builds `prompt.section` and `prompt.list` over one `Arc`-shared `read` callback; `prompt.list` raises "section `<heading>` has no pre-parsed items" with the trimmed heading; `install_scheduler_control_globals` and the test-only `install_control_globals` take `read` with `Send + Sync + 'static` bounds; every doc mention of `list_from_section` names the `prompt` reads
@@ -458,13 +449,8 @@ The test suite gets smaller. One parser test pins the span, one unit test pins t
     - `prompt_reads_work_in_h1_and_the_shared_library`: the H1 block reads a top-level section and list and gets `nil` for `### Kid`; it asserts and returns nothing, because a scalar return from H1 ends the run before `## Main` executes. A `lua shared` library reads `prompt.list('### Kid')` into a global at load time, so each VM's replay resolves over its own visible set: the H1 block sees that global as `nil`, and `## Main`, whose child `### Kid` is, sees its items (`suite/exec_flow/store_failures.rs` shows how a test writes the `lua shared` fence)
   - the `nil`-rule edits: `call_and_list_inside_a_fanout_arm_reject_non_visible_sections` in `suite/exec_flow/fanout_arms.rs` asserts `prompt.list('## Parent') == nil`, with its doc comment and `expect` message no longer saying both error not-found; the two-string test in `suite/exec_flow/fanout_collections.rs` becomes `fanout_string_second_parameter_errors_pointing_at_prompt_list`, asserting on `prompt.list`, with its doc comment updated
   - the deletions: `list_from_section_ambiguous_error_is_loud` in `exec_flow.rs`, `list_from_section_from_h1_to_an_unknown_section_fails_the_run` in `suite/exec_flow/h1_control.rs`, and `list_from_section_works_on_the_h1` in `scheduler/live_h1/control_flow.rs`
-- The language spec, `../runvil-design/design/architect-runvil-prompting-language.md`:
-  - the L index line (line 48) drops `list_from_section(heading)`, and the P line (line 52) adds `prompt.list(heading)` and `prompt.section(heading)` after `pfanout` and before `runvil: 0`
-  - the H1 availability sentence (line 92) is rewritten: the unavailable list keeps `call_async`, deferred `execute`, and deferred `execute_async`, and the sentence says `call`, `jump`, and both `prompt` reads work in H1 over the whole top-level slice
-  - the deferred `markdown` note (line 125) says heading-resolved reads live in `prompt` and `markdown` stays for parsing arbitrary text
-  - the `list_from_section(heading)` entry (lines 362 to 366) becomes `prompt.section(heading)` and `prompt.list(heading)` entries, each opening with an `**Implementation status:**` line ("Active: new in this plan" and "Active: the list-section read, now `nil` on a miss"), then Effect, Return, Failure, and Example, without naming the removed global
-- Gate, the full exit criteria from the Testing Plan: both nextest runs; both clippy runs with `CARGO_BUILD_WARNINGS=deny`; `cargo fmt --all --check`; the docs build and the facade docs build with `RUSTDOCFLAGS="-D warnings"`; `cargo +nightly-2026-09-05 xtask api --check` (or whichever nightly `crates/build-xtask/src/api/toolchain.rs` names); `cargo test -p build-xtask`; `node --test test/docs-claims.mjs` from `crates/workshop/ui`; and `rg -n list_from_section crates` plus `rg -n list_from_section ../runvil-design/design/architect-runvil-prompting-language.md`, both printing nothing
-- Commits, two, spec first, per the Decision Record note: in `runvil-design`, staging only the spec file, `Specify prompt.section and prompt.list in place of list_from_section`, committed by the session after the coding sub-agent returns and amended after any later round that changes it; then in `runvil`, `Replace list_from_section with prompt.section and prompt.list`. Nothing is pushed.
+- Gate, the full exit criteria from the Testing Plan: both nextest runs; both clippy runs with `CARGO_BUILD_WARNINGS=deny`; `cargo fmt --all --check`; the docs build and the facade docs build with `RUSTDOCFLAGS="-D warnings"`; `cargo +nightly-2026-09-05 xtask api --check` (or whichever nightly `crates/build-xtask/src/api/toolchain.rs` names); `cargo test -p build-xtask`; `node --test test/docs-claims.mjs` from `crates/workshop/ui`; and `rg -n list_from_section crates`, printing nothing
+- Commit: in `runvil`, `Replace list_from_section with prompt.section and prompt.list`. Nothing is pushed.
 
 </step-3>
 

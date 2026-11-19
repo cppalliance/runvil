@@ -1,6 +1,6 @@
 ---
 name: prompt reads debt removal
-overview: Remove the one cheap fix the prompt-namespace-reads work left, adopt two rejected candidates, and fix every pre-existing finding the debt collector exposed, including marking closed plans' todos completed going forward and across vibe/ history.
+overview: Remove the one cheap fix the prompt-namespace-reads work left, adopt one rejected candidate, and fix every pre-existing finding the debt collector exposed, including marking closed plans' todos completed going forward and across vibe/ history.
 todos:
   - id: parser-cleanup
     content: "D1-5, C-1: split build_sections into four named checks; drop synthetic_section's items parameter and update its four call sites"
@@ -9,7 +9,7 @@ todos:
     content: "D1-14, D1-15: add h1_visible_sections beside visible_sections and use it at the three H1 sites; rename resolve_sibling to resolve_visible with its tests and doc links"
     status: completed
   - id: names-docs
-    content: "C-2, C-3, X-1: rename the fanout-arm test, fix the reserved tool-alias docs in globals.rs and parse.rs, set the two spec status lines to Active. (runvil-design commit)"
+    content: "C-2, C-3: rename the fanout-arm test, fix the reserved tool-alias docs in globals.rs and parse.rs."
     status: completed
   - id: plan-history
     content: "D1-16: vibe coder close step marks todos completed (tools-public commit); flip todo statuses in every closed vibe/ plan, preserving line endings"
@@ -27,11 +27,11 @@ isProject: false
 ## Product Requirements
 
 - Scope and target work
-  - Debt analysis target: the `vibe/2026-10-10-2-prompt-namespace-reads.md` plan, baseline `abe218a36`, endpoint and disposition ref `460da3f9e`, target commits `475fc39cb`, `4dc155672`, `7a80775b7`, `460da3f9e` in `c:\Users\Vinnie\cursor\runvil`. Its spec commit `6341ac8` in `runvil-design` was outside the analyzed repository.
-  - The user expanded the scope: every unrelated pre-existing finding is fixed here, and the rejected candidates were evaluated for adoption (two adopted).
+  - Debt analysis target: the `vibe/2026-10-10-2-prompt-namespace-reads.md` plan, baseline `abe218a36`, endpoint and disposition ref `460da3f9e`, target commits `475fc39cb`, `4dc155672`, `7a80775b7`, `460da3f9e` in `c:\Users\Vinnie\cursor\runvil`.
+  - The user expanded the scope: every unrelated pre-existing finding is fixed here, and the rejected candidates were evaluated for adoption (one adopted).
 - Cleanup goals
   - Remove the orphaned `items` parameter of the parser's `synthetic_section` test helper (C-1).
-  - Rename a test whose name is now half false (C-2), and correct the two new spec status lines (X-1).
+  - Rename a test whose name is now half false (C-2).
   - Fix the pre-existing findings: split `build_sections` into named checks (D1-5), give H1's visible set one helper (D1-14), rename `resolve_sibling` to `resolve_visible` (D1-15), correct two stale doc comments about reserved tool aliases (C-3), and mark closed plans' todos completed, going forward in the vibe coder and across `vibe/` history (D1-16).
 - Non-goals
   - Any change to author-visible behavior: `prompt.section`, `prompt.list`, `call`, `jump`, `fanout`, error messages, and the reserved-name list stay as they are.
@@ -52,14 +52,13 @@ isProject: false
   - C-1, from `7a80775b7`: deleting `exec_flow.rs::list_from_section_ambiguous_error_is_loud` removed the only callers that passed non-empty `items` to `crates/runvil-internal/parser/src/test_support.rs::synthetic_section`. All four remaining call sites (the `sibling` helper in `engine/src/heading_address-tests.rs`, three calls in `engine/src/execute/tests/exec_flow.rs::duplicate_top_level_section_names_error_loudly`) pass `Vec::new()`. Dead code the target orphaned; no reservation. Target state: the parameter is gone.
 - Adopted rejected candidates
   - C-2, residual-but-acceptable: `engine/src/execute/tests/suite/exec_flow/fanout_arms.rs::call_and_list_inside_a_fanout_arm_reject_non_visible_sections` now asserts `prompt.list('## Parent') == nil`, so "reject" is false for its list half. Adopted because the rename is free and the name misleads.
-  - X-1, the analysis's out-of-scope observation: `runvil-design/design/architect-runvil-prompting-language.md` lines 364 and 370 read "Active: new in this plan." and "Active: the list-section read, now `nil` on a miss." In that spec "this plan" means the spec's own plan, so the first wrongly claims `prompt.section` was part of it, and "now" is change-relative. The spec already uses a bare `Active.` elsewhere. Target state: both lines read `**Implementation status:** Active.`
 - Exposed pre-existing debt, fixed by user scope expansion
   - D1-5: `crates/runvil-internal/parser/src/build.rs::build_sections` runs from line 205 to `Ok(result)` at line 296, about 92 lines, holding the orphan-level check, the empty-name check, list detection, and the duplicate-sibling check inline. Target state: each check is a named helper and `build_sections` reads as the sequence of steps.
   - D1-14: H1's visible set (the whole top-level slice) is spelled out at three sites with the same comment: `engine/src/execute/section_context-construct.rs` line 171 (`new_live_h1`), `engine/src/execute/scheduler/walk.rs` line 290 (`resolve_chain_target`'s H1 branch), and `engine/src/execute/scheduler/h1.rs` line 148 (`end_live_h1_at_jump`). Target state: one helper beside `visible_sections`, so one module computes every visible set.
   - D1-15: `engine/src/heading_address.rs::resolve_sibling` resolves over siblings and direct children. Target state: renamed `resolve_visible`, pairing with `find_visible`.
   - C-3: `lua/src/globals.rs` module doc (lines 29 to 33) says "A frontmatter tool alias installs as a global of its own name, so the parser refuses one that is reserved", and `parser/src/parse.rs` line 32 lists "a tool alias is a reserved name" under `Frontmatter` errors. The frontmatter has only `plugins`, `args`, and `models`, the parser never calls `reserved_name`, and only `lua/src/prelude.rs` checks reserved names (for Plugin prelude globals). Target state: both docs state what is true.
   - D1-16: 133 tracked plan files under `vibe/` carry frontmatter todos reading `status: pending` (5 of them also `status: in_progress`), though every one is closed. The vibe coder (`c:\Users\Vinnie\cursor\tools-public\planning\vibe-coder.md`, Run Sequence step 5) marks progress only in step headings and never touches todos. Target state: the close step marks the plan copy's todos completed, and every closed plan's todos read `completed`.
-- Rejected candidate counts (22 total; 2 adopted above)
+- Rejected candidate counts (21 total; 1 adopted above)
   - residual-but-acceptable 7 (D1-1, D1-2, D1-4, D1-7, D1-8, D1-9, C-2): intended contract or bounded cost with no demonstrated consequence; C-2 adopted anyway.
   - weak/speculative 3 (D1-3, C-4, C-6): no consequence shown.
   - false 6 (D1-6, D1-10, D1-11, D1-12, D1-13, C-5): the code contradicts the candidate.
@@ -91,15 +90,14 @@ isProject: false
 
     The three H1 sites call it (`new_live_h1` keeps its `.to_vec()`, since the closure owns its set), and their duplicated "section 0 excludes nothing" comments go. Other `detail::sections` uses (`scheduler.rs` `SlicePath::resolve`, `context.rs` section count, the emptiness checks in `scheduler/drive.rs` and `scheduler/h1.rs` line 101) are not visible sets and stay.
   - `engine/src/heading_address.rs`: `resolve_sibling` becomes `resolve_visible` with the same signature, body, and messages. Every caller, doc link, and test follows: `walk_target.rs` (2 mentions), `scheduler/walk.rs` (2), `scheduler/h1.rs` (1), `heading_address-tests.rs` (15, including the seven `resolve_sibling_*` test names, which become `resolve_visible_*`). That test file's module doc, "Tests for resolving a fanout worker heading among sibling sections.", becomes "Tests for heading lookup over a visible set."
-- Docs (C-3, X-1):
+- Docs (C-3):
   - `lua/src/globals.rs` module doc: the sentence about frontmatter tool aliases becomes "A Plugin prelude global may not take one."
   - `parser/src/parse.rs` `# Errors`: drop "a tool alias is a reserved name," from the `Frontmatter` list.
-  - `../runvil-design/design/architect-runvil-prompting-language.md` lines 364 and 370: `**Implementation status:** Active.`
 - Test name (C-2): `call_and_list_inside_a_fanout_arm_reject_non_visible_sections` becomes `call_raises_and_list_reads_nil_for_non_visible_sections_in_a_fanout_arm`; body and doc comment unchanged.
 - Plan history (D1-16):
   - `c:\Users\Vinnie\cursor\tools-public\planning\vibe-coder.md`, Run Sequence step 5 becomes: "Set every frontmatter todo `status:` in <PLAN PATH> to `completed`, then commit that change with the deletion of `vibe/ACTIVE` with subject `Close plan: <words>`, a blank line, and the plan's `Plan:` trailer." Append one attribution line at the file's end in the existing form: `*2026-10-10 - Claude Opus 5.5 (Cursor agent). Close step marks the plan copy's todos completed.*`
   - `vibe/`: in every tracked plan file except the one `vibe/ACTIVE` names, within the YAML frontmatter only (line 1 `---` through the next line that is exactly `---`), lines matching `^(\s+)status: (pending|in_progress)\s*$` become `$1status: completed`. Each file keeps its line endings and its final newline, and no other byte changes. Git stores every tracked file with LF; in the worktree `vibe/2026-10-09-3-models-loop-in-rust.md` is CRLF, and `vibe/2026-09/2026-09-26-4-store-into-vfs.md` holds two lone CR bytes that make git classify it as binary.
-- Cross-repository commits: edits to `runvil-design` and `tools-public` are committed in those repositories as their own commits, staging only the named file (`runvil-design` holds an unrelated untracked `research/harness-survey-subagent-task-tools.md`). Sub-agents leave them unstaged; the session running the step commits them after the coding sub-agent returns and before that step's `runvil` commit, and amends them after any later round that changes them. Nothing is pushed.
+- Cross-repository commits: edits to `tools-public` are committed in that repository as their own commits, staging only the named file. Sub-agents leave them unstaged; the session running the step commits them after the coding sub-agent returns and before that step's `runvil` commit, and amends them after any later round that changes them. Nothing is pushed.
 - No public interface, persisted or wire format, component ownership, dependency direction, or trust boundary changes.
 
 </implementation-contract>
@@ -115,7 +113,6 @@ isProject: false
   - C-2: `cargo nextest run --locked -p runvil-engine --all-features call_raises_and_list_reads_nil` runs one test and passes.
 - Docs
   - C-3: `rg -n "tool alias is a reserved|parser refuses one that is reserved" crates` prints nothing; the docs build passes.
-  - X-1: `rg -n "Active: new in this plan|now .nil. on a miss" ../runvil-design/design/architect-runvil-prompting-language.md` prints nothing, and lines 364 and 370 read `**Implementation status:** Active.`
 - Plan history (D1-16)
   - `git grep -n -E "^\s+status: (pending|in_progress)\s*$" -- vibe` lists only the active plan's lines.
   - `git diff --text --numstat -- vibe` shows equal added and deleted counts per file, and every changed line in `git diff --text -U0 -- vibe`, apart from the `---` and `+++` file headers, matches `^[-+]\s+status: `. Without `--text`, git shows the binary-classified plan file as `-` and hides its changes.
@@ -154,7 +151,6 @@ isProject: false
 - D1-3 typed heading address: revisit if a second heading parser or a parse divergence appears.
 - C-6 `models.infer takes (prompt)` wording: revisit if authors report confusing it with the `prompt` namespace.
 - C-4 `Prompt` equality including raw Markdown: revisit if a non-test consumer starts comparing prompts.
-- The spec commit `6341ac8`'s other content was not analyzed beyond X-1: revisit in a debt run that targets `runvil-design`.
 
 </decision-record>
 <project-survey>
@@ -247,20 +243,18 @@ isProject: false
 
 <step-4>
 
-### Step 4: Correct the fanout-arm test name, the reserved-alias docs, and the spec status lines, then run the exit gate [completed]
+### Step 4: Correct the fanout-arm test name and the reserved-alias docs, then run the exit gate [completed]
 
 - Component: Names and docs
 - Placement: last. It depends on no other component, and the exit gate attached to it runs once after every work item lands, so any gate fix goes into a commit that is not yet finalized.
-- Pieces: the test rename (C-2), the doc corrections (C-3), and the spec status lines (X-1), built jointly: three independent text edits covered by one engine run, the docs build, and two `rg` checks.
-- Paths are relative to `crates/runvil-internal/` unless they name a sibling repository.
+- Pieces: the test rename (C-2) and the doc corrections (C-3), built jointly: two independent text edits covered by one engine run, the docs build, and one `rg` check.
+- Paths are relative to `crates/runvil-internal/`.
 - `engine/src/execute/tests/suite/exec_flow/fanout_arms.rs`: rename `call_and_list_inside_a_fanout_arm_reject_non_visible_sections` to `call_raises_and_list_reads_nil_for_non_visible_sections_in_a_fanout_arm`; body and doc comment stay.
 - `lua/src/globals.rs` module doc (lines 29 to 33): the sentence "A frontmatter tool alias installs as a global of its own name, so the parser refuses one that is reserved" becomes "A Plugin prelude global may not take one."
 - `parser/src/parse.rs` `# Errors` (line 32): drop "a tool alias is a reserved name," from the `Frontmatter` list.
-- `c:\Users\Vinnie\cursor\runvil-design\design\architect-runvil-prompting-language.md` lines 364 and 370: both read `**Implementation status:** Active.` The coding sub-agent leaves the file unstaged. The session commits it alone in `runvil-design`, staging only that file, after the sub-agent returns and before this step's `runvil` commit, and amends that commit after any later round that changes it. Nothing is pushed.
 - Verify:
   - `cargo nextest run --locked -p runvil-engine --all-features call_raises_and_list_reads_nil` runs one test and passes.
   - `rg -n "tool alias is a reserved|parser refuses one that is reserved" crates` prints nothing.
-  - `rg -n "Active: new in this plan|now .nil. on a miss" ../runvil-design/design/architect-runvil-prompting-language.md` prints nothing, and lines 364 and 370 read `**Implementation status:** Active.`
 - Exit gate, run once from the `runvil` root after this step's edits; fixes land in this step's commit:
   - `cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features`, then `cargo nextest run --locked -p workshop -p workshop-server -p workshop-server-api`
   - With `CARGO_BUILD_WARNINGS=deny` (PowerShell: `$env:CARGO_BUILD_WARNINGS='deny'`): `cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features` and `cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets`
@@ -268,8 +262,8 @@ isProject: false
   - With `RUSTDOCFLAGS="-D warnings"`: `cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api` and `cargo doc -p runvil --no-deps`
   - `cargo +nightly-2026-09-05 xtask api --check` (or the nightly `crates/build-xtask/src/api/toolchain.rs` names), which confirms `crates/runvil/public-api.txt` is unchanged, then `cargo test -p build-xtask`
   - `node --test test/docs-claims.mjs` from `crates/workshop/ui`
-  - Rerun this step's `rg` checks, Step 2's two `rg` checks, and Step 3's `git grep` check.
-- Commit: the `runvil-design` commit of the spec file alone, then one `runvil` commit.
+  - Rerun this step's `rg` check, Step 2's two `rg` checks, and Step 3's `git grep` check.
+- Commit: one `runvil` commit.
 
 </step-4>
 

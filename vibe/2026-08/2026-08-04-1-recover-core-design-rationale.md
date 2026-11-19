@@ -41,7 +41,6 @@ Every relative path below is relative to the code repository. Nothing in this pl
 - Code repository, and the only git repository this plan commits to: `c:\Users\Vinnie\src\cursor\runvil`
 - The crate under study: `crates/runvil-core`
 - The ledger: `research/2026-08-03-recover-rationale-runvil-core.md`, inside the code repository, so each step is a real commit with a real diff
-- The archive repository, opened only in pass 2: `c:\Users\Vinnie\src\cursor\runvil-design`
 - Review findings, overwritten each cycle: `c:\Users\Vinnie\src\cursor\cabinet\_scratch\recover-rationale\vibe-review.md`
 - Pass 1 group files, one per extraction step: `c:\Users\Vinnie\src\cursor\cabinet\_scratch\recover-rationale\group-<n>.md`
 
@@ -87,7 +86,7 @@ An element whose hypotheses were never seriously competing is a failure of the m
 
 Pass 1 may read: everything under `crates/runvil-core/src` and its tests; `crates/runvil-core/Cargo.toml`; the workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml`; and the `src` of sibling crates, but only to see how core's API is *used*, since call sites are legitimate structural evidence.
 
-Pass 1 may not read: `crates/runvil-core/design-core.md`; any other `design-*.md` in any crate; anything in the `runvil-design` repository; `README.md`, `STATUS.md`, or `AGENTS.md`, all of which carry rationale; and any git history - no `log`, `show`, `blame`, or commit message.
+Pass 1 may not read: `crates/runvil-core/design-core.md`; any other `design-*.md` in any crate; `README.md`, `STATUS.md`, or `AGENTS.md`, all of which carry rationale; and any git history - no `log`, `show`, `blame`, or commit message.
 
 One practical guard, because the forbidden files sit next to the permitted ones and a careless search walks straight into them. Every crate keeps its design document beside its `src` directory, so an unscoped grep across `crates/` prints rationale from `design-core.md` into the very context that is supposed not to have it, and once printed it cannot be unread. Scope every search to source: `rg <pattern> --glob 'crates/*/src/**' --glob '!*.md'`, or name the file directly. A pass 1 step that has already seen a forbidden line says so in its report rather than pretending otherwise, because a contaminated record dressed as a clean one is worse than a missing one.
 
@@ -97,7 +96,7 @@ The cost is real and worth accepting. This crate's comments are unusually good, 
 
 ## 4. Pass 2 opens the archive to measure what it could add
 
-Everything forbidden above becomes available: the design documents and residues in `runvil-design`, the crate's existing `design-core.md`, `README.md`, `STATUS.md`, `AGENTS.md`, and the full git history.
+Everything forbidden above becomes available: the design documents and residues, the crate's existing `design-core.md`, `README.md`, `STATUS.md`, `AGENTS.md`, and the full git history.
 
 For every element that came out narrowed or open, search that material for anything bearing on it and write a **proposal**: the collapse it would justify, the evidence, and the evidence's provenance - a file and line, or a commit hash and its date.
 

@@ -501,8 +501,7 @@ Lua crate tests pin every form, error, and ordering rule. Engine and other crate
   - **Structured output from adhoc tools.** A function returning a table fails. No catalog tool has structured output today, so every catalog tool can be wrapped; a structured one would hand its wrapper a table that the wrapper cannot return. Revisit: when a prompt needs it, or when the first catalog tool with structured output exists.
 - Out of scope:
   - the vendored `wg21-paperflow/vendor/runvil` copy;
-  - the historical `vibe/` plans, except the one note in the Execution Instructions;
-  - the `runvil-design` research reports.
+  - the historical `vibe/` plans, except the one note in the Execution Instructions.
 
 </decision-record>
 <project-survey>
@@ -1106,7 +1105,7 @@ Edits come in four labeled parts. Line hints are approximate at `e1a469c`, so fi
   - `12-tools.md`, beyond the passages above: lines 558 and 1163 (part A's replacement example), line 2044 (deleted in part A), the batch passage at lines 2141-2176 (part A), line 2331, and line 2391;
   - `15-tasks.md`, the model-task sentences outside the ranges above: line 93 drops its last sentence, about the model's task built-ins; delete line 552; lines 1089 and 1105 drop the model's notices, and line 1105 says the reason's phrase is what the `TaskAbandoned` trace line renders (`AbandonReason::why` in `types/src/ids.rs`); the `tool_loop_exhausted` row (line 1111) reads "while the task was live", and line 1115 says it is kept apart from `owner_failed` so a report can name the round cap as the cause; line 1333 drops its `await_tasks` sentence; delete lines 1840-1841, and line 1844 drops its model task id sentence; delete line 1996; in "Task events and task errors", lines 2665, 2671-2672, 2684, 2686, and 2690 lose their model-task parts, and "Notice and tool call events" (lines 2692-2700) is deleted, since the code has no `TaskNotice` event and no task built-ins;
   - `17-quick-reference.md`: delete the four `Engine built-in` rows (lines 254-257), and row 101 reads as part A gives it;
-  - the vendored `wg21-paperflow/vendor/runvil` copy and the `runvil-design` reports are out of scope.
+  - the vendored `wg21-paperflow/vendor/runvil` copy is out of scope.
 
 **Part C, task origin.** The code has no task origin, so every passage that gives a task an origin, or counts only author tasks, is removed or corrected. Facts from the code, which this part documents: `tasks.pending()` takes no arguments, and any non-nil argument raises `tasks.pending takes no arguments, got {type}` (`tasks_pending` in `lua/src/__impl_tasks.lua`); a status table holds exactly `target`, `state`, `ok`, `section`, `blocked`, `turns`, `tasks`, `depth`, and `note` (`TaskStatus` in `lua/src/protocol/answer.rs`); `TaskStarted` records `task`, `target`, `input`, `item`, `index`, and `var` (`types/src/event.rs`); and every live task a chain spawned counts toward `tasks_live`, whose message is `chain ended with tasks still live: {ids}; wait on or cancel every task a chain spawns before it ends` (`engine/src/error.rs`, line 218).
 

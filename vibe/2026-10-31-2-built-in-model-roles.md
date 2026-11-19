@@ -15,16 +15,16 @@ todos:
     content: "Engine: prepare(prompt, BTreeMap<ModelRole, ModelInfo>) checks declared requirements against the filling model, refuses a non-empty map without default (RequirementCheck::Unbound), and builds the ModelSet on RunContext; delete ModelBindings, bindings.rs, model_bindings(), bind_role_for_test, Scenario::bind_roles; RequirementCheck {ContextMinimum, Thinking, Unbound}; UnmetRequirement.role: ModelRole; RunState holds Arc<ModelSet>"
     status: completed
   - id: callers-and-fixtures
-    content: "One pass per file: prepare callers (harness prepare_from_snapshot, scenarios, example, bench, tests) and every prompt and fixture with custom labels, keywords or models.default (README, prompts, workshop chat.md, roughly 30 fixture files); regenerate public-api.txt; first design doc update"
+    content: "One pass per file: prepare callers (harness prepare_from_snapshot, scenarios, example, bench, tests) and every prompt and fixture with custom labels, keywords or models.default (README, prompts, workshop chat.md, roughly 30 fixture files); regenerate public-api.txt"
     status: completed
   - id: gate-commit-1
     content: "Commit 1 gate: cargo test and clippy for types, parser, model-client, lua, engine, harness, facade, workshop server; UI build; stale-name and wording sweeps; check that model-call events record the model id actually used"
     status: completed
   - id: chain-selection
-    content: "Commit 2: Chain owns the selection Arc; ChainStart carries the starting value (default binding for root chains, parent's value for call and spawn, taken at dispatch); end_h1 hands H1's value to the root walk; section setup passes the chain's Arc into injection; tests; design doc update"
+    content: "Commit 2: Chain owns the selection Arc; ChainStart carries the starting value (default binding for root chains, parent's value for call and spawn, taken at dispatch); end_h1 hands H1's value to the root walk; section setup passes the chain's Arc into injection; tests"
     status: completed
   - id: fanout-shim
-    content: "Commit 3: 3-arg tasks.fanout(model, worker, collection) entirely in __impl_fanout.lua using privileged nil-safe selection get/set captured at install: switch, spawn every arm, restore before the first join and on the spawn-failure path; tests; design doc update"
+    content: "Commit 3: 3-arg tasks.fanout(model, worker, collection) entirely in __impl_fanout.lua using privileged nil-safe selection get/set captured at install: switch, spawn every arm, restore before the first join and on the spawn-failure path; tests"
     status: completed
   - id: final-gate
     content: "Gates for commits 2 and 3: tests, clippy, public-api check, stale-name and wording sweeps"
@@ -60,7 +60,7 @@ Prompt authors declare model roles in `models:` front matter and pick one with `
   - Every deleted name listed in the sweep (Testing Plan) is absent from living code and docs.
   - Every gate in Execution Instructions passes.
 - Constraints:
-  - Code, doc comments, error messages, test names, README text and the design document describe present behavior only. None says "replaces", "formerly", "previously", "no longer", "legacy", "removed" or "migrated", and no test asserts that a deleted name is gone.
+  - Code, doc comments, error messages, test names and README text describe present behavior only. None says "replaces", "formerly", "previously", "no longer", "legacy", "removed" or "migrated", and no test asserts that a deleted name is gone.
   - Prompts, fixtures and docs are rewritten in place, with no "was X, now Y" annotations.
   - Dated logs under `vibe/` and the generated `.vibelight/` directory are not edited.
   - Each step commit leaves the workspace building with its tests passing.
@@ -194,7 +194,7 @@ The Host's role map enters `prepare`, which resolves the five roles, checks requ
   - Deleted from the Lua and front matter surface: `models.default`, the handle's `capabilities` field, front matter `keywords:` and per-role `description:`.
   - Deleted across modules: `ModelView`, `ModelSetError`, the default alias and its accessors on `ModelSet`, the run-wide model-set mutex, `ModelSelection` and `resolve_model_binding`.
   - Regenerate `crates/runvil/public-api.txt`.
-  - Rewrite in place: `README.md`; `prompts/hello.md`, `prompts/greet.md`, `prompts/research-person.md`, `prompts/analyst-example.md`; `crates/workshop/agents/agents/chat.md`; about 30 fixtures that embed `models:` front matter under `crates/runvil-internal/engine`, `crates/harness-internal/runner/tests/it`, `crates/harness/tests/suite`, `crates/runvil/tests/suite`, `crates/harness-gateway-client/src/wire/request-tests.rs` and `crates/workshop/server`; and the models section of `runvil-design/design/architect-runvil-prompting-language.md` in the sibling design repository.
+  - Rewrite in place: `README.md`; `prompts/hello.md`, `prompts/greet.md`, `prompts/research-person.md`, `prompts/analyst-example.md`; `crates/workshop/agents/agents/chat.md`; and about 30 fixtures that embed `models:` front matter under `crates/runvil-internal/engine`, `crates/harness-internal/runner/tests/it`, `crates/harness/tests/suite`, `crates/runvil/tests/suite`, `crates/harness-gateway-client/src/wire/request-tests.rs` and `crates/workshop/server`.
 - Data, persistence, failure, security, and privacy constraints:
   - The only externally visible data change is the Workshop prompt-contract JSON above. No other persisted format changes.
   - `prepare` refuses a run before any effect is issued: unmet requirements and a missing `default` are carried in `Requirements`, and the harness only merges and refuses (`crates/harness-internal/runner/src/prepare.rs`). No non-test code outside `requirements.rs` and the constructing code in `fill.rs` matches on `RequirementCheck` or reads `UnmetRequirement.role` or `.check`, so those types can change freely.
@@ -242,7 +242,7 @@ Tests cover the parse rules, `prepare` resolution, the Lua surface, chain inheri
     - a non-handle first argument is an error.
   - A prompt with no `models:` runs end to end through the harness against a one-model Host, using the rewritten fixtures.
 - Regression, security, and performance:
-  - Deleted-name sweep: search `crates`, `README.md` and `prompts` in the runvil repository, and `design` in the sibling design repository, for `models.default`, `models.bind`, `default_alias`, `set_default_alias`, `ModelView`, `ModelSetError`, `ModelBindings`, `model_bindings`, `ModelRoles`, `ModelRolesIter`, `ModelKeyword`, `keyword_name`, `keyword_wire`, `with_capabilities`, `HardKeyword`, `resolve_model_binding`, `trivial fill` and `bound model role`. Expect no hits. Skip `vibe/` and `.vibelight/`.
+  - Deleted-name sweep: search `crates`, `README.md` and `prompts` in the runvil repository for `models.default`, `models.bind`, `default_alias`, `set_default_alias`, `ModelView`, `ModelSetError`, `ModelBindings`, `model_bindings`, `ModelRoles`, `ModelRolesIter`, `ModelKeyword`, `keyword_name`, `keyword_wire`, `with_capabilities`, `HardKeyword`, `resolve_model_binding`, `trivial fill` and `bound model role`. Expect no hits. Skip `vibe/` and `.vibelight/`.
   - Wording sweep: search the added lines of the diff for `no longer`, `formerly`, `previously`, `legacy`, `deprecat`, `backward`, `replaces` and `migrat`. Expect no hits.
   - Public API check: `crates/runvil/public-api.txt` is regenerated and matches the surface listed in Technical Design.
   - Security: the child-isolation tests above.
@@ -272,7 +272,7 @@ Tests cover the parse rules, `prepare` resolution, the Lua surface, chain inheri
   - No backward compatibility, and no trail to old behavior in code, docs, errors or tests. User: "I want no backward compatibility. Dont leave behind notes referring to the old behavior, etc.. just change it."
   - Reduce the API surface while keeping the results. User: "see if you can reduce the API surface and get the same results". Applied as: an immutable `ModelSet`, `prepare` building the model set directly so `ModelBindings` goes, and the selection storing a whole `ModelBinding`.
   - `Frontmatter::role_requirements(role)` returns `Option<&RoleRequirements>`: `None` when the prompt does not declare the role, and `Some` with neither field set when it declares `role: {}`. The Workshop prompt contract lists exactly the declared roles, which needs that distinction. The plan named the accessor without its return type.
-  - The work is built as three components in eight steps. Each step is one commit that leaves the workspace building with its tests passing, and the component that ends at a step carries that step's gate of full tests, lints, the public API check and both sweeps. The eight steps are: (1) the `ModelRole` type; (2) the Host role map in `prepare`; (3) the immutable model set with the `default` role as baseline; (4) `models.use` with a handle, `models.current` and the handle fields; (5) requirements-only front matter with the Workshop contract and UI, which ends the first component and its gate; (6) the chain-owned current model with inheritance at dispatch, which ends the second component and its gate; (7) the model-first `tasks.fanout`, which ends the third component and its gate; (8) one design-document step in `runvil-design`, written after all the code, that describes the final surface of all three components. The rationale is fewer review cycles, and a document that describes the finished surface once instead of three partial states. The owner said "12 steps seems like a lot" about a split that gave each component its own design-document commit, and chose this eight-step shape. The three components are independently shippable, and only the second carries real risk.
+  - The work is built as three components in seven steps. Each step is one commit that leaves the workspace building with its tests passing, and the component that ends at a step carries that step's gate of full tests, lints, the public API check and both sweeps. The seven steps are: (1) the `ModelRole` type; (2) the Host role map in `prepare`; (3) the immutable model set with the `default` role as baseline; (4) `models.use` with a handle, `models.current` and the handle fields; (5) requirements-only front matter with the Workshop contract and UI, which ends the first component and its gate; (6) the chain-owned current model with inheritance at dispatch, which ends the second component and its gate; (7) the model-first `tasks.fanout`, which ends the third component and its gate. The rationale is fewer review cycles. The owner said "12 steps seems like a lot" and chose this shape. The three components are independently shippable, and only the second carries real risk.
 - Rejected alternatives:
   - Custom prompt-declared roles alongside the five. The user rejected them. Revisit only if the five tiers prove insufficient, which would be a change to the prompt language.
   - A `thinking` role. The user rejected it because thinking is a model property.
@@ -285,7 +285,7 @@ Tests cover the parse rules, `prepare` resolution, the Lua surface, chain inheri
   - Keeping the soft keywords, `description` and the handle's `capabilities`. Rejected as dead surface. Revisit if a Host needs role metadata.
   - A `models.default` stub or a migration error. Rejected by the no-compatibility decision.
 - Assumptions, risks, and notes:
-  - Paths in this plan are relative to the root of the `runvil` repository, except paths starting with `runvil-design/`, which are in the sibling design repository.
+  - Paths in this plan are relative to the root of the `runvil` repository.
   - "No prompt that lacks a `models:` section should fail" is read as a statement about front matter. With an empty Host map a prompt fails only when it calls a model, which follows from "the map can be empty".
   - Model-call events carry a `model` field set from the completion, not from the request (`crates/runvil-internal/engine/src/execute/turn.rs`, `crates/runvil-internal/types/src/event.rs`), so attribution by model is available. Whether `Completion::model()` falls back to the requested model when a backend omits the name was not established, and events then carry a `ModelMetadataDegraded` signal. A test pins the attribution rather than assuming it.
   - The search for `RequirementCheck` consumers skipped gitignored paths and the Workshop UI `dist` bundles, and a read of `role` or `check` through JSON would not have matched the type names. It found no non-test consumer.
@@ -537,7 +537,7 @@ Finish the author-facing Lua surface for model roles: `models.current()`, `model
 
 Make `models:` front matter optional and limited to requirements on the five roles. Give the Engine, the Workshop server and the Workshop UI the new reader. This is the last step of the first component, so its tests include the component's whole exit gate for the `runvil` repository.
 
-- Placement: this piece, "Requirements-only front matter", comes after the Host map piece because the requirement checks now read the parser's new accessor and the fixtures already use role names. The parser, the engine reader, the Workshop server and the Workshop UI are one step. Removing the parser's old types stops the engine and the server from compiling until they read the new accessor, and once the server sends the new JSON the UI's reader returns `null` for every model row, so a commit that left the UI behind would leave the run panel without its model rows. The design document is step 8, written after all the code, so it describes the final surface.
+- Placement: this piece, "Requirements-only front matter", comes after the Host map piece because the requirement checks now read the parser's new accessor and the fixtures already use role names. The parser, the engine reader, the Workshop server and the Workshop UI are one step. Removing the parser's old types stops the engine and the server from compiling until they read the new accessor, and once the server sends the new JSON the UI's reader returns `null` for every model row, so a commit that left the UI behind would leave the run panel without its model rows.
 - Build state: the workspace and the UI build and pass after this step, and the whole gate above passes. The facade listing changes, so regenerate `crates/runvil/public-api.txt` with `cargo +nightly-2026-09-05 xtask api --bless`. If a gate command fails because of an earlier step's leftover (a deleted name still present, a doc link, a listing difference), fix it here.
 - Behavior:
   - Front matter `models:` maps role names to `{ min_context, thinking }`. `min_context` is a positive token count and `thinking` is a boolean. Both are optional, and `fast: {}` is valid and adds nothing. A prompt with no `models:` key is valid.
@@ -655,31 +655,5 @@ Add the model-first form `tasks.fanout(model, worker, collection)`, implemented 
 - Rules: nothing you write (code, comments, docs, error messages, test names) says "replaces", "formerly", "previously", "no longer", "legacy", "removed" or "migrated", or notes what a name used to be, and no test asserts that a deleted name is gone. Do not edit `vibe/` or `.vibelight/`.
 
 </step-7>
-
-<step-8>
-
-### Step 8: Design document for roles, the chain's current model and fanout [completed]
-
-- Component: Model-first fanout
-- Tests:
-  - Run from the `runvil-design` repository, the sibling of `runvil`: `rg -n "models\.default|models\.bind|default_alias|ModelView|ModelSetError|ModelBindings|model_bindings|ModelRoles|ModelRolesIter|ModelKeyword|keyword_name|keyword_wire|with_capabilities|HardKeyword|resolve_model_binding|trivial fill|bound model role" design` (a pass prints nothing and exits with code 1)
-  - Run from the `runvil-design` repository: `git add -N .; git diff -U0 HEAD | rg -n -i "^\+.*(no longer|formerly|previously|legacy|deprecat|backward|replaces|migrat)"` (a pass prints nothing and exits with code 1)
-
-Rewrite the models part and the task descriptions of `design/architect-runvil-prompting-language.md` in the `runvil-design` repository to describe the behavior steps 1 to 7 ship. This step's commit goes in `runvil-design`, not in `runvil`.
-
-- Placement: the last step of the plan. It is written once, after all the code, so the document describes the finished surface of the three components and not three partial states. It is its own step because it is a commit in a different repository. It is filed under the third component, which finished its code at step 7, so the plan keeps three components.
-- Build state: documentation only. Nothing in `runvil` changes.
-- Behavior to document (present tense, no history):
-  - Every prompt has exactly five roles: `default`, `strong`, `small`, `fast`, `creative`. There are no custom roles. Front matter `models:` is optional and holds only requirements per role, `min_context` (a positive token count) and `thinking` (`true` requires a model that can think and turns thinking on for that role's requests, `false` requires one that can run without thinking and turns it off). An unknown role name or field is a parse error.
-  - The Host passes a role-to-model map to `prepare`. A role with no entry uses the `default` entry. An empty map means the Host has no model, and a prompt fails only when it calls a model. A non-empty map without `default` is refused before the run starts. Requirements are checked against the model that fills the role, fallbacks included.
-  - The Lua surface: a chain starts on the `default` role. `models.use(role_or_handle, options?)` switches the chain's current model and returns the handle, and the switch lasts across that chain's sections until the next switch. `models.current()` returns the current handle, `models.get(role)` inspects without switching, and `models.infer` and `models.loop` run on the current model or an explicit handle. A handle exposes `label`, `model_id`, `description`, `context`, `thinking` and `provider`, plus `infer` and `loop`. Error texts: `models.use label "reviewer" is not a model role: expected default, strong, small, fast or creative`, and `the caller supplied no model`.
-  - `call` children, `tasks.spawn` tasks and fanout arms start with a copy of the parent's current model, taken when the call or spawn is dispatched. The root walk starts with the model the H1 pass ended on. A child's switch never reaches its parent or its siblings.
-  - The save-and-restore pattern is `local prev = models.current(); models.use('creative'); ...; models.use(prev)`. A `models.use('strong')` for one expensive step leaves every later section of that chain on `strong`, which is a cost to plan for, and the save-and-restore pattern undoes it.
-  - `tasks.fanout(worker, items)` runs every arm on the chain's current model. `tasks.fanout(model, worker, items)` takes a model handle first and runs every arm on it, without switching the parent: the parent's model after the call is what it was before, including when a spawn fails part-way. Example: `tasks.fanout(models.get('fast'), worker, items)`. Inside an arm, `models.use('strong')` affects only that arm and its children, and `models.use('default')` selects the `default` role. Error texts: `tasks.fanout: the first argument must be a model handle, got nil` and `tasks.fanout takes (worker, collection) or (model, worker, collection)`. The save-and-restore example with a 2-argument fanout stays valid: `local prev = models.current(); models.use('creative'); local drafts = tasks.fanout(worker, items); models.use(prev)`.
-  - Wherever the document says a switch lasts for the rest of the section, it says the chain instead.
-- Artifacts: in `design/architect-runvil-prompting-language.md`, rewrite the `## Models` section, every other mention of `models.bind` and `models.default`, and the `tasks.fanout` and `tasks.spawn` descriptions and examples. Find the places with `rg -n "models\.bind|models\.default|keywords|models\.use|models\.current|selection|tasks\.fanout|tasks\.spawn" design`. The `models.bind` and `models.default` hits are in the deferred-work list near the top, the sample prompt that calls `models.default("writer")`, the `models.bind` and `models.default` headings and effects, the paragraph about the section's model selection and explicit handles, and the later examples. Rewrite each example in place to run on the `default` role or to call `models.use` with a role. Follow the document's existing heading and example style.
-- Rules: nothing you write says "replaces", "formerly", "previously", "no longer", "legacy", "removed" or "migrated", or notes what a name used to be. Do not edit dated logs.
-
-</step-8>
 
 </execution-plan>

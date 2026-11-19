@@ -18,7 +18,7 @@ isProject: false
   - Repository: `runvil`.
   - Target: `fc4a1c0ed..8faa39a76`, the six commits of the Pack and Plugin rename plan (`vibe/2026-10-19-2-pack-plugin-rename.md`): `7182e88e5`, `901797bf9`, `808028b3f`, `176c78340`, `61cea9eb6`, and `8faa39a76`.
   - Baseline: `upstream/master` at `fc4a1c0ed`, which is also the merge base. Endpoint and disposition ref: `8faa39a76`. The worktree was clean and is excluded.
-  - The same plan's commits in `runvil-docs` (`62ae759`) and `runvil-design` (`69b03e8`) are outside this target.
+  - The same plan's commit in `runvil-docs` (`62ae759`) is outside this target.
 - Cleanup goals:
   - Remove the dead `services` field from `HostContext` that `61cea9eb6` left behind, along with the doc text that describes it.
 - Non-goals:
@@ -130,7 +130,7 @@ isProject: false
 - D1-2 and D1-3: the vendor check and the punctuation-twin ids. Revisit in the dynamic-library step, where library Plugins can be untrusted.
 - C2: two vendors' Packs with one Pack id in one run. Revisit in the toolset design, which owns the tool id grammar.
 - D1-7: an MCP session that ends still reports `ready`. This is pre-existing and documented, and it is out of scope.
-- The `runvil-docs` and `runvil-design` commits of the same plan were not analyzed.
+- The `runvil-docs` commit of the same plan was not analyzed.
 
 </decision-record>
 <project-survey>
