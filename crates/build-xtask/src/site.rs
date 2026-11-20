@@ -59,7 +59,7 @@ pub(crate) const HARNESS_VAR: &str = "RUNVIL_HARNESS";
 /// the few broad words its landing row shows under Covers. The crates come
 /// from runvil-harness, so each site documents the commit of the checkout
 /// `RUNVIL_HARNESS` names.
-const RUSTDOC_SITES: [(&str, &str, &str); 5] = [
+const RUSTDOC_SITES: [(&str, &str, &str); 4] = [
     (
         "runvil-engine",
         "runvil-engine",
@@ -75,7 +75,6 @@ const RUSTDOC_SITES: [(&str, &str, &str); 5] = [
         "harness-gateway-client",
         "Model calls through the Gateway",
     ),
-    ("plugin-web", "plugin-web", "Web fetch and web search tools"),
     ("plugin-mcp", "plugin-mcp", "Tools from remote MCP servers"),
 ];
 

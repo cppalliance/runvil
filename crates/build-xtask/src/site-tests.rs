@@ -342,13 +342,8 @@ fn the_crate_page_uses_the_underscored_crate_name() {
 }
 
 #[test]
-fn the_rustdoc_sites_document_each_public_harness_crate_and_the_web_plugin() {
-    for krate in [
-        "runvil",
-        "harness-gateway-client",
-        "plugin-web",
-        "plugin-mcp",
-    ] {
+fn the_rustdoc_sites_document_each_public_harness_crate() {
+    for krate in ["runvil", "harness-gateway-client", "plugin-mcp"] {
         assert!(
             RUSTDOC_SITES
                 .iter()
