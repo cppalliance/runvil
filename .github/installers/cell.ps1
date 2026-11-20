@@ -57,12 +57,13 @@ if ($want -and $want.Gateway) {
 $root = Join-Path $env:LOCALAPPDATA 'Runvil'
 $profileDir = Join-Path $env:USERPROFILE '.runvil'
 $workshopExe = Join-Path $root 'runvil-workshop.exe'
-# The libraries of the std Plugin and the bashkit Plugin install with
-# Workshop, in its Plugin directory. Each is listed with the name its
-# Plugin reports.
+# The libraries of the std Plugin, the bashkit Plugin, and the web Plugin
+# install with Workshop, in its Plugin directory. Each is listed with the
+# name its Plugin reports.
 $plugins = @(
   @{ Name = 'std'; Library = Join-Path $root 'plugins\plugin_std.dll' },
-  @{ Name = 'bashkit'; Library = Join-Path $root 'plugins\plugin_bashkit.dll' })
+  @{ Name = 'bashkit'; Library = Join-Path $root 'plugins\plugin_bashkit.dll' },
+  @{ Name = 'web'; Library = Join-Path $root 'plugins\plugin_web.dll' })
 $gatewayExe = Join-Path $root 'runvil-gateway.exe'
 $config = Join-Path $profileDir 'gateway.toml'
 $discovery = Join-Path $profileDir 'run\gateway.json'
@@ -298,7 +299,8 @@ function Test-Selection($Want) {
   }
 
   # Workshop loads the Plugins it installed: std, which holds the file
-  # tools, and bashkit, which holds the shell.
+  # tools, bashkit, which holds the shell, and web, which holds the web
+  # tools.
   # The pipe matters: Workshop is a windowed program, and PowerShell waits
   # for one, and reads its output, only when that output is piped.
   if ($Want.Workshop) {

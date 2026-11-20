@@ -71,9 +71,9 @@ case "$system" in
     root=${CELL_ROOT:-/Applications/Runvil}
     workshop_item="$root/Runvil.app"
     workshop_exe="$workshop_item/Contents/MacOS/runvil-workshop"
-    # The libraries of the std Plugin and the bashkit Plugin ride inside
-    # Workshop's bundle, so the updater, which replaces the bundle,
-    # replaces them too.
+    # The libraries of the std Plugin, the bashkit Plugin, and the web
+    # Plugin ride inside Workshop's bundle, so the updater, which replaces
+    # the bundle, replaces them too.
     plugin_dir="$workshop_item/Contents/Resources/plugins"
     plugin_suffix=dylib
     gateway_item="$root/Runvil Gateway.app"
@@ -200,7 +200,7 @@ check_presence() {
 check_presence Workshop "$want_workshop" "$workshop_item"
 # The Plugins' libraries install with Workshop, inside its bundle, and
 # nothing installs a Plugin directory beside it.
-for plugin in std bashkit; do
+for plugin in std bashkit web; do
   [ -z "$plugin_dir" ] ||
     check_presence "Workshop's $plugin Plugin" "$want_workshop" "$plugin_dir/libplugin_$plugin.$plugin_suffix"
 done
@@ -238,14 +238,15 @@ check_version() {
 [ "$want_gateway" = 0 ] || check_version "$gateway_exe" "runvil-gateway $gateway_version"
 
 # Workshop loads the Plugins it ships with: std, which holds the file
-# tools, and bashkit, which holds the shell.
+# tools, bashkit, which holds the shell, and web, which holds the web
+# tools.
 check_plugins() {
   local output plugin
   if ! output=$("$workshop_exe" --plugins 2>"$logs/plugins.stderr.log"); then
     tail -n 20 "$logs/plugins.stderr.log" >&2
     fail "$workshop_exe --plugins failed; full output in $logs/plugins.stderr.log"
   fi
-  for plugin in std bashkit; do
+  for plugin in std bashkit web; do
     if ! echo "$output" | grep -Eq "^$plugin [0-9]"; then
       tail -n 20 "$logs/plugins.stderr.log" >&2
       fail "$workshop_exe --plugins must list the $plugin Plugin; it printed '$output'"
@@ -388,7 +389,7 @@ if [ "$system" = Linux ] && [ "$want_workshop" = 1 ]; then
   # Workshop looks for its Plugin directory from usr/bin, where it runs.
   [ -f "$extracted/squashfs-root/usr/bin/runvil-workshop" ] ||
     fail "the AppImage lacks usr/bin/runvil-workshop, which the Plugin directory lookup starts from"
-  for plugin in std bashkit; do
+  for plugin in std bashkit web; do
     [ -f "$extracted/squashfs-root/usr/lib/runvil/plugins/libplugin_$plugin.$plugin_suffix" ] ||
       fail "the AppImage lacks usr/lib/runvil/plugins/libplugin_$plugin.$plugin_suffix"
   done
