@@ -580,6 +580,39 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      # Rendered in every mode, so a pull request that breaks the template
+      # fails here instead of at a tag. Every placeholder must be filled,
+      # and every file the notes name must be among the built files.
+      - name: Render the release notes
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          GATEWAY_VERSION: ${{ needs.prepare.outputs.gateway-version }}
+        run: |
+          python3 - "$RUNNER_TEMP/release" "$RUNNER_TEMP/release-notes.md" <<'PY'
+          import os, pathlib, re, sys
+          assets, out = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+          text = pathlib.Path(".github/installers/release-notes.md").read_text()
+          text = text.replace("{version}", os.environ["VERSION"])
+          text = text.replace("{gateway_version}", os.environ["GATEWAY_VERSION"])
+          left = re.findall(r"\{[^}]*\}", text)
+          if left:
+              sys.exit(f"release-notes.md keeps placeholders this step does not fill: {left}")
+          named = sorted(set(re.findall(r"`(Runvil_[^`]+)`", text)))
+          missing = [name for name in named if not (assets / name).is_file()]
+          if missing:
+              sys.exit(f"release-notes.md names files the build did not produce: {missing}")
+          out.write_text(text)
+          print(f"notes name {len(named)} files, all built")
+          PY
+
+      - name: Upload the release notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes.md
+          if-no-files-found: error
+          retention-days: 7
+
   publish-release:
     needs: [prepare, test, manifest]
     if: needs.prepare.outputs.mode == 'release'
@@ -600,11 +633,19 @@ jobs:
           name: release-manifest
           path: dist
 
+      # Outside dist, which the release uploads whole.
+      - name: Download the release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/notes
+
       - name: Publish the release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ github.ref_name }}
           name: Runvil ${{ github.ref_name }}
+          body_path: ${{ runner.temp }}/notes/release-notes.md
           make_latest: true
           files: dist/*
 
