@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # One install cell of installers.yml on macOS or Linux: installs a component
 # selection with the Qt IFW installer, then checks that exactly the selected
-# components are present and that each present one runs.
+# components are present, that each present one runs, and that an installed
+# Gateway answers a chat request.
 #
 # Usage: cell.sh <installer> <selection> <version> <gateway-version>
 #   <installer>        the .dmg on macOS, the .run on Linux
@@ -14,6 +15,13 @@
 #   CELL_ROOT    install here (IFW --root) instead of the default location,
 #                for local runs with a temporary HOME
 #   CELL_LOGS    write the logs here (default: a new temporary directory)
+#   CHEAPSEEK_BASE_URL
+#                the base URL of a running CheapSeek, which every selection
+#                with the Gateway requires: step 7 gives it to the Gateway as
+#                its chat model. The CheapSeek action sets it; a local run
+#                starts `cheapseek` and passes the URL it prints.
+#
+# Step 7 runs chat.mjs and run-prompt.mjs, which need Node 22 or later.
 #
 # Written for bash 3.2, the bash macOS ships.
 set -euo pipefail
@@ -46,6 +54,14 @@ esac
 ids=""
 [ "$want_workshop" = 0 ] || ids="$ids com.runvil.workshop"
 [ "$want_gateway" = 0 ] || ids="$ids com.runvil.gateway"
+if [ "$want_gateway" = 1 ]; then
+  [ -n "${CHEAPSEEK_BASE_URL:-}" ] ||
+    fail "the selection '$selection' installs the Gateway, so CHEAPSEEK_BASE_URL must hold the base URL of a running CheapSeek; it is empty"
+  command -v node >/dev/null || fail "the selection '$selection' installs the Gateway, so node must be on PATH; it is not"
+fi
+# The directory of this script, which holds chat.mjs, run-prompt.mjs, and
+# hello.md.
+here=$(cd "$(dirname "$0")" && pwd)
 
 system=$(uname -s)
 profile="$HOME/.runvil"
@@ -378,6 +394,22 @@ if [ "$system" = Linux ] && [ "$want_workshop" = 1 ]; then
   done
   rm -rf "$extracted"
   echo "cell: the AppImage carries its GStreamer audio plugins and Workshop's Plugins"
+fi
+
+# 7. The installed Gateway answers a chat request, and Workshop, when it is
+# installed too, runs hello.md to an end with text. The Gateway's first
+# start configured no chat model, so chat.mjs gives it CheapSeek first.
+# hello.md is a copy of prompts/hello.md in cppalliance/runvil-harness, the
+# smallest prompt the Harness ships.
+if [ "$want_gateway" = 1 ]; then
+  node "$here/chat.mjs" "$profile/run/gateway.json" "$CHEAPSEEK_BASE_URL" ||
+    fail "the installed Gateway must answer a chat request; chat.mjs printed why it did not"
+  if [ "$want_workshop" = 1 ]; then
+    mkdir -p "$profile/agents"
+    cp "$here/hello.md" "$profile/agents/hello.md"
+    node "$here/run-prompt.mjs" "$workshop_port" hello ||
+      fail "Workshop must run hello.md to an end with text; run-prompt.mjs printed why it did not"
+  fi
 fi
 
 echo "cell: $selection passed"

@@ -1,7 +1,8 @@
 # One install cell of installers.yml on Windows: installs a component
 # selection with the NSIS setup, checks that exactly the selected components
-# are present and that each present one runs, then runs the selection's
-# Windows-only check (update, relaunch, rerun, or rejections).
+# are present, that each present one runs, and that an installed Gateway
+# answers a chat request, then runs the selection's Windows-only check
+# (update, relaunch, rerun, or rejections).
 #
 # Usage: cell.ps1 <setup> <selection> <version> <gateway-version>
 #   <setup>            the NSIS -setup.exe
@@ -12,6 +13,12 @@
 #
 # Environment:
 #   CELL_LOGS    write the logs here (default: a new temporary directory)
+#   CHEAPSEEK_BASE_URL
+#                the base URL of a running CheapSeek, which every selection
+#                that installs the Gateway requires: step 7 gives it to the
+#                Gateway as its chat model. The CheapSeek action sets it.
+#
+# Step 7 runs chat.mjs and run-prompt.mjs, which need Node 22 or later.
 param(
   [Parameter(Mandatory = $true, Position = 0)][string]$Setup,
   [Parameter(Mandatory = $true, Position = 1)][string]$Selection,
@@ -38,6 +45,14 @@ if (-not $selections.ContainsKey($Selection)) {
   Fail "selection must be all, workshop, gateway, gateway-stt, or rejections; got '$Selection'"
 }
 $want = $selections[$Selection]
+if ($want -and $want.Gateway) {
+  if (-not $env:CHEAPSEEK_BASE_URL) {
+    Fail "the selection '$Selection' installs the Gateway, so CHEAPSEEK_BASE_URL must hold the base URL of a running CheapSeek; it is empty"
+  }
+  if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    Fail "the selection '$Selection' installs the Gateway, so node must be on PATH; it is not"
+  }
+}
 
 $root = Join-Path $env:LOCALAPPDATA 'Runvil'
 $profileDir = Join-Path $env:USERPROFILE '.runvil'
@@ -391,6 +406,23 @@ api_key = "release-smoke"
     if ($Want.Stt -and -not $declares) { Fail "Speech to Text was selected, but the Gateway wrote $config without an [[stt_model]]" }
     if (-not $Want.Stt -and $declares) { Fail "Speech to Text was not selected, but the Gateway wrote $config with an [[stt_model]]" }
     Write-Host "cell: the Gateway's first start wrote $config from the Speech to Text gate"
+  }
+
+  # 7. The installed Gateway answers a chat request, and Workshop, when it
+  # is installed too, runs hello.md to an end with text. The Gateway's
+  # first start configured no chat model, so chat.mjs gives it CheapSeek
+  # first. hello.md is a copy of prompts/hello.md in
+  # cppalliance/runvil-harness, the smallest prompt the Harness ships.
+  if ($Want.Gateway) {
+    & node (Join-Path $PSScriptRoot 'chat.mjs') $discovery $env:CHEAPSEEK_BASE_URL
+    if ($LASTEXITCODE -ne 0) { Fail 'the installed Gateway must answer a chat request; chat.mjs printed why it did not' }
+    if ($Want.Workshop) {
+      $agents = Join-Path $profileDir 'agents'
+      New-Item -ItemType Directory -Force -Path $agents | Out-Null
+      Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'hello.md') -Destination $agents
+      & node (Join-Path $PSScriptRoot 'run-prompt.mjs') $port hello
+      if ($LASTEXITCODE -ne 0) { Fail 'Workshop must run hello.md to an end with text; run-prompt.mjs printed why it did not' }
+    }
   }
 }
 

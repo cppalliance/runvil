@@ -3,8 +3,10 @@ run-name: Runvil installers (${{ github.event_name == 'push' && github.ref_name 
 
 # Builds the five installers (Windows x64, macOS ARM and Intel, Linux x64
 # and ARM64), installs and runs component selections on a fresh machine of
-# each kind, and assembles and verifies latest.json and SHA256SUMS. A
-# vX.Y.Z tag then publishes the release; any failed cell means no release.
+# each kind, and assembles and verifies latest.json and SHA256SUMS. A cell
+# that installs the Gateway sends it a chat request, and a cell that
+# installs Workshop too runs a prompt through both. A vX.Y.Z tag then
+# publishes the release; any failed cell means no release.
 #
 # Workshop is its own product in cppalliance/runvil-workshop. Every job
 # that builds takes it at the commit the root Cargo.toml pins in
@@ -433,6 +435,10 @@ jobs:
     runs-on: ${{ matrix.runner }}
     # The Speech to Text cells download about 600 MB.
     timeout-minutes: 45
+    env:
+      # true for the selections that install the Gateway. Their cells send
+      # the Gateway a chat request, which CheapSeek answers.
+      CHAT: ${{ matrix.selection == 'all' || startsWith(matrix.selection, 'gateway') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -475,6 +481,48 @@ jobs:
             libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
             libxcb-render-util0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-xfixes0 \
             libxcb-xkb1 libxcb-util1 libfontconfig1 libfreetype6 libdbus-1-3
+
+      # Step 7 of a cell runs chat.mjs and run-prompt.mjs.
+      - uses: actions/setup-node@v4
+        if: env.CHAT == 'true'
+        with:
+          node-version: 22
+
+      # CheapSeek is a test server that speaks the OpenAI chat API and
+      # computes each reply from fixed rules. The checkout is the commit of
+      # its release v1.1.0, and holds its action and its sources.
+      - name: Check out CheapSeek
+        if: env.CHAT == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: cppalliance/cheapseek
+          ref: 54d18ebefc024fb2bfe86a3556792303829bcd56
+          path: cheapseek
+
+      # A CheapSeek release holds executables for Linux x64, macOS ARM, and
+      # Windows x64. The cells of the other two platforms build it, on the
+      # toolchain its rust-toolchain.toml pins. The build of its release
+      # took 3 to 4 minutes on each runner. Cargo takes a package under this
+      # repository's checkout for a member of its workspace, so the build
+      # runs on a copy outside the checkout.
+      - name: Build CheapSeek
+        id: cheapseek-build
+        if: env.CHAT == 'true' && (matrix.platform == 'macos-intel' || matrix.platform == 'linux-arm')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -R cheapseek "$RUNNER_TEMP/cheapseek"
+          cd "$RUNNER_TEMP/cheapseek"
+          cargo build --release --locked
+          echo "executable=$PWD/target/release/cheapseek" >> "$GITHUB_OUTPUT"
+
+      # The action sets CHEAPSEEK_BASE_URL for the steps after it. With no
+      # executable given it downloads the one of its release.
+      - name: Start CheapSeek
+        if: env.CHAT == 'true'
+        uses: ./cheapseek
+        with:
+          executable: ${{ steps.cheapseek-build.outputs.executable }}
 
       - name: Install and check (macOS and Linux)
         if: runner.os != 'Windows'
