@@ -50,7 +50,7 @@ libraries = [{ git = "https://github.com/cppalliance/dylints", rev = "982b297ede
 # differs from this workspace's.
 [workspace.metadata.workshop]
 git = "https://github.com/cppalliance/runvil-workshop"
-rev = "3c12833c83aa4953463137a65c21dc2f6220acbb"
+rev = "2894471d13252d6d940c8fc1819d360e59bf2175"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

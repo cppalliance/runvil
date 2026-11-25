@@ -353,6 +353,16 @@ fn the_rustdoc_sites_document_each_public_harness_crate() {
     }
 }
 
+#[test]
+fn the_rustdoc_sites_document_the_gateway_client() {
+    assert!(
+        RUSTDOC_SITES
+            .iter()
+            .any(|(dir, documented, _)| *dir == "gateway-client" && *documented == "gateway-client"),
+        "the gateway-client/ folder documents the crate gateway-client: {RUSTDOC_SITES:?}"
+    );
+}
+
 /// A stage output holding, per `(book, title, description)`, the book's
 /// folder with a `book.toml` giving that title and description.
 fn staged_with(books: &[(&str, &str, &str)]) -> tempfile::TempDir {

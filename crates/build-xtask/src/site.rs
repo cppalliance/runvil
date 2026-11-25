@@ -58,8 +58,9 @@ pub(crate) const HARNESS_VAR: &str = "RUNVIL_HARNESS";
 /// documents, with default features, the facade as dependents read it, and
 /// the few broad words its landing row shows under Covers. The crates come
 /// from runvil-harness, so each site documents the commit of the checkout
-/// `RUNVIL_HARNESS` names.
-const RUSTDOC_SITES: [(&str, &str, &str); 4] = [
+/// `RUNVIL_HARNESS` names. The `gateway-client` crate is a git dependency of
+/// that checkout, so its site documents the commit the checkout pins.
+const RUSTDOC_SITES: [(&str, &str, &str); 5] = [
     (
         "runvil-engine",
         "runvil-engine",
@@ -74,6 +75,11 @@ const RUSTDOC_SITES: [(&str, &str, &str); 4] = [
         "harness-gateway-client",
         "harness-gateway-client",
         "Model calls through the Gateway",
+    ),
+    (
+        "gateway-client",
+        "gateway-client",
+        "Chat completions for any server, and finding a Gateway",
     ),
     ("plugin-mcp", "plugin-mcp", "Tools from remote MCP servers"),
 ];
