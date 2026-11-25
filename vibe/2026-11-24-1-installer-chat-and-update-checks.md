@@ -4,25 +4,25 @@ overview: The install cells of `installers.yml` end once each installed program 
 todos:
   - id: plan-copy
     content: "Commit this plan alone on the branch qa-plan-tests"
-    status: pending
+    status: completed
   - id: cells
     content: "Add chat.mjs, run-prompt.mjs, and hello.md, call them from step 7 of cell.sh and cell.ps1, and start CheapSeek in the test job of installers.yml"
-    status: pending
+    status: completed
   - id: update
     content: "Add update.mjs"
-    status: pending
+    status: completed
   - id: local
     content: "Run both cells and the update check on Linux x64 against release 0.3.1, and run each failure case"
-    status: pending
+    status: completed
   - id: five-systems
     content: "Run every cell on the five runners with a dispatched run of installers.yml"
     status: pending
   - id: record
     content: "Record the results in this plan"
-    status: pending
+    status: completed
   - id: pr
     content: "Open one PR against cppalliance/runvil"
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -86,10 +86,10 @@ A cell that installs the Gateway gets one more step, step 7. A person gets one n
   - Each script prints one line for each thing it confirmed, and exits 0.
 - States and validation:
   - A cell whose selection installs the Gateway fails before it installs anything when `CHEAPSEEK_BASE_URL` is empty or `node` is missing from `PATH`.
-  - `update.mjs` fails before it starts Workshop when `CHEAPSEEK_BASE_URL` is empty, when one of `tauri-driver`, `WebKitWebDriver`, `xvfb-run`, `dbus-run-session`, and `pkill` is missing from `PATH`, when the release's `SHA256SUMS` does not list the AppImage, or when the AppImage it was given is the new release already.
+  - `update.mjs` fails before it starts Workshop when the AppImage it was given does not exist, when `CHEAPSEEK_BASE_URL` is empty, when one of `tauri-driver`, `WebKitWebDriver`, `xvfb-run`, `dbus-run-session`, and `pkill` is missing from `PATH`, when the release's `SHA256SUMS` does not list the AppImage, or when the AppImage it was given is the new release already.
 - Errors and recovery:
   - Every failure prints one line that says what failed, with what was required and what was found where the script knows both, and the script exits 1. Two examples: `chat: POST http://127.0.0.1:35285/v1/chat/completions answered 404, required 200: ...` and `run-prompt: the run of hello failed: Model turn failed in agent `Greet``.
-  - `update.mjs` stops every process it started, on success and on failure, and prints the folder that holds its logs.
+  - `update.mjs` stops every process it started before it exits: when it passes, when a requirement fails, when an error it did not expect ends it, and when a person stops it with Ctrl-C. Those processes run in sessions of their own, so Ctrl-C alone would leave them running. It prints the folder that holds its logs.
 - Security and privacy behavior:
   - CheapSeek listens on `127.0.0.1` only. `chat.mjs` sends the Gateway's key only to the Gateway's loopback port.
   - The test job checks CheapSeek out at the commit of its release `v1.1.0`. A CheapSeek release holds executables for Linux x64, macOS ARM, and Windows x64. On those three platforms its action downloads the executable and checks it against the release's `SHA256SUMS`. On macOS Intel and Linux ARM64 the test job builds CheapSeek from the checkout.
@@ -154,7 +154,7 @@ The change adds checks, so the test of the change is that each new check passes 
 
 - Decisions:
   - The checks go into the existing cells. The cells already install each selection on each of the five machines, so the new step costs one chat request in each cell that installs the Gateway, and one prompt run in each cell for `all`. A separate set of cells would install everything a second time.
-  - Step 7, the chat request and the prompt run, is required in every cell that installs the Gateway. A cell that skipped it when `CHEAPSEEK_BASE_URL` was empty would pass with the check gone, so the cell fails instead.
+  - Step 7 is required in every cell that installs the Gateway. A cell that skipped it when `CHEAPSEEK_BASE_URL` was empty would pass with the check gone, so the cell fails instead.
   - `chat.mjs`, `run-prompt.mjs`, and `update.mjs` are Node scripts. Node 22 has an HTTP client and a WebSocket client built in, and the repository already runs `tools/docs-claims.mjs` with Node alone.
   - `.github/installers/hello.md` is a copy of `prompts/hello.md` from `cppalliance/runvil-harness`. The alternative is to download the file at the Harness commit that Workshop's `Cargo.toml` names at the Workshop pin, which adds a checkout and a lookup to every cell. Workshop's own test of the same run, in `crates/workshop/server/tests/it/live.rs` of `cppalliance/runvil-workshop`, holds a copy too. When the prompt language changes and the copy stays behind, step 7 fails in the pull request that moves the Workshop pin.
   - `update.mjs` runs by hand and stays out of `installers.yml`. The address Workshop reads updates from is compiled into it, so the check can only read a release that is already published. A job that ran the check at the end of a release run would be new code in the release workflow whose first real run is the next release, so a fault in the job would first show in the middle of a release.
@@ -165,9 +165,33 @@ The change adds checks, so the test of the change is that each new check passes 
   - Stopping Workshop and the Gateway, editing `gateway.toml`, and starting both again. It adds a stop and a start to both cell scripts, for a Gateway that Workshop started and for one that the cell started. The Gateway's `/admin/config` routes, which its Settings page saves with and `chat.mjs` uses, work on a running Gateway.
   - The update check as a test in `cppalliance/runvil-workshop`, beside its window tests. It checks released files, `latest.json` among them, and this repository publishes those.
 - Assumptions, risks, and notes:
-  - The cells on macOS Intel and Linux ARM64 spend an estimated 3 to 4 more minutes each on the CheapSeek build. A CheapSeek release with executables for those two platforms would remove the build.
-  - `update.mjs` has run from the 0.3.0 AppImage only, which holds its own Gateway. The AppImage of 0.3.1 holds Workshop alone, so at the release after 0.3.1 the check will need a Gateway program beside the AppImage copy, where the 0.3.1 installer puts it. That path has not run.
+  - The CheapSeek build lengthens the cells for `all` on macOS Intel and Linux ARM64, by the times that the second run below gives. A CheapSeek release with executables for those two platforms would remove the build.
+  - `update.mjs` has run from the 0.3.0 AppImage only, which holds its own Gateway. At the release after 0.3.1, the earlier AppImage holds Workshop alone, so the check will need to put a Gateway program beside its copy of the AppImage, in the place where the 0.3.1 installer puts one. That case has not run.
   - This plan serves four tests of the team's QA plan of attack, a list of 40 tests that the reviewers have seen: "On each of the five systems, install both parts and send `hello.md`. The run ends with text.", "Install the Gateway alone and send it one chat request. It answers.", "Install the previous release and start Workshop. It offers the new version.", and "Accept that update, then send `hello.md`. The run ends with text."
+  - Result of the cells on Linux x64, on Ubuntu 26.04.1 with the installer of release 0.3.1 and CheapSeek 1.1.0: `cell.sh` passed for `all` in 63 seconds and for `gateway` in 42 seconds. `chat.mjs` got the reply "Hi there — what do you need?", and the run of `hello.md` ended with "What do you need? I'll take it from there."
+  - Result of `update.mjs` from the 0.3.0 AppImage, which was published in the pre-release `nightly`, to 0.3.1: it passed every one of 25 runs in a row. A run took 11.3 to 21.6 seconds, and 14.3 seconds on average.
+  - Result of the failure cases: all 11 failed, each with a line of its own.
+    - `cell.sh` for `gateway` with `CHEAPSEEK_BASE_URL` empty: `cell: the selection 'gateway' installs the Gateway, so CHEAPSEEK_BASE_URL must hold the base URL of a running CheapSeek; it is empty`
+    - `chat.mjs` with a CheapSeek address that answers 404: `chat: POST http://127.0.0.1:45899/v1/chat/completions answered 404, required 200: {"error":{"code":"upstream_client_error","message":"upstream returned 404","type":"invalid_request_error"}}`
+    - `run-prompt.mjs` for `hello`, after `chat.mjs` had failed that way: ``run-prompt: the run of hello failed: Model turn failed in agent `Greet` ``
+    - `run-prompt.mjs` for `hello` before the Gateway has been given a chat model: `run-prompt: the run of hello must end within 120 seconds; frames so far: [agents, agent_session]`
+    - `run-prompt.mjs` for an agent that Workshop does not list: `run-prompt: Workshop must list the agent nope; it lists ["bad","chat","hello"]`
+    - `run-prompt.mjs` for a prompt that does not parse: `run-prompt: the run of bad failed: file must begin with a --- frontmatter delimiter (line 1, column 1)`
+    - `run-prompt.mjs` on a port where nothing listens: `run-prompt: ws://127.0.0.1:9/agents/ws failed: the connection was refused or dropped`
+    - `chat.mjs` without its arguments: `chat: usage: chat.mjs <discovery-file> <cheapseek-url>; got 0 arguments`
+    - `update.mjs` with a version that was never released: `update: https://github.com/cppalliance/runvil/releases/download/v0.3.2/SHA256SUMS answered 404, required 200`
+    - `update.mjs` with the new release's own AppImage: `update: <path>/Runvil_0.3.1_amd64.AppImage is release 0.3.1 already; give the AppImage of an earlier release`
+    - `update.mjs` with `CHEAPSEEK_BASE_URL` empty: `update: CHEAPSEEK_BASE_URL must hold the base URL of a running CheapSeek; it is empty`
+  - One branch of `update.mjs` has not run: the failure when Workshop offers another version than the one asked for. Release 0.3.1 is the only one that Workshop offers today.
+  - Result on the five runners: two runs of `installers.yml` for pull request 221. A pull request runs the cells for `all` and `workshop`. In every cell for `all` that got as far as step 7, both checks printed the same replies as on my machine.
+    - First run, at commit `5d1a63a24`: the cells for `all` passed on Linux x64, macOS ARM, and Windows x64, in 64 to 91 seconds a job. On macOS Intel and Linux ARM64 the job failed before the cell started, at the CheapSeek build: Cargo took the checkout inside this repository for a member of this workspace. The build now runs on a copy outside the checkout.
+    - Second run, at commit `31f37957f`: the cells for `all` passed on Linux x64, Windows x64, macOS Intel, and Linux ARM64. The CheapSeek build took 7 minutes 53 seconds on macOS Intel and 2 minutes 29 seconds on Linux ARM64.
+    - In the second run the cell for `all` on macOS ARM failed at step 4, which is older than this change and runs before step 7. Workshop gives a Gateway that it starts 30 seconds to answer its health probe, and the Gateway's log shows that it finished loading its speech runtime 37.6 seconds after it started. A rerun of that one job passed, in 89 seconds.
+    - The ten jobs for `workshop`, five in each run, passed. They install Workshop alone, so the job skips the CheapSeek steps and the cell skips step 7.
+  - The cell for `gateway` has run on Linux x64 only, on my machine, and the Windows cell for `gateway-stt` has not run. The other four systems first run those cells in a dispatched run of `installers.yml` or in a release run, so the todo `five-systems` stays open.
+  - Result of the review: Greg Kal found that `update.mjs` could end without stopping what it had started. Tauri's updater moves the old AppImage away before it writes the new one (`install_appimage` in `tauri-plugin-updater` 2.11.0), so the read that computes the SHA-256 can find the path empty, and that error ended the script before it stopped `tauri-driver`, the display, Workshop, and the Gateway. Ctrl-C had the same effect. The read now counts as "not yet updated", and the script stops its processes on an unexpected error, on SIGINT, and on SIGTERM. Tested: a run that got SIGINT 6 seconds after its start, and one that got SIGTERM, each had 7 processes running before the signal and all 7 stopped after it. Each of the 28 runs before the change read the file outside that moment, and passed.
+  - Result of the exit criteria: `bash -n`, the three `node --check` runs, `cargo test -p build-xtask` (99 passed), and `node --test tools/docs-claims.mjs` (2 passed) passed on my machine.
+  - `vibelight`, the team's tool that outlines Rust crates for review, was not run: this change is shell, PowerShell, JavaScript, and YAML.
 
 ### Deferred and Out of Scope
 
